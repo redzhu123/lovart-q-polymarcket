@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 市场详情",
+  "description": "GET /market?condition_id=xxx 响应",
+  "type": "object",
+  "required": ["condition_id", "question"],
+  "properties": {
+    "condition_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Polymarket 条件 ID"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "description": "市场问题描述"
+    },
+    "description": { "type": "string" },
+    "closed": { "type": "boolean" },
+    "active": { "type": "boolean" },
+    "neg_risk": { "type": "boolean" },
+    "minimum_tick_size": { "type": "string" },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["token_id", "outcome"],
+        "properties": {
+          "token_id": { "type": "string", "minLength": 1 },
+          "outcome": { "type": "string", "enum": ["Yes", "No"] },
+          "price": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "condition_id": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "question": "BTC above $100k in 2026?",
+  "description": "Will Bitcoin price exceed $100,000 USD in 2026?",
+  "closed": false,
+  "active": true,
+  "neg_risk": false,
+  "minimum_tick_size": "0.01",
+  "tokens": [
+    {"token_id": "1111111111111111111111111111111111111111111111111111111111111111", "outcome": "Yes", "price": "0.45"},
+    {"token_id": "2222222222222222222222222222222222222222222222222222222222222222", "outcome": "No", "price": "0.55"}
+  ]
+}

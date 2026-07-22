@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 账户余额",
+  "description": "GET /balances 响应",
+  "type": "object",
+  "required": ["balance"],
+  "properties": {
+    "balance": {
+      "type": "string",
+      "description": "可用余额（字符串格式，单位：pUSD）"
+    },
+    "allowance": {
+      "type": "string",
+      "description": "交易所授权额度"
+    }
+  }
+}

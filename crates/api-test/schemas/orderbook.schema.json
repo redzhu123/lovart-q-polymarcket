@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 订单簿",
+  "description": "GET /book?token_id=xxx 响应",
+  "type": "object",
+  "required": ["bids", "asks"],
+  "properties": {
+    "bids": {
+      "type": "array",
+      "description": "买盘列表",
+      "items": {
+        "type": "object",
+        "required": ["price", "size"],
+        "properties": {
+          "price": {
+            "type": "string",
+            "description": "价格（字符串格式）"
+          },
+          "size": {
+            "type": "string",
+            "description": "数量（字符串格式）"
+          }
+        }
+      }
+    },
+    "asks": {
+      "type": "array",
+      "description": "卖盘列表",
+      "items": {
+        "type": "object",
+        "required": ["price", "size"],
+        "properties": {
+          "price": { "type": "string" },
+          "size": { "type": "string" }
+        }
+      }
+    },
+    "tick_size": {
+      "type": "string",
+      "description": "最小价格单位"
+    },
+    "neg_risk": {
+      "type": "boolean",
+      "description": "是否 NegRisk 市场"
+    },
+    "hash": {
+      "type": "string",
+      "description": "订单簿哈希"
+    }
+  }
+}

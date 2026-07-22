@@ -1,0 +1,14 @@
+[
+  {
+    "id": "pos-001",
+    "condition_id": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    "token_id": "1111111111111111111111111111111111111111111111111111111111111111",
+    "size": "50.0",
+    "avg_price": "0.43",
+    "current_price": "0.45",
+    "unrealized_pnl": "1.00",
+    "realized_pnl": "0.00",
+    "outcome": "Yes",
+    "question": "BTC above $100k in 2026?"
+  }
+]

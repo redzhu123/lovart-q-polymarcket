@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 订单列表",
+  "description": "GET /orders 响应",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "market", "side", "status"],
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "订单 ID"
+      },
+      "market": {
+        "type": "string",
+        "minLength": 1,
+        "description": "市场 ID"
+      },
+      "side": {
+        "type": "string",
+        "enum": ["BUY", "SELL"],
+        "description": "买卖方向"
+      },
+      "status": {
+        "type": "string",
+        "enum": ["LIVE", "MATCHED", "CANCELLED", "EXPIRED", "CLOSED"],
+        "description": "订单状态"
+      },
+      "price": { "type": "string" },
+      "original_size": { "type": "string" },
+      "size_matched": { "type": "string" },
+      "size_remaining": { "type": "string" },
+      "token_id": { "type": "string" },
+      "asset_id": { "type": "string" },
+      "type": { "type": "string" },
+      "created_at": { "type": "string" },
+      "expiration": { "type": "string" },
+      "owner": { "type": "string" }
+    }
+  }
+}

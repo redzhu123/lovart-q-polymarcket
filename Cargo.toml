@@ -30,6 +30,12 @@ members = [
     "crates/strategy",
     "crates/metrics",
     "crates/backtest",
+    "crates/orderbook",
+    "crates/opportunity",
+    "crates/risk",
+    "crates/trading",
+    "crates/gateway",
+    "crates/api-test",
 ]
 
 [workspace.package]
@@ -72,6 +78,12 @@ pm-execution = { path = "crates/execution" }
 pm-strategy = { path = "crates/strategy" }
 pm-metrics = { path = "crates/metrics" }
 pm-backtest = { path = "crates/backtest" }
+pm-orderbook = { path = "crates/orderbook" }
+pm-opportunity = { path = "crates/opportunity" }
+pm-risk = { path = "crates/risk" }
+pm-trading = { path = "crates/trading" }
+pm-gateway = { path = "crates/gateway" }
+pm-api-test = { path = "crates/api-test" }
 
 # 测试/构建优化 profile（保持默认即可，显式声明便于后续调优）
 [profile.dev]

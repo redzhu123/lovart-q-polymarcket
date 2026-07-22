@@ -1,0 +1,48 @@
+[package]
+name = "pm-api-test"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Polymarket API 自动化测试框架 —— 独立于业务模块，验证所有 API 的请求/响应格式与 Schema 合法性"
+
+[dependencies]
+# HTTP 客户端（与 workspace 保持一致：rustls-tls）
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+# 序列化
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 错误处理
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+# 时间
+chrono = { workspace = true }
+# 日志（中文）
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# 异步
+tokio = { workspace = true }
+# JSON Schema 校验
+jsonschema = "0.26"
+# WebSocket
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3.31"
+# URL 解析
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "contract_tests"
+path = "tests/contract_tests.rs"
+
+[[test]]
+name = "mock_tests"
+path = "tests/mock_tests.rs"
+
+[[test]]
+name = "live_tests"
+path = "tests/live_tests.rs"

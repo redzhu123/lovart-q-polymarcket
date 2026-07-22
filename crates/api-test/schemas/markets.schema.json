@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 市场列表",
+  "description": "GET /markets 或 GET /simplified-markets 响应",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["condition_id", "question"],
+    "properties": {
+      "condition_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Polymarket 条件 ID"
+      },
+      "question": {
+        "type": "string",
+        "minLength": 1,
+        "description": "市场问题描述"
+      },
+      "description": { "type": "string" },
+      "closed": { "type": "boolean" },
+      "active": { "type": "boolean" },
+      "neg_risk": { "type": "boolean" },
+      "minimum_tick_size": { "type": "string" },
+      "tokens": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["token_id", "outcome"],
+          "properties": {
+            "token_id": { "type": "string", "minLength": 1 },
+            "outcome": { "type": "string", "enum": ["Yes", "No"] },
+            "price": { "type": "string" }
+          }
+        }
+      },
+      "outcomes": { "type": "string" },
+      "outcomePrices": { "type": "string" },
+      "volume": { "type": "string" },
+      "volumeNum": { "type": "number" },
+      "liquidity": { "type": "string" },
+      "liquidityNum": { "type": "number" },
+      "end_date": { "type": "string" },
+      "start_date": { "type": "string" },
+      "image": { "type": "string" },
+      "icon": { "type": "string" }
+    }
+  }
+}

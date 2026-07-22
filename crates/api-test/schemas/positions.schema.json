@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 持仓列表",
+  "description": "GET /positions (Data API) 响应",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["condition_id", "token_id", "size"],
+    "properties": {
+      "id": { "type": "string" },
+      "condition_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "市场 ID"
+      },
+      "token_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Token ID"
+      },
+      "size": {
+        "type": "string",
+        "description": "持仓数量"
+      },
+      "avg_price": { "type": "string" },
+      "current_price": { "type": "string" },
+      "unrealized_pnl": { "type": "string" },
+      "realized_pnl": { "type": "string" },
+      "cost_basis": { "type": "string" },
+      "market_value": { "type": "string" },
+      "outcome": { "type": "string" },
+      "question": { "type": "string" }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Polymarket 成交记录",
+  "description": "GET /trades 响应",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "market", "price", "size", "side"],
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "成交 ID"
+      },
+      "market": {
+        "type": "string",
+        "minLength": 1,
+        "description": "市场 ID (condition_id)"
+      },
+      "price": {
+        "type": "string",
+        "description": "成交价格"
+      },
+      "size": {
+        "type": "string",
+        "description": "成交数量"
+      },
+      "side": {
+        "type": "string",
+        "enum": ["BUY", "SELL"],
+        "description": "买卖方向"
+      },
+      "asset_id": { "type": "string" },
+      "token_id": { "type": "string" },
+      "created_at": { "type": "string" },
+      "status": { "type": "string" },
+      "fee_rate_bps": { "type": "string" }
+    }
+  }
+}
