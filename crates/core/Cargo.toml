@@ -1,0 +1,13 @@
+[package]
+name = "pm-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "跨 crate 公共原语：Side、错误类型、模拟标记"
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }

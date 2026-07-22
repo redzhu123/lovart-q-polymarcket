@@ -1,0 +1,19 @@
+[package]
+name = "pm-paper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Paper Trading 引擎 + 历史回放（Simulation Only）"
+
+[dependencies]
+pm-core = { workspace = true }
+pm-models = { workspace = true }
+pm-portfolio = { workspace = true }
+pm-storage = { workspace = true }
+pm-utils = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }

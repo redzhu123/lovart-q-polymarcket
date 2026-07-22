@@ -1,0 +1,22 @@
+# === Rust / Cargo ===
+target/
+**/*.rs.bk
+*.pdb
+
+# === IDE & Editor ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Claude ===
+.claude/
+
+# === Runtime Data (generated CSV output) ===
+data/*.csv
+
+# === Local Config (may contain API keys) ===
+# config.toml  # uncomment if config contains secrets; otherwise commit it

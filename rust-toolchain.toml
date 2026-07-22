@@ -1,0 +1,8 @@
+# 固定工具链：MSVC target。
+# 原因：默认 stable-x86_64-pc-windows-gnu 缺少 dlltool.exe，windows-sys 0.59+ 的 build script
+# 在 gnu target 上会调用 dlltool 导致构建失败。MSVC target (link.exe + Windows SDK) 可用。
+# 此文件比 `rustup override set` 更可复现（随仓库走，不依赖本机 rustup 设置）。
+[toolchain]
+channel = "stable"
+targets = ["x86_64-pc-windows-msvc"]
+profile = "minimal"

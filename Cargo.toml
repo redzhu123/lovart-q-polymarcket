@@ -1,0 +1,78 @@
+# Polymarket Quant Platform V1.0 - Cargo Workspace
+#
+# Research Platform：持续采集 / 发现机会 / 验证策略 / 模拟交易 / 统计收益。
+# Simulation Only -- 不连接钱包 / 不真实交易 / 不签名 / 不上链。
+#
+# 两个 app：
+#   apps/cli      = 统一默认二进制 (default-members)，分发 scan|replay|paper|backtest|execution-test|report
+#   apps/scanner  = 专用持续扫描二进制 (cargo run -p pm-scanner-app)
+# crate 依赖图见各 crate README 与 _legacy 迁移笔记；禁止循环依赖。
+
+[workspace]
+resolver = "2"
+# `cargo run -- <mode>` 与 `cargo build`（无 -p）默认作用于 apps/cli，
+# 使六个 `cargo run -- <mode>` 命令统一可用。构建全部用 `cargo build --workspace`。
+default-members = ["apps/cli"]
+members = [
+    "apps/scanner",
+    "apps/cli",
+    "crates/core",
+    "crates/models",
+    "crates/utils",
+    "crates/storage",
+    "crates/tracker",
+    "crates/scanner",
+    "crates/recorder",
+    "crates/shadow",
+    "crates/portfolio",
+    "crates/paper",
+    "crates/execution",
+    "crates/strategy",
+    "crates/metrics",
+    "crates/backtest",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.85"
+authors = ["Polymarket Quant Platform"]
+license = "MIT"
+repository = "https://example.com/polymarket-quant"
+publish = false
+
+[workspace.dependencies]
+# ---- 外部依赖（统一版本，各 crate 按 need 引用）----
+tokio = { version = "1", features = ["macros", "rt", "time", "signal"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
+rand = "0.10"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+
+# ---- 内部 crate（path 依赖，版本跟 workspace.package）----
+pm-core = { path = "crates/core" }
+pm-models = { path = "crates/models" }
+pm-utils = { path = "crates/utils" }
+pm-storage = { path = "crates/storage" }
+pm-tracker = { path = "crates/tracker" }
+pm-scanner = { path = "crates/scanner" }
+pm-recorder = { path = "crates/recorder" }
+pm-shadow = { path = "crates/shadow" }
+pm-portfolio = { path = "crates/portfolio" }
+pm-paper = { path = "crates/paper" }
+pm-execution = { path = "crates/execution" }
+pm-strategy = { path = "crates/strategy" }
+pm-metrics = { path = "crates/metrics" }
+pm-backtest = { path = "crates/backtest" }
+
+# 测试/构建优化 profile（保持默认即可，显式声明便于后续调优）
+[profile.dev]
+opt-level = 0

@@ -1,0 +1,13 @@
+[package]
+name = "pm-portfolio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "组合资金管理：Position/Order/Portfolio + RiskManager（Simulation Only）"
+
+[dependencies]
+pm-core = { workspace = true }
+chrono = { workspace = true }

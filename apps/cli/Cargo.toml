@@ -1,0 +1,29 @@
+[package]
+name = "pm-cli-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "统一研究 CLI（pm-cli）：scan/replay/paper/backtest/execution-test/report"
+
+[[bin]]
+name = "pm-cli"
+path = "src/main.rs"
+
+[dependencies]
+pm-core = { workspace = true }
+pm-models = { workspace = true }
+pm-utils = { workspace = true }
+pm-storage = { workspace = true }
+pm-scanner = { workspace = true }
+pm-backtest = { workspace = true }
+pm-paper = { workspace = true }
+pm-execution = { workspace = true }
+pm-shadow = { workspace = true }
+pm-metrics = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

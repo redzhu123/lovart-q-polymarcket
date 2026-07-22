@@ -1,0 +1,11 @@
+[package]
+name = "pm-utils"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "纯工具：数值格式化与统计数学（无 IO、无业务依赖）"
+
+[dependencies]

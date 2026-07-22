@@ -1,0 +1,13 @@
+[package]
+name = "pm-metrics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "统一指标计数器 + 统计辅助"
+
+[dependencies]
+pm-core = { workspace = true }
+pm-utils = { workspace = true }

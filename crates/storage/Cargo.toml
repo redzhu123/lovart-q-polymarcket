@@ -1,0 +1,18 @@
+[package]
+name = "pm-storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "通用 CSV 读写原语 + 机会文件读取"
+
+[dependencies]
+pm-core = { workspace = true }
+pm-models = { workspace = true }
+serde = { workspace = true }
+csv = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }

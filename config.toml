@@ -1,0 +1,70 @@
+# Polymarket Quant Platform V1.0 配置文件
+#
+# Simulation Only -- 所有参数仅用于模拟研究，不涉及真实交易。
+# 由 pm-models::Config::load("config.toml") 读取；不读环境变量。
+
+[scanner]
+# 每轮扫描间隔（秒）
+scan_interval_secs = 10
+# 套利判定阈值：YES+NO 低于此值视为潜在机会
+opportunity_threshold = 0.99
+# 调试开关（旧版，已由 [logging].log_level 接管；保留以兼容旧配置解析）
+debug = true
+
+# 日志级别（V1.01 第九节）-- 控制控制台输出详尽程度。
+#   ERROR 仅错误 / WARN +警告 / INFO +统计仪表盘 / DEBUG +调试明细（默认）/ TRACE +全量市场转储
+[logging]
+log_level = "DEBUG"
+
+# 数据源（V1.02）-- 控制使用哪个 Provider 与内存缓存 TTL。
+#   provider  = gamma | clob | mock（clob 暂未实现，会返回明确错误）
+#   cache_ttl = 内存缓存存活秒数（仅内存，无 Redis / 无数据库）
+[datasource]
+provider = "gamma"
+cache_ttl = 10
+
+[portfolio]
+# 初始资金（USDC）
+initial_capital = 10000.0
+# 最大同时持仓数
+max_positions = 10
+# 单笔持仓最大成本（USDC）
+max_position_size = 100.0
+
+[execution]
+# Execution Simulator 初始资金（USDC）
+capital = 10000.0
+# 待处理订单数上限（风控）
+max_pending_orders = 20
+# 单笔订单固定成本（USDC）
+order_notional = 100.0
+# 最大成交延迟（扫描周期数，0..=N 随机）
+max_fill_delay = 3
+# 最大等待扫描周期数，到达仍未完全成交 -> Cancelled / Expired
+max_wait_scans = 5
+
+[risk]
+# 单日最大亏损（USDC），超过则禁止新开仓
+max_daily_loss = 1000.0
+
+[paths]
+data_dir = "data"
+opportunities_csv = "data/opportunities.csv"
+shadow_csv = "data/shadow_trades.csv"
+paper_orders_csv = "data/paper_orders.csv"
+paper_positions_csv = "data/paper_positions.csv"
+paper_portfolio_csv = "data/paper_portfolio.csv"
+execution_csv = "data/execution_orders.csv"
+backtest_report_csv = "data/backtest_report.csv"
+
+[replay]
+# 回放速度倍率：1=真实速度，10=10 倍速
+speed = 10
+# 历史扫描步长（秒）
+step_secs = 10
+
+[backtest]
+# 模拟入场滑点（Simulation Only）：entry_sum = best_sum * (1 + slippage)
+entry_slippage = 0.005
+# 策略名称（写入报告，便于多次回测对比）
+strategy_name = "ShadowStrategy-v1.0"
