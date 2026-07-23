@@ -1,0 +1,47 @@
+# Polymarket Quant Platform V1.07 -- Trading Provider 配置
+#
+# 环境：dev / paper / sandbox / production
+# 默认 paper。禁止在未确认的情况下设置为 production。
+#
+# 安全警告：
+#   - 不要在此文件中填写真实的 API Key / Secret / Private Key
+#   - 使用环境变量或 .env 文件管理凭据
+#   - production 环境需要显式确认
+
+environment = "paper"
+default_provider = "mock"
+
+# Session 配置
+session_ttl_secs = 3600
+
+# 心跳间隔（秒）
+heartbeat_interval_secs = 30
+
+# 健康检查间隔（秒）
+health_interval_secs = 60
+
+# 自动重连
+auto_reconnect = true
+reconnect_max_attempts = 10
+
+# ---- Mock Provider（默认启用）----
+[[providers]]
+provider_type = "mock"
+enabled = true
+environment = "paper"
+
+# ---- Polymarket Provider（未来启用）----
+# [[providers]]
+# provider_type = "polymarket"
+# enabled = false
+# environment = "paper"
+# http_url = "https://clob.polymarket.com"
+# ws_url = "wss://ws.polymarket.com"
+# connect_timeout_ms = 5000
+# request_timeout_ms = 30000
+# max_retries = 5
+#
+# [providers.credential]
+# # 注意：不要在此填写真实凭据，使用环境变量：
+# #   POLYMARKET_API_KEY / POLYMARKET_API_SECRET / POLYMARKET_WALLET_ADDRESS
+# environment = "paper"

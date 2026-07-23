@@ -1,0 +1,26 @@
+[package]
+name = "pm-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Exchange Gateway：统一交易所网关（V1.08）— Mock / Polymarket / Kalshi / DEX / CEX"
+
+[dependencies]
+pm-core = { workspace = true }
+pm-models = { workspace = true }
+pm-utils = { workspace = true }
+pm-execution = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+rand = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+csv = { workspace = true }
