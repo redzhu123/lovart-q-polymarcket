@@ -12,8 +12,12 @@ description = "Execution Simulator：订单执行模拟器（Simulation Only）"
 pm-core = { workspace = true }
 pm-storage = { workspace = true }
 pm-utils = { workspace = true }
+pm-models = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 tracing = { workspace = true }
+async-trait = { workspace = true }
+csv = { workspace = true }
+tokio = { workspace = true }
