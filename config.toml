@@ -43,9 +43,68 @@ max_fill_delay = 3
 # 最大等待扫描周期数，到达仍未完全成交 -> Cancelled / Expired
 max_wait_scans = 5
 
+# ---- V1.06 新增 ----
+# 最大队列长度
+max_queue_size = 1000
+# 最大重试次数
+max_retries = 3
+# 重试延迟（毫秒）
+retry_delay_ms = 1000
+# 订单超时（毫秒）
+timeout_ms = 30000
+# 每秒最大订单数（速率限制）
+max_orders_per_second = 10
+# 突发容量（一次可发送的最大 burst）
+burst_size = 5
+# Gateway 类型：mock | polymarket | kalshi（当前仅 mock）
+gateway = "mock"
+# Execution 事件 CSV 路径
+events_csv = "data/execution_events.csv"
+# Execution 报告 CSV 路径
+report_csv = "data/execution_report.csv"
+
+# ============================================================================
+# V1.05 Risk Engine 配置
+# ============================================================================
+# 所有风险参数从此段读取，禁止写死。
 [risk]
-# 单日最大亏损（USDC），超过则禁止新开仓
+# 仓位规模策略：Fixed | FixedRisk | Kelly | Volatility | Liquidity | Confidence
+position_sizer = "Fixed"
+# 固定仓位金额（USDC，Fixed 策略）
+fixed_size = 100.0
+# 固定风险比例（FixedRisk 策略，0.01 = 1%）
+risk_ratio = 0.01
+
+# 仓位限制
+max_positions = 10
+max_position_size = 100.0
+max_open_orders = 20
+max_single_capital = 500.0
+max_capital_usage = 0.5
+
+# 亏损限制
 max_daily_loss = 1000.0
+max_consecutive_losses = 5
+max_drawdown = 0.2
+
+# 暴露限制
+max_market_exposure = 0.3
+max_category_exposure = 0.5
+max_side_exposure = 0.6
+
+# 市场质量
+min_liquidity = 100.0
+min_depth = 50.0
+max_slippage = 0.02
+max_volatility = 0.5
+
+# 评分阈值（Risk Score 0~100）
+accept_threshold = 70.0
+review_threshold = 40.0
+
+# CSV 路径
+risk_events_csv = "data/risk_events.csv"
+risk_dashboard_csv = "data/risk_dashboard.csv"
 
 [paths]
 data_dir = "data"
@@ -62,6 +121,53 @@ backtest_report_csv = "data/backtest_report.csv"
 speed = 10
 # 历史扫描步长（秒）
 step_secs = 10
+
+# ============================================================================
+# V1.08 Exchange Gateway 配置
+# ============================================================================
+# 统一交易所网关。默认 DryRun — 真实下单必须 enable_live=true。
+[gateway]
+# Gateway 类型："mock" | "polymarket" | "kalshi" | "dex" | "cex"
+gateway_type = "mock"
+# 是否启用真实交易。默认 false（DryRun），真实下单必须设为 true
+enable_live = false
+# Polymarket API 基础 URL
+polymarket_api_url = "https://clob.polymarket.com"
+# Polymarket WebSocket URL
+polymarket_ws_url = "wss://ws.polymarket.com"
+# API 密钥（不写配置文件！从环境变量读取）
+api_key = ""
+api_key_env = "POLYMARKET_API_KEY"
+api_secret_env = "POLYMARKET_API_SECRET"
+api_passphrase_env = "POLYMARKET_API_PASSPHRASE"
+
+# ---- 重试配置 ----
+max_retries = 3
+retry_base_ms = 500
+retry_max_ms = 15000
+backoff_multiplier = 2.0
+
+# ---- Circuit Breaker ----
+cb_failure_threshold = 5
+cb_recovery_timeout_ms = 30000
+cb_half_open_max = 3
+
+# ---- 速率限制 ----
+rate_limit_per_sec = 10
+rate_limit_per_min = 300
+
+# ---- 健康检查 ----
+health_check_interval_secs = 30
+api_timeout_ms = 10000
+
+# ---- 同步 ----
+order_sync_interval_secs = 5
+balance_sync_interval_secs = 30
+position_sync_interval_secs = 15
+
+# ---- Metrics ----
+gateway_metrics_csv = "data/gateway_metrics.csv"
+gateway_health_csv = "data/gateway_health.csv"
 
 [backtest]
 # 模拟入场滑点（Simulation Only）：entry_sum = best_sum * (1 + slippage)

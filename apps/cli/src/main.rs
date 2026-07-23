@@ -1,18 +1,37 @@
 //! pm-cli：统一研究 CLI（默认二进制）。
 //!
-//! 分发六个模式（`cargo run -- <mode>`）：
-//!   scan            正常扫描 + Shadow + Paper + Execution Simulator
-//!   replay          历史回放
-//!   paper           历史机会走 PaperTradingEngine 回放
-//!   backtest        完整回测
-//!   execution-test  Execution Simulator 压力测试
-//!   report          汇总报告
+//! 分发模式（`cargo run -- <mode>`）：
+//!   scan / diagnose / datasource / replay / paper / backtest / execution-test / report
+//!   market / orderbook / spread / liquidity（V1.03 市场微观结构）
+//!   opportunities / top / explain（V1.04 机会引擎）
+//!   risk / explain-risk / risk-replay（V1.05 风险引擎）
+//!   orders / execution / queue / exec-replay（V1.06 执行引擎）
+//!   gateway / account / balance（V1.08 Exchange Gateway）
 //!
 //! Simulation Only -- 不连接钱包 / 不真实交易 / 不签名 / 不下单 / 无 Polygon / WebSocket / 数据库 / Redis。
 
 use anyhow::Result;
+use pm_orderbook::{
+    DepthAnalyzer, LiquidityAnalyzer, MarketStatistics, OrderBookSnapshot,
+    OrderBookValidator, OrderBookVisualizer, SpreadAnalyzer,
+};
+use pm_risk::{
+    RiskConfig, RiskContext, RiskDashboard, RiskEngine, RiskReplay, TradeSuggestion,
+};
+use pm_scanner::DataSourceManager;
+use pm_trading::{
+    self, diagnose_connection, diagnose_credential, diagnose_health, diagnose_provider,
+    diagnose_session, MockTradingProvider, TradingConfig,
+};
+use pm_gateway::{
+    self, create_gateway, diagnose_account, diagnose_balance, diagnose_gateway,
+    GatewayConfig,
+};
 
 const CONFIG_PATH: &str = "config.toml";
+
+/// 市场微观结构命令默认分析的订单簿数量上限。
+const ORDERBOOK_LIMIT: usize = 10;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
@@ -38,7 +57,7 @@ async fn main() -> Result<()> {
         )
         .try_init();
 
-    println!("pm-cli -- Polymarket 量化平台 V1.02");
+    println!("pm-cli -- Polymarket 量化平台 V1.08");
     println!("仅模拟 -- 无钱包 / 无下单 / 无签名");
     println!();
 
@@ -82,6 +101,108 @@ async fn main() -> Result<()> {
             println!("模式：报告");
             run_report(&cfg)
         }
+        // ---- V1.03 市场微观结构 CLI ----
+        "market" => {
+            println!("模式：市场列表");
+            run_market(&cfg).await
+        }
+        "orderbook" => {
+            println!("模式：订单簿");
+            run_orderbook(&cfg).await
+        }
+        "spread" => {
+            println!("模式：价差分析");
+            run_spread(&cfg).await
+        }
+        "liquidity" => {
+            println!("模式：流动性分析");
+            run_liquidity(&cfg).await
+        }
+        // ---- V1.04 机会引擎 CLI ----
+        "opportunities" | "opps" => {
+            println!("模式：机会列表");
+            run_opportunities(&cfg).await
+        }
+        "top" => {
+            println!("模式：Top 10 机会");
+            run_top(&cfg).await
+        }
+        "explain" => {
+            let id = args.get(2).cloned().unwrap_or_default();
+            if id.is_empty() {
+                println!("用法: cargo run -- explain <id>");
+                println!("  id 可以是 market_id 或机会 ID 前缀");
+                return Ok(());
+            }
+            println!("模式：机会解释");
+            run_explain(&cfg, &id).await
+        }
+        // ---- V1.05 风险引擎 CLI ----
+        "risk" => {
+            println!("模式：风险仪表盘");
+            run_risk(&cfg).await
+        }
+        "explain-risk" => {
+            println!("模式：风险解释");
+            run_explain_risk(&cfg).await
+        }
+        "risk-replay" => {
+            println!("模式：风险回放");
+            run_risk_replay(&cfg).await
+        }
+        // ---- V1.06 执行引擎 CLI ----
+        "orders" => {
+            println!("模式：订单列表");
+            run_orders(&cfg).await
+        }
+        "execution" => {
+            println!("模式：执行状态");
+            run_execution_status(&cfg)
+        }
+        "queue" => {
+            println!("模式：队列查看");
+            run_queue_status(&cfg)
+        }
+        "exec-replay" => {
+            let id = args.get(2).cloned().unwrap_or_default();
+            if id.is_empty() {
+                println!("用法: cargo run -- exec-replay <order_id>");
+                return Ok(());
+            }
+            println!("模式：订单回放");
+            run_exec_replay(&cfg, &id)
+        }
+        // ---- V1.07 Trading Infrastructure CLI ----
+        "provider" => {
+            println!("模式：Provider 诊断");
+            run_trading_provider(&cfg).await
+        }
+        "health" => {
+            println!("模式：Health 诊断");
+            run_trading_health(&cfg).await
+        }
+        "session" => {
+            println!("模式：Session 诊断");
+            run_trading_session(&cfg)
+        }
+        "connection" => {
+            println!("模式：Connection 诊断");
+            run_trading_connection(&cfg)
+        }
+        // ---- V1.08 Exchange Gateway CLI ----
+        "gateway" => {
+            println!("模式：Gateway 状态");
+            run_gateway(&cfg).await
+        }
+        "account" => {
+            println!("模式：账户诊断");
+            run_account(&cfg).await
+        }
+        "balance" => {
+            println!("模式：余额查询");
+            run_balance(&cfg).await
+        }
+        // "orders" 已存在（V1.06），但 V1.08 增强为经 Gateway 查询
         other => {
             println!("未知模式: {}", other);
             print_usage();
@@ -89,6 +210,288 @@ async fn main() -> Result<()> {
         }
     }
 }
+
+// ============================================================================
+// V1.03 市场微观结构 CLI 命令
+// ============================================================================
+
+/// 获取市场 ID 列表：优先使用当前 Provider，不支持时回退到 Gamma。
+async fn get_market_ids(cfg: &pm_models::Config, limit: usize) -> Result<Vec<String>> {
+    let mut manager = DataSourceManager::from_config(cfg)?;
+
+    if manager.capability().supports_markets {
+        let outcome = manager.fetch_markets().await?;
+        let ids: Vec<String> = outcome
+            .markets
+            .iter()
+            .filter(|m| m.active())
+            .take(limit)
+            .map(|m| m.market_id.clone())
+            .collect();
+        return Ok(ids);
+    }
+
+    // 回退到 Gamma（CLOB 不支持市场列表）
+    if cfg.datasource.provider != "gamma" {
+        tracing::info!("当前 Provider 不支持市场列表，回退到 Gamma 获取市场 ID");
+        let mut gamma_cfg = cfg.clone();
+        gamma_cfg.datasource.provider = "gamma".into();
+        let mut gamma_manager = DataSourceManager::from_config(&gamma_cfg)?;
+        let outcome = gamma_manager.fetch_markets().await?;
+        let ids: Vec<String> = outcome
+            .markets
+            .iter()
+            .filter(|m| m.active())
+            .take(limit)
+            .map(|m| m.market_id.clone())
+            .collect();
+        return Ok(ids);
+    }
+
+    Ok(Vec::new())
+}
+
+/// `cargo run -- market`：拉取市场列表并展示基本信息。
+async fn run_market(cfg: &pm_models::Config) -> Result<()> {
+    let mut manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    if !manager.capability().supports_markets {
+        println!("当前 Provider 不支持市场列表。");
+        println!("提示：使用 Gamma Provider (provider=\"gamma\") 或 Mock Provider (provider=\"mock\")。");
+        return Ok(());
+    }
+
+    println!("正在拉取市场数据...");
+    println!();
+
+    let outcome = manager.fetch_markets().await?;
+    let markets = &outcome.markets;
+
+    println!("市场数量: {}", markets.len());
+    if outcome.cached {
+        println!("（数据来自缓存）");
+    }
+    println!();
+
+    // 打印前 20 个市场
+    let display_count = markets.len().min(20);
+    println!("前 {} 个市场：", display_count);
+    println!();
+    println!(
+        "{:<40} {:>6} {:>6} {:>10} {:>10} {:>8}",
+        "问题", "YES", "NO", "成交量", "流动性", "状态"
+    );
+    println!("{}", "-".repeat(90));
+
+    for m in markets.iter().take(display_count) {
+        let yes_str = m.yes_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "  -   ".into());
+        let no_str = m.no_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "  -   ".into());
+        let vol_str = if m.volume >= 1000.0 {
+            format!("{:.1}k", m.volume / 1000.0)
+        } else {
+            format!("{:.0}", m.volume)
+        };
+        let liq_str = if m.liquidity >= 1000.0 {
+            format!("{:.1}k", m.liquidity / 1000.0)
+        } else {
+            format!("{:.0}", m.liquidity)
+        };
+        // 截断问题到 38 个字符
+        let q: String = m.question.chars().take(38).collect();
+
+        println!(
+            "{:<40} {:>6} {:>6} {:>10} {:>10} {:>8}",
+            q,
+            yes_str,
+            no_str,
+            vol_str,
+            liq_str,
+            m.status.as_zh()
+        );
+    }
+
+    if markets.len() > display_count {
+        println!("... 及其他 {} 个市场", markets.len() - display_count);
+    }
+    println!();
+
+    Ok(())
+}
+
+/// `cargo run -- orderbook`：拉取订单簿并展示。
+async fn run_orderbook(cfg: &pm_models::Config) -> Result<()> {
+    let manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    if !manager.capability().supports_orderbook {
+        println!("当前 Provider 不支持订单簿。");
+        println!("提示：使用 CLOB Provider (provider=\"clob\") 或 Mock Provider (provider=\"mock\")。");
+        return Ok(());
+    }
+
+    println!("正在拉取订单簿数据...");
+    println!();
+
+    let ids = get_market_ids(cfg, ORDERBOOK_LIMIT).await?;
+
+    if ids.is_empty() {
+        println!("无可用市场，无法获取订单簿。");
+        return Ok(());
+    }
+
+    println!("对 {} 个市场查询订单簿...", ids.len());
+    println!();
+
+    let orderbooks = manager.provider().fetch_orderbooks(&ids).await?;
+
+    // 校验
+    let validation = OrderBookValidator::validate_all(&orderbooks);
+    validation.print_summary();
+    println!();
+
+    // 展示每个订单簿
+    for ob in &orderbooks {
+        if ob.best_bid.is_none() && ob.best_ask.is_none() {
+            println!("市场 {}：订单簿数据不可用", ob.market_id);
+            println!();
+            continue;
+        }
+
+        println!("{}", "─".repeat(60));
+        println!("市场: {}", ob.market_id);
+        println!();
+
+        if let Some(bid) = ob.best_bid {
+            println!("  Best Bid : {:.4}  |  买盘深度: {:.2}", bid, ob.bid_depth.unwrap_or(0.0));
+        }
+        if let Some(ask) = ob.best_ask {
+            println!("  Best Ask : {:.4}  |  卖盘深度: {:.2}", ask, ob.ask_depth.unwrap_or(0.0));
+        }
+        if let Some(spread) = ob.spread {
+            println!("  Spread   : {:.4}", spread);
+        }
+        println!("  买盘档位: {}  |  卖盘档位: {}", ob.bid_levels.len(), ob.ask_levels.len());
+        println!("  累计买量: {:.2}  |  累计卖量: {:.2}", ob.bid_volume, ob.ask_volume);
+        println!();
+
+        // ASCII 可视化
+        if !ob.bid_levels.is_empty() || !ob.ask_levels.is_empty() {
+            let ascii = OrderBookVisualizer::render(ob);
+            println!("{}", ascii);
+        }
+    }
+
+    // 保存快照
+    let snapshots = OrderBookSnapshot::from_orderbooks(&orderbooks, chrono::Local::now());
+    let snap_path = format!("{}/orderbook_snapshots.csv", cfg.paths.data_dir);
+    OrderBookSnapshot::save_to_csv(&snapshots, &snap_path)?;
+
+    Ok(())
+}
+
+/// `cargo run -- spread`：价差分析。
+async fn run_spread(cfg: &pm_models::Config) -> Result<()> {
+    let manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    if !manager.capability().supports_orderbook {
+        println!("当前 Provider 不支持订单簿，无法进行价差分析。");
+        println!();
+        println!("提示：使用 Gamma Provider 无法获取价差（Gamma 无订单簿）。");
+        println!("请将 config.toml 中 [datasource] provider 设为 \"clob\" 以获取真实订单簿。");
+        println!("或设为 \"mock\" 使用模拟数据测试。");
+        return Ok(());
+    }
+
+    let ids = get_market_ids(cfg, ORDERBOOK_LIMIT).await?;
+
+    println!("对 {} 个市场进行价差分析...", ids.len());
+    println!();
+
+    let orderbooks = manager.provider().fetch_orderbooks(&ids).await?;
+
+    let mut valid_count = 0;
+    for ob in &orderbooks {
+        let report = SpreadAnalyzer::analyze(ob);
+        if report.spread.is_some() {
+            valid_count += 1;
+            SpreadAnalyzer::print_report(&report);
+        }
+    }
+
+    // 汇总
+    let summary = SpreadAnalyzer::summarize(&orderbooks);
+    if valid_count > 0 {
+        SpreadAnalyzer::print_summary(&summary);
+    } else {
+        println!("（无有效价差数据 -- 该 Provider 不支持订单簿或未返回价差信息）");
+        println!();
+    }
+
+    Ok(())
+}
+
+/// `cargo run -- liquidity`：流动性分析。
+async fn run_liquidity(cfg: &pm_models::Config) -> Result<()> {
+    let manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    if !manager.capability().supports_orderbook {
+        println!("当前 Provider 不支持订单簿，无法进行流动性分析。");
+        println!();
+        println!("提示：请将 config.toml 中 [datasource] provider 设为 \"clob\" 或 \"mock\"。");
+        return Ok(());
+    }
+
+    let ids = get_market_ids(cfg, ORDERBOOK_LIMIT).await?;
+
+    println!("对 {} 个市场进行流动性分析...", ids.len());
+    println!();
+
+    let orderbooks = manager.provider().fetch_orderbooks(&ids).await?;
+    let reports = LiquidityAnalyzer::analyze_all(&orderbooks);
+
+    let mut has_data = false;
+    for report in &reports {
+        if report.total_liquidity > 0.0 {
+            has_data = true;
+            LiquidityAnalyzer::print_report(report);
+        }
+    }
+
+    if has_data {
+        LiquidityAnalyzer::print_summary(&reports);
+    }
+
+    // 附带深度分析
+    println!("{}", "=".repeat(60));
+    println!();
+    println!("深度分析（附带）：");
+    println!();
+    let depth_reports = DepthAnalyzer::analyze_all(&orderbooks);
+    let depth_has_data = depth_reports.iter().any(|r| r.bid_top10 > 0.0 || r.ask_top10 > 0.0);
+    if depth_has_data {
+        let depth_summary = DepthAnalyzer::summarize(&depth_reports);
+        DepthAnalyzer::print_summary(&depth_summary);
+    } else {
+        println!("（无深度数据）");
+        println!();
+    }
+
+    // 累计统计
+    println!("{}", "=".repeat(60));
+    println!();
+    let mut stats = MarketStatistics::new();
+    stats.accumulate(&orderbooks);
+    stats.print_report();
+
+    Ok(())
+}
+
+// ============================================================================
+// 原有 CLI 命令
+// ============================================================================
 
 /// report 模式：读取各 CSV，打印平台级汇总。
 fn run_report(cfg: &pm_models::Config) -> Result<()> {
@@ -125,6 +528,606 @@ fn run_report(cfg: &pm_models::Config) -> Result<()> {
     Ok(())
 }
 
+// ============================================================================
+// V1.04 机会引擎 CLI 命令
+// ============================================================================
+
+/// `cargo run -- opportunities`：列出所有机会。
+async fn run_opportunities(cfg: &pm_models::Config) -> Result<()> {
+    let mut manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    println!("正在拉取市场数据并分析机会...");
+    println!();
+
+    let outcome = manager.fetch_markets().await?;
+    let markets = &outcome.markets;
+
+    let mut engine = pm_opportunity::OpportunityEngine::from_pm_config(cfg);
+
+    // 尝试获取订单簿
+    let mut orderbooks_map: std::collections::HashMap<String, pm_models::OrderBook> =
+        std::collections::HashMap::new();
+    if manager.capability().supports_orderbook {
+        let ids: Vec<String> = markets.iter().map(|m| m.market_id.clone()).collect();
+        if let Ok(obs) = manager.provider().fetch_orderbooks(&ids).await {
+            for ob in obs {
+                if ob.best_bid.is_some() || ob.best_ask.is_some() {
+                    orderbooks_map.insert(ob.market_id.clone(), ob);
+                }
+            }
+        }
+    }
+
+    let output = engine.analyze(
+        markets,
+        &orderbooks_map,
+        &manager.provider().capability(),
+        chrono::Utc::now(),
+    );
+
+    println!("机会总数: {}", output.opportunities.len());
+    println!("新增: {}  更新: {}  过滤: {}  过期: {}",
+        output.new_count, output.updated_count, output.filtered_count, output.expired.len());
+    println!();
+    println!("{}", "=".repeat(100));
+    println!();
+
+    if output.opportunities.is_empty() {
+        println!("（未发现符合条件的套利机会）");
+        println!();
+        println!("提示：");
+        println!("  - 当前阈值: SUM < {}", cfg.scanner.opportunity_threshold);
+        println!("  - Gamma 数据归一化（YES+NO=1.0），常态下无套利机会");
+        println!("  - 使用 CLOB (provider=\"clob\") 获取真实订单簿价格");
+        println!("  - 使用 Mock (provider=\"mock\") 查看模拟机会");
+        return Ok(());
+    }
+
+    for opp in &output.opportunities {
+        println!("{}", pm_opportunity::ExplainEngine::explain(opp));
+        println!();
+    }
+
+    Ok(())
+}
+
+/// `cargo run -- top`：Top 10 机会。
+async fn run_top(cfg: &pm_models::Config) -> Result<()> {
+    let mut manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    println!("正在拉取市场数据并分析 Top 10 机会...");
+    println!();
+
+    let outcome = manager.fetch_markets().await?;
+    let markets = &outcome.markets;
+
+    let mut engine = pm_opportunity::OpportunityEngine::from_pm_config(cfg);
+
+    let mut orderbooks_map: std::collections::HashMap<String, pm_models::OrderBook> =
+        std::collections::HashMap::new();
+    if manager.capability().supports_orderbook {
+        let ids: Vec<String> = markets.iter().map(|m| m.market_id.clone()).collect();
+        if let Ok(obs) = manager.provider().fetch_orderbooks(&ids).await {
+            for ob in obs {
+                if ob.best_bid.is_some() || ob.best_ask.is_some() {
+                    orderbooks_map.insert(ob.market_id.clone(), ob);
+                }
+            }
+        }
+    }
+
+    let _output = engine.analyze(
+        markets,
+        &orderbooks_map,
+        &manager.provider().capability(),
+        chrono::Utc::now(),
+    );
+
+    let top = engine.top_n(10);
+
+    if top.is_empty() {
+        println!("（未发现符合条件的套利机会）");
+        return Ok(());
+    }
+
+    println!("Top {} 机会：", top.len());
+    println!();
+    println!(
+        "{:<6} {:<10} {:<45} {:<8} {:<8} {:<8} {:<8}",
+        "排名", "类型", "问题", "评分", "置信度", "风险", "ROI"
+    );
+    println!("{}", "-".repeat(100));
+
+    for (i, opp) in top.iter().enumerate() {
+        let q: String = opp.question.chars().take(43).collect();
+        println!(
+            "{:<6} {:<10} {:<45} {:<8.0} {:<8.0} {:<8.0} {:<8.2}",
+            i + 1,
+            opp.opportunity_type.as_zh(),
+            q,
+            opp.score,
+            opp.confidence * 100.0,
+            opp.risk_score,
+            opp.expected_roi * 100.0,
+        );
+    }
+    println!();
+
+    Ok(())
+}
+
+/// `cargo run -- explain <id>`：解释某个机会的评分。
+async fn run_explain(cfg: &pm_models::Config, target_id: &str) -> Result<()> {
+    let mut manager = DataSourceManager::from_config(cfg)?;
+    manager.print_capability_block();
+
+    println!("正在查找机会: {} ...", target_id);
+    println!();
+
+    let outcome = manager.fetch_markets().await?;
+    let markets = &outcome.markets;
+
+    let mut engine = pm_opportunity::OpportunityEngine::from_pm_config(cfg);
+
+    let mut orderbooks_map: std::collections::HashMap<String, pm_models::OrderBook> =
+        std::collections::HashMap::new();
+    if manager.capability().supports_orderbook {
+        let ids: Vec<String> = markets.iter().map(|m| m.market_id.clone()).collect();
+        if let Ok(obs) = manager.provider().fetch_orderbooks(&ids).await {
+            for ob in obs {
+                if ob.best_bid.is_some() || ob.best_ask.is_some() {
+                    orderbooks_map.insert(ob.market_id.clone(), ob);
+                }
+            }
+        }
+    }
+
+    let output = engine.analyze(
+        markets,
+        &orderbooks_map,
+        &manager.provider().capability(),
+        chrono::Utc::now(),
+    );
+
+    // 按 ID 或 market_id 匹配
+    let found = output.opportunities.iter().find(|opp| {
+        opp.id.starts_with(target_id) || opp.market_id.starts_with(target_id)
+    });
+
+    match found {
+        Some(opp) => {
+            let explanation = pm_opportunity::ExplainEngine::explain(opp);
+            println!("{}", explanation);
+        }
+        None => {
+            println!("未找到匹配的机会: {}", target_id);
+            println!();
+            println!("可用的机会 ID：");
+            for opp in &output.opportunities {
+                println!("  {} ({})", opp.id, opp.question.chars().take(50).collect::<String>());
+            }
+            if output.opportunities.is_empty() {
+                println!("  （无机会）");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// V1.05 风险引擎 CLI 命令
+// ============================================================================
+
+/// `cargo run -- risk`：显示风险仪表盘。
+async fn run_risk(cfg: &pm_models::Config) -> Result<()> {
+    let risk_config = RiskConfig::from_pm_config(cfg);
+    let engine = RiskEngine::new(risk_config);
+
+    // 构建 RiskContext（从 Paper + Execution 当前状态）
+    let now = chrono::Local::now();
+    let ctx = RiskContext::minimal(cfg.portfolio.initial_capital, cfg.portfolio.initial_capital, now);
+
+    let exposure = pm_risk::ExposureReport::new(cfg.portfolio.initial_capital);
+
+    let dashboard = RiskDashboard::render(&engine, &ctx, &exposure);
+    println!("{}", dashboard);
+    println!();
+    println!("提示：运行 `cargo run -- explain-risk` 查看风险规则说明。");
+    println!();
+
+    Ok(())
+}
+
+/// `cargo run -- explain-risk`：解释风险规则。
+async fn run_explain_risk(cfg: &pm_models::Config) -> Result<()> {
+    let risk_config = RiskConfig::from_pm_config(cfg);
+
+    println!("【风险规则说明】");
+    println!();
+    println!("Risk Engine V1.05 — 统一风险引擎");
+    println!();
+    println!("所有交易必须经过 Risk Engine 审核，禁止绕过。");
+    println!();
+    println!("决策类型：");
+    println!("  ✅ 接受（Accept）  — 风险评分 ≥ {}", risk_config.accept_threshold);
+    println!("  ⚠️ 需审核（Review） — 风险评分 {:.0}~{:.0} 或存在警告", risk_config.review_threshold, risk_config.accept_threshold);
+    println!("  ❌ 拒绝（Reject）  — 风险评分 < {:.0} 或触发硬限制", risk_config.review_threshold);
+    println!();
+    println!("── 风险规则 ──");
+    println!();
+    println!("  最大持仓数量：    {} 个", risk_config.max_positions);
+    println!("  单笔最大资金：    {:.0} USDC", risk_config.max_position_size);
+    println!("  最大待处理订单：  {} 个", risk_config.max_open_orders);
+    println!("  最大单笔占用：    {:.0} USDC", risk_config.max_single_capital);
+    println!("  最大资金利用率：  {:.0}%", risk_config.max_capital_usage * 100.0);
+    println!("  每日最大亏损：    {:.0} USDC", risk_config.max_daily_loss);
+    println!("  连续亏损上限：    {} 次", risk_config.max_consecutive_losses);
+    println!("  最大回撤：        {:.0}%", risk_config.max_drawdown * 100.0);
+    println!("  最大市场暴露：    {:.0}%", risk_config.max_market_exposure * 100.0);
+    println!("  最大类别暴露：    {:.0}%", risk_config.max_category_exposure * 100.0);
+    println!("  最大方向暴露：    {:.0}%", risk_config.max_side_exposure * 100.0);
+    println!("  最低流动性：      {:.0} USDC", risk_config.min_liquidity);
+    println!("  最低深度：        {:.0} USDC", risk_config.min_depth);
+    println!("  最大滑点：        {:.1}%", risk_config.max_slippage * 100.0);
+    println!("  最高波动率：      {:.0}%", risk_config.max_volatility * 100.0);
+    println!();
+    println!("── 仓位策略 ──");
+    println!();
+    println!("  当前策略：{}", risk_config.position_sizer.as_zh());
+    println!();
+
+    // 示例：模拟几个场景
+    println!("── 示例场景 ──");
+    println!();
+    println!("场景1：正常交易（流动性充足、无亏损、低持仓）");
+    println!("  预期：✅ 接受");
+    println!();
+    println!("场景2：连续亏损达到上限");
+    println!("  原因：连续亏损达到限制");
+    println!("  预期：❌ 拒绝");
+    println!();
+    println!("场景3：市场流动性不足");
+    println!("  原因：市场流动性不足");
+    println!("  预期：⚠️ 需审核 或 ❌ 拒绝");
+    println!();
+    println!("场景4：资金占用超过限制");
+    println!("  原因：资金占用超过限制");
+    println!("  预期：❌ 拒绝");
+    println!();
+
+    Ok(())
+}
+
+/// `cargo run -- risk-replay`：回放历史风险。
+async fn run_risk_replay(cfg: &pm_models::Config) -> Result<()> {
+    let risk_config = RiskConfig::from_pm_config(cfg);
+    let mut replay = RiskReplay::new(risk_config);
+
+    let now = chrono::Local::now();
+
+    // 从历史机会 CSV 构建回放数据（如果有的话）
+    println!("正在读取历史数据...");
+    println!();
+
+    // 简化版：使用几个模拟场景展示回放功能
+    let scenarios = vec![
+        (
+            "正常场景",
+            TradeSuggestion::new("mkt-normal", "正常市场机会", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            {
+                let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
+                ctx.market_liquidity = 50000.0;
+                ctx.suggested_price = 0.45;
+                ctx.suggested_notional = 100.0;
+                ctx
+            },
+        ),
+        (
+            "亏损场景",
+            TradeSuggestion::new("mkt-loss", "亏损场景机会", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            {
+                let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
+                ctx.daily_realized_pnl = -1200.0;
+                ctx.market_liquidity = 50000.0;
+                ctx.suggested_price = 0.45;
+                ctx.suggested_notional = 100.0;
+                ctx
+            },
+        ),
+        (
+            "满仓场景",
+            TradeSuggestion::new("mkt-full", "满仓场景机会", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            {
+                let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
+                ctx.open_position_count = 10;
+                ctx.market_liquidity = 50000.0;
+                ctx.suggested_price = 0.45;
+                ctx.suggested_notional = 100.0;
+                ctx
+            },
+        ),
+        (
+            "连续亏损场景",
+            TradeSuggestion::new("mkt-streak", "连续亏损场景", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            {
+                let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
+                ctx.consecutive_losses = 5;
+                ctx.market_liquidity = 50000.0;
+                ctx.suggested_price = 0.45;
+                ctx.suggested_notional = 100.0;
+                ctx
+            },
+        ),
+        (
+            "低流动性场景",
+            TradeSuggestion::new("mkt-illiq", "低流动性场景", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            {
+                let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
+                ctx.market_liquidity = 50.0;
+                ctx.suggested_price = 0.45;
+                ctx.suggested_notional = 100.0;
+                ctx
+            },
+        ),
+    ];
+
+    let history: Vec<_> = scenarios
+        .into_iter()
+        .map(|(name, sug, ctx)| {
+            println!("回放: {} ...", name);
+            (now, sug, ctx)
+        })
+        .collect();
+
+    let _records = replay.replay(&history);
+
+    println!();
+    println!("{}", replay.report_zh());
+    println!();
+
+    // 保存回放 CSV
+    let replay_path = format!("{}/risk_replay.csv", cfg.paths.data_dir);
+    replay.save_csv(&replay_path)?;
+    println!("回放记录已保存至: {}", replay_path);
+    println!();
+
+    Ok(())
+}
+
+// ============================================================================
+// V1.06 执行引擎 CLI 命令
+// ============================================================================
+
+/// `cargo run -- orders`：显示所有订单列表（中文，经 Gateway）。
+async fn run_orders(cfg: &pm_models::Config) -> Result<()> {
+    let gw_cfg = GatewayConfig::from_raw(&cfg.gateway);
+    let gateway = create_gateway(&gw_cfg);
+    println!("【订单列表】");
+    println!();
+    println!("  Gateway      : {} ({})", gateway.name(), gateway.gateway_type());
+    println!("  模式         : {}", if gateway.live_enabled() { "⚠️ 真实交易" } else { "🔒 模拟交易" });
+    println!();
+
+    let info = gateway.info();
+    println!("  {}", info.summary_zh());
+    println!();
+
+    // 经 Gateway 查询活跃订单
+    let orders = gateway.list_orders().await;
+    if orders.is_empty() {
+        println!("（暂无活跃订单）");
+        println!();
+        println!("提示：运行 `cargo run -- scan` 或 `cargo run -- execution-test` 生成订单数据。");
+    } else {
+        println!("  活跃订单: {} 个", orders.len());
+        println!();
+        for (i, o) in orders.iter().enumerate() {
+            println!(
+                "  {}. {} | 状态: {} | 成交: {:.2} | {}",
+                i + 1,
+                o.gateway_order_id,
+                o.status.as_zh(),
+                o.filled,
+                o.message,
+            );
+        }
+    }
+
+    // 历史订单 CSV
+    let count = pm_storage::count_rows(&cfg.paths.execution_csv);
+    println!();
+    println!("  历史订单数（CSV）: {}", count);
+    if count > 0 {
+        println!("  查看历史订单：{}", cfg.paths.execution_csv);
+    }
+
+    Ok(())
+}
+
+/// `cargo run -- execution`：显示 Execution 状态（中文）。
+fn run_execution_status(cfg: &pm_models::Config) -> Result<()> {
+    use pm_execution::ExecutionConfigV106;
+
+    let exec_cfg = ExecutionConfigV106::from_pm_config(&cfg.execution);
+    let qc = exec_cfg.to_queue_config();
+    let sc = exec_cfg.to_scheduler_config();
+
+    println!("【Execution 状态】");
+    println!();
+    println!("══════════════════════════════════════");
+    println!();
+    println!("── 配置 ──");
+    println!();
+    println!("  Gateway        : {}", exec_cfg.gateway);
+    println!("  初始资金       : {:.0} USDC", exec_cfg.capital);
+    println!("  单笔成本       : {:.0} USDC", exec_cfg.order_notional);
+    println!("  待处理上限     : {}", exec_cfg.max_pending_orders);
+    println!("  订单超时       : {} ms", exec_cfg.timeout_ms);
+    println!();
+    println!("── 队列 ──");
+    println!();
+    println!("  最大容量       : {}", qc.max_size);
+    println!("  最大重试       : {} 次", qc.max_retries);
+    println!("  重试延迟       : {} ms", qc.retry_delay_ms);
+    println!();
+    println!("── 调度器 ──");
+    println!();
+    println!("  每秒上限       : {} 单", sc.max_orders_per_second);
+    println!("  突发容量       : {} 单", sc.burst_size);
+    println!();
+    println!("── CSV ──");
+    println!();
+    println!("  订单记录       : {}", cfg.paths.execution_csv);
+    println!("  事件记录       : {}", cfg.execution.events_csv);
+    println!("  报告           : {}", cfg.execution.report_csv);
+    println!();
+    println!("══════════════════════════════════════");
+    println!();
+    println!("仅模拟 -- Execution Engine V1.06");
+    println!();
+    println!("提示：运行 `cargo run -- scan` 启动完整流水线。");
+    println!("      运行 `cargo run -- queue` 查看队列。");
+    println!("      运行 `cargo run -- orders` 查看订单。");
+
+    Ok(())
+}
+
+/// `cargo run -- queue`：查看队列状态（中文）。
+fn run_queue_status(cfg: &pm_models::Config) -> Result<()> {
+    use pm_execution::{ExecutionConfigV106, ExecutionQueue};
+
+    let exec_cfg = ExecutionConfigV106::from_pm_config(&cfg.execution);
+    let qc = exec_cfg.to_queue_config();
+    let q = ExecutionQueue::new(qc);
+
+    q.print_status();
+    println!();
+    println!("提示：运行 `cargo run -- scan` 启动扫描并观察队列实时状态。");
+
+    Ok(())
+}
+
+/// `cargo run -- exec-replay <order_id>`：回放指定订单的生命周期。
+fn run_exec_replay(cfg: &pm_models::Config, order_id: &str) -> Result<()> {
+    use pm_execution::OrderReplay;
+
+    println!("订单回放: {}", order_id);
+    println!();
+
+    // 尝试从事件 CSV 加载
+    let events_path = &cfg.execution.events_csv;
+    match OrderReplay::from_csv(events_path) {
+        Ok(replay) => {
+            replay.print_timeline(order_id);
+        }
+        Err(_) => {
+            println!("无法读取事件文件: {}", events_path);
+            println!();
+            println!("提示：运行 `cargo run -- scan` 生成执行事件。");
+        }
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// V1.07 Trading Infrastructure CLI 命令
+// ============================================================================
+
+/// `cargo run -- provider`：查看 Provider 诊断信息。
+async fn run_trading_provider(_cfg: &pm_models::Config) -> Result<()> {
+    let trading_cfg = TradingConfig::load_or_default("provider.toml");
+    println!("{}", trading_cfg.safe_summary());
+    println!();
+
+    let provider = MockTradingProvider::new();
+    let output = diagnose_provider(&provider).await;
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- health`：查看 Health 诊断信息。
+async fn run_trading_health(_cfg: &pm_models::Config) -> Result<()> {
+    let trading_cfg = TradingConfig::load_or_default("provider.toml");
+    println!("{}", trading_cfg.safe_summary());
+    println!();
+
+    let provider = MockTradingProvider::new();
+    let output = diagnose_health(&provider).await;
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- session`：查看 Session 诊断信息。
+fn run_trading_session(_cfg: &pm_models::Config) -> Result<()> {
+    let provider = MockTradingProvider::new();
+    let output = diagnose_session(&provider.session_manager);
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- connection`：查看 Connection 诊断信息。
+fn run_trading_connection(_cfg: &pm_models::Config) -> Result<()> {
+    let provider = MockTradingProvider::new();
+    let output = diagnose_connection(&provider.connection_manager);
+    println!("{}", output);
+
+    println!();
+    let cred_output = diagnose_credential(&provider.credential_manager);
+    println!("{}", cred_output);
+    Ok(())
+}
+
+// ============================================================================
+// V1.08 Exchange Gateway CLI 命令
+// ============================================================================
+
+/// `cargo run -- gateway`：查看 Gateway 状态（中文）。
+async fn run_gateway(cfg: &pm_models::Config) -> Result<()> {
+    let gw_cfg = GatewayConfig::from_raw(&cfg.gateway);
+    println!("{}", gw_cfg.safety_summary_zh());
+    println!();
+    println!("{}", gw_cfg.summary_zh());
+    println!();
+
+    let gateway = create_gateway(&gw_cfg);
+    let diag = diagnose_gateway(gateway.as_ref()).await;
+    println!("{}", diag);
+    println!();
+
+    // 断路器状态
+    println!("提示：使用 `cargo run -- account` 查看账户详情。");
+    println!("      使用 `cargo run -- balance` 查看余额。");
+    println!("      使用 `cargo run -- orders` 查看活跃订单。");
+
+    Ok(())
+}
+
+/// `cargo run -- account`：查看账户诊断（中文）。
+async fn run_account(cfg: &pm_models::Config) -> Result<()> {
+    let gw_cfg = GatewayConfig::from_raw(&cfg.gateway);
+    let gateway = create_gateway(&gw_cfg);
+
+    let diag = diagnose_account(gateway.as_ref()).await;
+    println!("{}", diag);
+
+    Ok(())
+}
+
+/// `cargo run -- balance`：查看余额（中文）。
+async fn run_balance(cfg: &pm_models::Config) -> Result<()> {
+    let gw_cfg = GatewayConfig::from_raw(&cfg.gateway);
+    let gateway = create_gateway(&gw_cfg);
+
+    let diag = diagnose_balance(gateway.as_ref()).await;
+    println!("{}", diag);
+
+    Ok(())
+}
+
 fn print_usage() {
     println!();
     println!("用法:");
@@ -137,4 +1140,38 @@ fn print_usage() {
     println!("  cargo run -- backtest        完整回测");
     println!("  cargo run -- execution-test  执行模拟器压测");
     println!("  cargo run -- report          汇总报告");
+    println!();
+    println!("  市场微观结构（V1.03）：");
+    println!("  cargo run -- market          市场列表");
+    println!("  cargo run -- orderbook       订单簿");
+    println!("  cargo run -- spread          价差分析");
+    println!("  cargo run -- liquidity       流动性分析");
+    println!();
+    println!("  机会引擎（V1.04）：");
+    println!("  cargo run -- opportunities   列出全部机会");
+    println!("  cargo run -- top             Top 10 机会");
+    println!("  cargo run -- explain <id>   解释某个机会的评分");
+    println!();
+    println!("  风险引擎（V1.05）：");
+    println!("  cargo run -- risk           风险仪表盘");
+    println!("  cargo run -- explain-risk   风险规则说明");
+    println!("  cargo run -- risk-replay    风险回放");
+    println!();
+    println!("  执行引擎（V1.06）：");
+    println!("  cargo run -- orders         订单列表");
+    println!("  cargo run -- execution      执行状态");
+    println!("  cargo run -- queue          队列查看");
+    println!("  cargo run -- exec-replay <id>  订单回放");
+    println!();
+    println!("  Trading 基础设施（V1.07）：");
+    println!("  cargo run -- provider       Provider 诊断");
+    println!("  cargo run -- health         Health 诊断");
+    println!("  cargo run -- session        Session 诊断");
+    println!("  cargo run -- connection     Connection 诊断");
+    println!();
+    println!("  Exchange Gateway（V1.08）：");
+    println!("  cargo run -- gateway        Gateway 状态与诊断");
+    println!("  cargo run -- account        账户详情（余额+持仓）");
+    println!("  cargo run -- balance        余额查询");
+    println!("  cargo run -- orders         订单列表（经 Gateway）");
 }

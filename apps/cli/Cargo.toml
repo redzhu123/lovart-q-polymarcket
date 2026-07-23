@@ -23,6 +23,13 @@ pm-paper = { workspace = true }
 pm-execution = { workspace = true }
 pm-shadow = { workspace = true }
 pm-metrics = { workspace = true }
+pm-orderbook = { workspace = true }
+pm-opportunity = { workspace = true }
+pm-risk = { workspace = true }
+pm-portfolio = { workspace = true }
+pm-trading = { workspace = true }
+pm-gateway = { workspace = true }
+chrono = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
