@@ -183,9 +183,10 @@ impl Default for PortfolioConfig {
     }
 }
 
-/// Execution Simulator 配置。
+/// Execution Simulator 配置（V1.06 扩展）。
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExecutionConfig {
+    // ---- V0.9 原有字段 ----
     #[serde(default = "default_exec_capital")]
     pub capital: f64,
     #[serde(default = "default_max_pending")]
@@ -196,6 +197,35 @@ pub struct ExecutionConfig {
     pub max_fill_delay: u32,
     #[serde(default = "default_max_wait_scans")]
     pub max_wait_scans: u32,
+
+    // ---- V1.06 新增字段 ----
+    /// 最大队列长度。
+    #[serde(default = "default_max_queue_size")]
+    pub max_queue_size: usize,
+    /// 最大重试次数。
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    /// 重试延迟（毫秒）。
+    #[serde(default = "default_retry_delay_ms")]
+    pub retry_delay_ms: u64,
+    /// 订单超时（毫秒）。
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+    /// 每秒最大订单数（速率限制）。
+    #[serde(default = "default_max_orders_per_second")]
+    pub max_orders_per_second: u32,
+    /// 突发容量。
+    #[serde(default = "default_burst_size")]
+    pub burst_size: u32,
+    /// Gateway 类型："mock" | "polymarket" | "kalshi"。
+    #[serde(default = "default_exec_gateway")]
+    pub gateway: String,
+    /// 事件 CSV 路径。
+    #[serde(default = "default_exec_events_csv")]
+    pub events_csv: String,
+    /// 报告 CSV 路径。
+    #[serde(default = "default_exec_report_csv")]
+    pub report_csv: String,
 }
 
 fn default_exec_capital() -> f64 {
@@ -213,6 +243,15 @@ fn default_max_fill_delay() -> u32 {
 fn default_max_wait_scans() -> u32 {
     5
 }
+fn default_max_queue_size() -> usize { 1000 }
+fn default_max_retries() -> u32 { 3 }
+fn default_retry_delay_ms() -> u64 { 1000 }
+fn default_timeout_ms() -> u64 { 30000 }
+fn default_max_orders_per_second() -> u32 { 10 }
+fn default_burst_size() -> u32 { 5 }
+fn default_exec_gateway() -> String { "mock".into() }
+fn default_exec_events_csv() -> String { "data/execution_events.csv".into() }
+fn default_exec_report_csv() -> String { "data/execution_report.csv".into() }
 
 impl Default for ExecutionConfig {
     fn default() -> Self {
@@ -222,25 +261,127 @@ impl Default for ExecutionConfig {
             order_notional: default_order_notional(),
             max_fill_delay: default_max_fill_delay(),
             max_wait_scans: default_max_wait_scans(),
+            max_queue_size: default_max_queue_size(),
+            max_retries: default_max_retries(),
+            retry_delay_ms: default_retry_delay_ms(),
+            timeout_ms: default_timeout_ms(),
+            max_orders_per_second: default_max_orders_per_second(),
+            burst_size: default_burst_size(),
+            gateway: default_exec_gateway(),
+            events_csv: default_exec_events_csv(),
+            report_csv: default_exec_report_csv(),
         }
     }
 }
 
-/// 风控配置。
+/// 风控配置（V1.05 扩展）。
 #[derive(Debug, Clone, Deserialize)]
 pub struct RiskConfig {
+    // ---- 仓位规模 ----
+    #[serde(default)]
+    pub position_sizer: String,
+    #[serde(default = "default_fixed_size")]
+    pub fixed_size: f64,
+    #[serde(default = "default_risk_ratio")]
+    pub risk_ratio: f64,
+
+    // ---- 仓位限制 ----
+    #[serde(default = "default_max_positions")]
+    pub max_positions: usize,
+    #[serde(default = "default_max_position_size")]
+    pub max_position_size: f64,
+    #[serde(default = "default_max_open_orders")]
+    pub max_open_orders: usize,
+    #[serde(default = "default_max_single_capital")]
+    pub max_single_capital: f64,
+    #[serde(default = "default_max_capital_usage")]
+    pub max_capital_usage: f64,
+
+    // ---- 亏损限制 ----
     #[serde(default = "default_max_daily_loss")]
     pub max_daily_loss: f64,
+    #[serde(default = "default_max_consecutive_losses")]
+    pub max_consecutive_losses: usize,
+    #[serde(default = "default_max_drawdown")]
+    pub max_drawdown: f64,
+
+    // ---- 暴露限制 ----
+    #[serde(default = "default_max_market_exposure")]
+    pub max_market_exposure: f64,
+    #[serde(default = "default_max_category_exposure")]
+    pub max_category_exposure: f64,
+    #[serde(default = "default_max_side_exposure")]
+    pub max_side_exposure: f64,
+
+    // ---- 市场质量 ----
+    #[serde(default = "default_min_liquidity")]
+    pub min_liquidity: f64,
+    #[serde(default = "default_min_depth")]
+    pub min_depth: f64,
+    #[serde(default = "default_max_slippage")]
+    pub max_slippage: f64,
+    #[serde(default = "default_max_volatility")]
+    pub max_volatility: f64,
+
+    // ---- 评分阈值 ----
+    #[serde(default = "default_accept_threshold")]
+    pub accept_threshold: f64,
+    #[serde(default = "default_review_threshold")]
+    pub review_threshold: f64,
+
+    // ---- CSV ----
+    #[serde(default = "default_risk_events_csv")]
+    pub risk_events_csv: String,
+    #[serde(default = "default_risk_dashboard_csv")]
+    pub risk_dashboard_csv: String,
 }
 
-fn default_max_daily_loss() -> f64 {
-    1000.0
-}
+fn default_position_sizer() -> String { "Fixed".into() }
+fn default_fixed_size() -> f64 { 100.0 }
+fn default_risk_ratio() -> f64 { 0.01 }
+fn default_max_daily_loss() -> f64 { 1000.0 }
+fn default_max_open_orders() -> usize { 20 }
+fn default_max_single_capital() -> f64 { 500.0 }
+fn default_max_capital_usage() -> f64 { 0.5 }
+fn default_max_consecutive_losses() -> usize { 5 }
+fn default_max_drawdown() -> f64 { 0.2 }
+fn default_max_market_exposure() -> f64 { 0.3 }
+fn default_max_category_exposure() -> f64 { 0.5 }
+fn default_max_side_exposure() -> f64 { 0.6 }
+fn default_min_liquidity() -> f64 { 100.0 }
+fn default_min_depth() -> f64 { 50.0 }
+fn default_max_slippage() -> f64 { 0.02 }
+fn default_max_volatility() -> f64 { 0.5 }
+fn default_accept_threshold() -> f64 { 70.0 }
+fn default_review_threshold() -> f64 { 40.0 }
+fn default_risk_events_csv() -> String { "data/risk_events.csv".into() }
+fn default_risk_dashboard_csv() -> String { "data/risk_dashboard.csv".into() }
 
 impl Default for RiskConfig {
     fn default() -> Self {
         Self {
+            position_sizer: default_position_sizer(),
+            fixed_size: default_fixed_size(),
+            risk_ratio: default_risk_ratio(),
+            max_positions: default_max_positions(),
+            max_position_size: default_max_position_size(),
+            max_open_orders: default_max_open_orders(),
+            max_single_capital: default_max_single_capital(),
+            max_capital_usage: default_max_capital_usage(),
             max_daily_loss: default_max_daily_loss(),
+            max_consecutive_losses: default_max_consecutive_losses(),
+            max_drawdown: default_max_drawdown(),
+            max_market_exposure: default_max_market_exposure(),
+            max_category_exposure: default_max_category_exposure(),
+            max_side_exposure: default_max_side_exposure(),
+            min_liquidity: default_min_liquidity(),
+            min_depth: default_min_depth(),
+            max_slippage: default_max_slippage(),
+            max_volatility: default_max_volatility(),
+            accept_threshold: default_accept_threshold(),
+            review_threshold: default_review_threshold(),
+            risk_events_csv: default_risk_events_csv(),
+            risk_dashboard_csv: default_risk_dashboard_csv(),
         }
     }
 }
@@ -356,6 +497,89 @@ impl Default for BacktestConfig {
     }
 }
 
+// Gateway 默认值（V1.08）— 必须在 struct 前定义。
+fn default_retry_base_ms() -> u64 { 500 }
+fn default_retry_max_ms_val() -> u64 { 15000 }
+fn default_backoff_multiplier() -> f64 { 2.0 }
+fn default_cb_failure_threshold() -> u32 { 5 }
+fn default_cb_recovery_timeout_ms() -> u64 { 30000 }
+fn default_cb_half_open_max() -> u32 { 3 }
+
+/// Gateway 原始配置（V1.08）-- 从 config.toml [gateway] 段读取。
+#[derive(Debug, Clone, Deserialize)]
+pub struct GatewayRawConfig {
+    /// Gateway 类型。
+    #[serde(default = "default_gateway_type")]
+    pub gateway_type: String,
+    /// 是否启用真实交易。
+    #[serde(default)]
+    pub enable_live: bool,
+    /// Polymarket API URL。
+    #[serde(default = "default_polymarket_api_url")]
+    pub polymarket_api_url: String,
+    /// Polymarket WS URL。
+    #[serde(default = "default_polymarket_ws_url")]
+    pub polymarket_ws_url: String,
+    /// API 密钥环境变量名。
+    #[serde(default = "default_api_key_env")]
+    pub api_key_env: String,
+    /// API 私钥环境变量名。
+    #[serde(default = "default_api_secret_env")]
+    pub api_secret_env: String,
+    /// API 口令环境变量名。
+    #[serde(default = "default_api_passphrase_env")]
+    pub api_passphrase_env: String,
+    /// 最大重试次数。
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    /// 基础重试延迟。
+    #[serde(default = "default_retry_base_ms")]
+    pub retry_base_ms: u64,
+    /// 最大重试延迟。
+    #[serde(default = "default_retry_max_ms_val")]
+    pub retry_max_ms: u64,
+    /// 退避乘数。
+    #[serde(default = "default_backoff_multiplier")]
+    pub backoff_multiplier: f64,
+    /// 断路器失败阈值。
+    #[serde(default = "default_cb_failure_threshold")]
+    pub cb_failure_threshold: u32,
+    /// 断路器恢复超时。
+    #[serde(default = "default_cb_recovery_timeout_ms")]
+    pub cb_recovery_timeout_ms: u64,
+    /// 断路器半开最大请求数。
+    #[serde(default = "default_cb_half_open_max")]
+    pub cb_half_open_max: u32,
+}
+
+fn default_gateway_type() -> String { "mock".into() }
+fn default_polymarket_api_url() -> String { "https://clob.polymarket.com".into() }
+fn default_polymarket_ws_url() -> String { "wss://ws.polymarket.com".into() }
+fn default_api_key_env() -> String { "POLYMARKET_API_KEY".into() }
+fn default_api_secret_env() -> String { "POLYMARKET_API_SECRET".into() }
+fn default_api_passphrase_env() -> String { "POLYMARKET_API_PASSPHRASE".into() }
+
+impl Default for GatewayRawConfig {
+    fn default() -> Self {
+        Self {
+            gateway_type: default_gateway_type(),
+            enable_live: false,
+            polymarket_api_url: default_polymarket_api_url(),
+            polymarket_ws_url: default_polymarket_ws_url(),
+            api_key_env: default_api_key_env(),
+            api_secret_env: default_api_secret_env(),
+            api_passphrase_env: default_api_passphrase_env(),
+            max_retries: default_max_retries(),
+            retry_base_ms: default_retry_base_ms(),
+            retry_max_ms: default_retry_max_ms_val(),
+            backoff_multiplier: default_backoff_multiplier(),
+            cb_failure_threshold: default_cb_failure_threshold(),
+            cb_recovery_timeout_ms: default_cb_recovery_timeout_ms(),
+            cb_half_open_max: default_cb_half_open_max(),
+        }
+    }
+}
+
 /// 顶层配置。各子段缺省时退化为代码默认值。
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
@@ -379,6 +603,9 @@ pub struct Config {
     /// 数据源配置（V1.02）。缺省段 -> provider=gamma, cache_ttl=10。
     #[serde(default)]
     pub datasource: DataSourceConfig,
+    /// Gateway 配置（V1.08）。缺省段 -> gateway_type=mock, enable_live=false。
+    #[serde(default)]
+    pub gateway: GatewayRawConfig,
 }
 
 impl Config {
