@@ -29,6 +29,7 @@ use pm_paper::{OrderRecord, PaperTradingEngine, PortfolioRecord, PositionRecord}
 use pm_portfolio::RiskPolicy;
 use pm_recorder::LifecycleRecord;
 use pm_shadow::{ShadowEngine, ShadowTradeRecord};
+use pm_opportunity::{Opportunity, OpportunityEngine, OpportunityStatistics};
 use pm_strategy::{DefaultStrategy, ScanContext, ScanEvents, Strategy};
 use pm_tracker::OpportunityTracker;
 
@@ -121,6 +122,14 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
     let mut metrics = Metrics::new();
     let mut scanner_stats = ScannerStats::new();
 
+    // V1.04：机会引擎（Market → Opportunity）
+    let mut opp_engine = OpportunityEngine::from_pm_config(cfg);
+    let mut opp_stats = OpportunityStatistics::new();
+    println!();
+    println!("机会引擎 V1.04");
+    println!();
+    println!("已就绪 -- 评分 / 分类 / 过滤 / 排序");
+
     let scan_interval = Duration::from_secs(cfg.scanner.scan_interval_secs.max(1));
     let level = cfg.effective_log_level();
     println!();
@@ -150,6 +159,8 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
                 &mut strategy,
                 &mut metrics,
                 &mut scanner_stats,
+                &mut opp_engine,
+                &mut opp_stats, // V1.04: 累计统计（保留供后续扩展）
             ) => r,
         };
 
@@ -204,6 +215,8 @@ async fn scan_once(
     strategy: &mut dyn Strategy,
     metrics: &mut Metrics,
     scanner_stats: &mut ScannerStats,
+    opp_engine: &mut OpportunityEngine,
+    _opp_stats: &mut OpportunityStatistics,
 ) -> Result<()> {
     // 本轮统一时间戳：明细展示与状态写入共用，保证一轮内时间一致
     let now_dt = Local::now();
@@ -296,6 +309,59 @@ async fn scan_once(
         return Ok(());
     }
 
+    // ---------------- V1.04 机会引擎（Market → Opportunity）----------------
+    // 尝试获取订单簿（Provider 支持时），然后经引擎评分/分类/过滤。
+    let opp_engine_start = Instant::now();
+    let mut orderbooks_map: std::collections::HashMap<String, pm_models::OrderBook> =
+        std::collections::HashMap::new();
+    if manager.capability().supports_orderbook {
+        let active_ids: Vec<String> = markets.iter().map(|m| m.market_id.clone()).collect();
+        if !active_ids.is_empty() {
+            match manager.provider().fetch_orderbooks(&active_ids).await {
+                Ok(obs) => {
+                    for ob in obs {
+                        if ob.best_bid.is_some() || ob.best_ask.is_some() {
+                            orderbooks_map.insert(ob.market_id.clone(), ob);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!(error = %e, "订单簿获取失败，引擎将无订单簿运行");
+                }
+            }
+        }
+    }
+    let engine_output = opp_engine.analyze(
+        &markets,
+        &orderbooks_map,
+        &manager.provider().capability(),
+        chrono::Utc::now(),
+    );
+    let opp_engine_ms = opp_engine_start.elapsed().as_millis();
+
+    // 从引擎输出构建 OppSnapshot 列表（兼容现有 Tracker）
+    let enriched_snaps: Vec<pm_models::OppSnapshot> = engine_output
+        .opportunities
+        .iter()
+        .map(|opp| pm_models::OppSnapshot {
+            question: opp.question.clone(),
+            yes_price: opp.yes_price,
+            no_price: opp.no_price,
+            sum: opp.sum,
+            volume: opp.volume,
+            liquidity: opp.liquidity,
+        })
+        .collect();
+
+    // 打印引擎输出（INFO+）
+    if level >= LogLevel::Info {
+        display::print_opportunity_engine_block(
+            &engine_output,
+            opp_engine_ms,
+            orderbooks_map.len(),
+        );
+    }
+
     // ---------------- 跟踪器 + 策略（计时）----------------
     let strat_start = Instant::now();
     // 本轮发现的机会 Key（用于 reap 判定"消失"）
@@ -304,7 +370,8 @@ async fn scan_once(
     let mut updated_events: Vec<TrackUpdate> = Vec::new();
     let mut events = ScanEvents::default();
 
-    for snap in &snaps {
+    // V1.04：同时迭代 OppSnapshot（给 Tracker）和 Opportunity（给 Strategy）
+    for (snap, opp) in enriched_snaps.iter().zip(engine_output.opportunities.iter()) {
         seen_keys.insert(snap.question.clone());
         let ev = tracker.observe(snap, now_dt);
         let is_new = ev.is_new;
@@ -316,12 +383,42 @@ async fn scan_once(
                 execution: &mut *exec,
                 events: &mut events,
             };
-            strategy.on_opportunity(snap, is_new, &mut ctx);
+            strategy.on_opportunity(opp, is_new, &mut ctx);
         }
         if is_new {
             new_events.push(ev);
         } else {
             updated_events.push(ev);
+        }
+    }
+
+    // 如果引擎无输出，回退到原 market::find_opportunities 路径
+    if enriched_snaps.is_empty() {
+        let fallback_snaps = market::find_opportunities(&markets, threshold);
+        for snap in &fallback_snaps {
+            if seen_keys.contains(&snap.question) {
+                continue; // 引擎已处理过
+            }
+            seen_keys.insert(snap.question.clone());
+            let ev = tracker.observe(snap, now_dt);
+            let is_new = ev.is_new;
+            // 回退路径：用 OppSnapshot 构建简化 Opportunity
+            let fallback_opp = opp_from_snap(snap);
+            {
+                let mut ctx = ScanContext {
+                    now: now_dt,
+                    shadow: &mut *shadow,
+                    paper: &mut *paper,
+                    execution: &mut *exec,
+                    events: &mut events,
+                };
+                strategy.on_opportunity(&fallback_opp, is_new, &mut ctx);
+            }
+            if is_new {
+                new_events.push(ev);
+            } else {
+                updated_events.push(ev);
+            }
         }
     }
 
@@ -625,6 +722,24 @@ fn build_round_module_stats(
             warning_count: 0,
         },
     ]
+}
+
+/// V1.04 辅助：从 OppSnapshot 构建简化 Opportunity（回退路径用）。
+fn opp_from_snap(snap: &pm_models::OppSnapshot) -> Opportunity {
+    use pm_opportunity::OpportunityType;
+    Opportunity::new(
+        snap.question.clone(),
+        snap.question.clone(),
+        "scanner".into(),
+        chrono::Utc::now(),
+        OpportunityType::Unknown,
+        50.0, 0.5, 50,
+        25.0, 20.0, 0.0, 10.0, 5.0, 10.0,
+        0.01, 1.0,
+        snap.yes_price, snap.no_price, snap.sum,
+        None, snap.volume, snap.liquidity,
+        None, None,
+    )
 }
 
 /// 从本轮事件累加 Metrics 计数（exec 事件按类型分类）。

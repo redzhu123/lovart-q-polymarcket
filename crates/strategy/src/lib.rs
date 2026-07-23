@@ -1,8 +1,9 @@
-//! pm-strategy：策略抽象。
+//! pm-strategy：策略抽象（V1.04 — Strategy 处理 Opportunity 而非 Market）。
 //!
 //! 把原先内联在 scan_once 中的"新机会 -> 开 shadow+paper+execution；更新 -> mark；结束 -> 平仓"
 //! 决策逻辑抽成可替换的 [`Strategy`] trait，便于未来实现不同策略（不引入 AI / ML）。
 //!
+//! V1.04：Strategy 永远只处理 [`Opportunity`]，不直接分析 Market / OppSnapshot。
 //! [`ScanContext`] 聚合各 engine 可变引用 + `now` + 事件累加器 [`ScanEvents`]。
 //! metrics / display / CSV 由 driver（pm-scanner）在 trait 之外处理，保持 strategy 职责单一。
 
@@ -11,6 +12,7 @@ use chrono::{DateTime, Local};
 use pm_core::Side;
 use pm_execution::{ExecEvent, ExecutionEngine, SubmitOutcome};
 use pm_models::{FinishedOpportunity, OppSnapshot};
+use pm_opportunity::Opportunity;
 use pm_paper::{CloseOutcome, OpenOutcome, PaperTradingEngine};
 use pm_portfolio::Order;
 use pm_shadow::{ShadowEngine, ShadowTrade};
@@ -37,16 +39,19 @@ pub struct ScanEvents {
 }
 
 /// 策略 trait：决定每个机会事件触发哪些交易动作。
+///
+/// V1.04：`on_opportunity` 接收 `&Opportunity`（来自 Opportunity Engine），
+/// 不再直接接触 `OppSnapshot` 或 `UnifiedMarket`。
 pub trait Strategy {
     /// 每轮扫描收尾：推进 execution tick、重估 paper 组合等。
     fn on_scan(&mut self, ctx: &mut ScanContext);
     /// 机会事件：`is_new` 为 true 表示本轮新发现（开仓），否则为已有机会（mark）。
-    fn on_opportunity(&mut self, snap: &OppSnapshot, is_new: bool, ctx: &mut ScanContext);
+    fn on_opportunity(&mut self, opp: &Opportunity, is_new: bool, ctx: &mut ScanContext);
     /// 机会生命周期结束：平仓对应 shadow / paper / execution。
     fn on_close(&mut self, finished: &FinishedOpportunity, ctx: &mut ScanContext);
 }
 
-/// 默认策略：实现 v0.9 行为。
+/// 默认策略：实现 v0.9 行为（使用 Opportunity 字段）。
 ///
 /// - 新机会：开 shadow 交易 + paper BUY 开仓 + execution 提交 BUY 订单。
 /// - 已有机会：用最新 YES 价 mark paper 持仓。
@@ -75,31 +80,31 @@ impl Strategy for DefaultStrategy {
         ctx.events.exec_events.extend(tick_events);
     }
 
-    fn on_opportunity(&mut self, snap: &OppSnapshot, is_new: bool, ctx: &mut ScanContext) {
+    fn on_opportunity(&mut self, opp: &Opportunity, is_new: bool, ctx: &mut ScanContext) {
         if is_new {
             // 新机会：开一笔影子交易（每个机会仅一笔；重复时返回 None 忽略）
             if let Some(trade) =
-                ctx.shadow.open_trade(&snap.question, snap.yes_price, snap.no_price, ctx.now)
+                ctx.shadow.open_trade(&opp.question, opp.yes_price, opp.no_price, ctx.now)
             {
                 ctx.events.shadow_opened.push(trade);
             }
             // Paper Trading：自动 BUY 开仓（风控由 paper 内部 RiskManager 检查）
-            match ctx.paper.open_position(&snap.question, snap.yes_price, ctx.now) {
+            match ctx.paper.open_position(&opp.question, opp.yes_price, ctx.now) {
                 OpenOutcome::Filled(o) => ctx.events.paper_opens.push(o),
                 OpenOutcome::Rejected(r) => {
                     ctx.events
                         .paper_rejections
-                        .push((snap.question.clone(), r));
+                        .push((opp.question.clone(), r));
                 }
             }
             // Execution Simulator：提交 BUY 订单（进入 Pending，等待成交模拟）
             let notional = ctx.execution.order_notional();
-            match ctx.execution.submit_buy(&snap.question, snap.yes_price, ctx.now) {
+            match ctx.execution.submit_buy(&opp.question, opp.yes_price, ctx.now) {
                 SubmitOutcome::Accepted(id) => {
-                    let qty = notional / snap.yes_price;
+                    let qty = notional / opp.yes_price;
                     ctx.events.exec_events.push(ExecEvent::NewOrder {
                         order_id: id,
-                        question: snap.question.clone(),
+                        question: opp.question.clone(),
                         side: Side::Buy,
                         quantity: qty,
                         notional,
@@ -107,7 +112,7 @@ impl Strategy for DefaultStrategy {
                 }
                 SubmitOutcome::Rejected(reason) => {
                     ctx.events.exec_events.push(ExecEvent::Rejected {
-                        question: snap.question.clone(),
+                        question: opp.question.clone(),
                         side: Side::Buy,
                         reason,
                     });
@@ -115,7 +120,7 @@ impl Strategy for DefaultStrategy {
             }
         } else {
             // 已有机会：用最新 YES 价 mark-to-market Paper 持仓
-            ctx.paper.mark_position(&snap.question, snap.yes_price);
+            ctx.paper.mark_position(&opp.question, opp.yes_price);
         }
     }
 
@@ -142,6 +147,36 @@ impl Strategy for DefaultStrategy {
             }
         }
     }
+}
+
+// ============================================================================
+// 测试辅助：将 OppSnapshot 转为最小 Opportunity（兼容旧测试结构）
+// ============================================================================
+
+/// 从 OppSnapshot 构建最小 Opportunity（供测试使用）。
+#[allow(dead_code)]
+fn opp_from_snap(snap: &OppSnapshot) -> Opportunity {
+    use chrono::Utc;
+    use pm_opportunity::OpportunityType;
+    Opportunity::new(
+        snap.question.clone(), // market_id = question（测试用）
+        snap.question.clone(),
+        "test".into(),
+        Utc::now(),
+        OpportunityType::Unknown,
+        50.0, // score
+        0.5,  // confidence
+        50,   // priority
+        25.0, 20.0, 0.0, 10.0, 5.0, 10.0, // dimension scores
+        0.02, 2.0,               // roi, profit
+        snap.yes_price,
+        snap.no_price,
+        snap.sum,
+        None,                     // spread
+        snap.volume,
+        snap.liquidity,
+        None, None,               // bid/ask depth
+    )
 }
 
 #[cfg(test)]
@@ -196,7 +231,8 @@ mod tests {
         let mut events = ScanEvents::default();
 
         let s = snap("Q", 0.42, 0.50);
-        strat.on_opportunity(&s, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        let opp = opp_from_snap(&s);
+        strat.on_opportunity(&opp, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
 
         assert_eq!(events.shadow_opened.len(), 1);
         assert_eq!(events.paper_opens.len(), 1);
@@ -218,11 +254,13 @@ mod tests {
         let mut events = ScanEvents::default();
 
         let s1 = snap("Q", 0.42, 0.50);
-        strat.on_opportunity(&s1, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        let opp1 = opp_from_snap(&s1);
+        strat.on_opportunity(&opp1, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
         // 第二轮：更新 -> mark
         let s2 = snap("Q", 0.45, 0.50);
+        let opp2 = opp_from_snap(&s2);
         events = ScanEvents::default();
-        strat.on_opportunity(&s2, false, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_opportunity(&opp2, false, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
         assert!(events.shadow_opened.is_empty());
         assert!(events.paper_opens.is_empty());
         // paper 持仓 current_price 应被 mark 到 0.45
@@ -241,7 +279,8 @@ mod tests {
         let mut events = ScanEvents::default();
 
         let s = snap("Q", 0.42, 0.50);
-        strat.on_opportunity(&s, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        let opp = opp_from_snap(&s);
+        strat.on_opportunity(&opp, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
 
         let finished = FinishedOpportunity {
             question: "Q".into(),
@@ -277,7 +316,8 @@ mod tests {
 
         // 先开仓
         let s = snap("Q", 0.42, 0.50);
-        strat.on_opportunity(&s, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        let opp = opp_from_snap(&s);
+        strat.on_opportunity(&opp, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
         // on_scan 推进 exec tick（可能产生 Filled/PartiallyFilled 等）
         events = ScanEvents::default();
         strat.on_scan(&mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));

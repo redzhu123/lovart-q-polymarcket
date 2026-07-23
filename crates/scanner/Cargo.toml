@@ -21,6 +21,7 @@ pm-paper = { workspace = true }
 pm-execution = { workspace = true }
 pm-strategy = { workspace = true }
 pm-metrics = { workspace = true }
+pm-opportunity = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 tracing = { workspace = true }

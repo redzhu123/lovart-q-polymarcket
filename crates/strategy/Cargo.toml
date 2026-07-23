@@ -15,4 +15,5 @@ pm-portfolio = { workspace = true }
 pm-shadow = { workspace = true }
 pm-paper = { workspace = true }
 pm-execution = { workspace = true }
+pm-opportunity = { workspace = true }
 chrono = { workspace = true }

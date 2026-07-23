@@ -964,3 +964,59 @@ pub fn print_market_trace_dump(markets: &[UnifiedMarket]) {
     }
     println!();
 }
+
+// ============================================================================
+// V1.04 机会引擎输出显示
+// ============================================================================
+
+/// 打印机会引擎输出区块（中文）。
+pub fn print_opportunity_engine_block(
+    output: &pm_opportunity::EngineOutput,
+    engine_ms: u128,
+    orderbook_count: usize,
+) {
+    println!("{}", SEP);
+    println!();
+    println!("机会引擎 V1.04");
+    println!();
+    println!("{}", DASH);
+    println!();
+    println!(
+        "发现: {}  新增: {}  更新: {}  过滤: {}  过期: {}",
+        output.opportunities.len(),
+        output.new_count,
+        output.updated_count,
+        output.filtered_count,
+        output.expired.len(),
+    );
+    println!();
+    println!("订单簿数: {}  引擎耗时: {}ms", orderbook_count, engine_ms);
+    println!();
+
+    if !output.opportunities.is_empty() {
+        println!(
+            "{:<6} {:<10} {:<40} {:<8} {:<8} {:<8}",
+            "优先级", "类型", "问题", "评分", "置信度", "ROI"
+        );
+        println!("{}", "-".repeat(90));
+        let display_count = output.opportunities.len().min(5); // Top 5
+        for opp in output.opportunities.iter().take(display_count) {
+            let q: String = opp.question.chars().take(38).collect();
+            println!(
+                "{:<6} {:<10} {:<40} {:<8.0} {:<8.0} {:<8.2}",
+                opp.priority,
+                opp.opportunity_type.as_zh(),
+                q,
+                opp.score,
+                opp.confidence * 100.0,
+                opp.expected_roi * 100.0,
+            );
+        }
+        if output.opportunities.len() > display_count {
+            println!("... 及其他 {} 个机会", output.opportunities.len() - display_count);
+        }
+    } else {
+        println!("（本轮未发现符合条件的套利机会）");
+    }
+    println!();
+}

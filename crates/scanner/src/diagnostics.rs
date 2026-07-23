@@ -196,7 +196,8 @@ fn run_engine_pass(cfg: &Config, snaps: &[pm_models::OppSnapshot]) -> EnginePass
             execution: &mut exec,
             events: &mut events,
         };
-        strategy.on_opportunity(snap, true, &mut ctx);
+        let opp = opp_from_snap_for_diag(snap);
+        strategy.on_opportunity(&opp, true, &mut ctx);
         strategy_ms += t1.elapsed().as_millis();
     }
 
@@ -774,4 +775,22 @@ fn print_diagnostic_answers_offline() {
     println!("11. 综合结论: 🔴 API 层故障 -- 优先修复网络 / 代理 / Gamma 可达性。");
     println!("12. 下一步: 检查 HTTPS_PROXY 代理（127.0.0.1:7890）与 DNS。");
     println!();
+}
+
+/// V1.04 辅助：诊断模式中将 OppSnapshot 转为 Opportunity（供 Strategy 调用）。
+fn opp_from_snap_for_diag(snap: &pm_models::OppSnapshot) -> pm_opportunity::Opportunity {
+    use pm_opportunity::{Opportunity, OpportunityType};
+    Opportunity::new(
+        snap.question.clone(),
+        snap.question.clone(),
+        "diagnostics".into(),
+        chrono::Utc::now(),
+        OpportunityType::Unknown,
+        50.0, 0.5, 50,
+        25.0, 20.0, 0.0, 10.0, 5.0, 10.0,
+        0.01, 1.0,
+        snap.yes_price, snap.no_price, snap.sum,
+        None, snap.volume, snap.liquidity,
+        None, None,
+    )
 }
