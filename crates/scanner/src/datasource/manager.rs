@@ -15,7 +15,7 @@ use pm_models::{Config, LogLevel, ProviderCapability, UnifiedMarket};
 
 use crate::datasource::cache::MarketDataCache;
 use crate::datasource::{HealthProbe, MarketDataProvider};
-use crate::datasource::{GammaProvider, MockProvider};
+use crate::datasource::{ClobProvider, GammaProvider, MockProvider};
 use crate::display::{DASH, SEP};
 use crate::stats::{FetchResult, FetchStats};
 
@@ -62,7 +62,12 @@ impl DataSourceManager {
             }
             "mock" => Box::new(MockProvider::default()),
             "clob" => {
-                anyhow::bail!("CLOB Provider 尚未实现（V1.02 仅实现 gamma/mock）")
+                let client = reqwest::Client::builder()
+                    .user_agent("polymarket-scanner/1.0")
+                    .timeout(Duration::from_secs(60))
+                    .build()?;
+                let debug = cfg.effective_log_level() >= LogLevel::Debug;
+                Box::new(ClobProvider::new(client, debug))
             }
             other => {
                 anyhow::bail!(
@@ -126,7 +131,7 @@ impl DataSourceManager {
         self.provider.health_check().await
     }
 
-    /// 打印【数据源能力】区块（第六节）。程序启动时调用。
+    /// 打印【数据源能力】区块（第六节 / V1.03 盘口深度扩展）。程序启动时调用。
     pub fn print_capability_block(&self) {
         let cap = self.capability();
         let real_arb = cap.supports_real_arbitrage();
@@ -144,6 +149,10 @@ impl DataSourceManager {
         println!("成交记录      : {}", yn(cap.supports_trades));
         println!("最优买卖价    : {}", yn(cap.supports_bid_ask));
         println!("流动性        : {}", yn(cap.supports_liquidity));
+        println!("盘口深度      : {}", yn(cap.supports_depth));
+        if cap.supports_depth {
+            println!("盘口档位      : {}", cap.depth_levels);
+        }
         println!("真实套利支持  : {}", yn(real_arb));
         if !real_arb {
             println!();
@@ -194,11 +203,15 @@ mod tests {
     }
 
     #[test]
-    fn from_config_clob_errors_clearly() {
+    fn from_config_clob_constructs_clob_provider() {
         let mut cfg = Config::default();
         cfg.datasource.provider = "clob".into();
-        let err = DataSourceManager::from_config(&cfg).err().expect("应返回错误");
-        assert!(format!("{:#}", err).contains("CLOB"));
+        let m = DataSourceManager::from_config(&cfg).expect("应成功构造 CLOB Provider");
+        assert_eq!(m.name(), "clob");
+        let cap = m.capability();
+        assert!(cap.supports_orderbook);
+        assert!(cap.supports_depth);
+        assert_eq!(cap.depth_levels, 10);
     }
 
     #[test]

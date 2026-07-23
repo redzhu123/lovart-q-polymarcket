@@ -14,9 +14,9 @@ pub mod datasource;
 pub mod market;
 pub mod opportunity;
 
-pub use config::{Config, DataSourceConfig, LogLevel, LoggingConfig};
+pub use config::{Config, DataSourceConfig, GatewayRawConfig, LogLevel, LoggingConfig};
 pub use datasource::{
-    MarketStatus, OrderBook, PriceQuote, ProviderCapability, UnifiedMarket,
+    MarketStatus, OrderBook, PriceLevel, PriceQuote, ProviderCapability, UnifiedMarket,
 };
 pub use market::{Market, OppSnapshot};
 pub use opportunity::{FinishedOpportunity, OpportunityState, ReplayOpportunity, TrackUpdate};

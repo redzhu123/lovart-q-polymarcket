@@ -25,7 +25,7 @@ pub mod pipeline;
 pub mod stats;
 
 pub use datasource::{
-    DataSourceManager, GammaProvider, MarketDataProvider, MockProvider,
+    ClobProvider, DataSourceManager, GammaProvider, MarketDataProvider, MockProvider,
 };
 pub use diagnostics::run_diagnose;
 pub use driver::run_scan;

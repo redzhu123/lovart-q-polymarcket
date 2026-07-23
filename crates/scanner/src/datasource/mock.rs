@@ -55,6 +55,8 @@ fn mock_capability() -> ProviderCapability {
         supports_trades: false,
         supports_bid_ask: true,
         supports_liquidity: true,
+        depth_levels: 5,
+        supports_depth: true,
     }
 }
 
@@ -113,25 +115,44 @@ impl MarketDataProvider for MockProvider {
     }
 
     async fn fetch_orderbooks(&self, market_ids: &[String]) -> Result<Vec<OrderBook>> {
+        use pm_models::PriceLevel;
+
         let now = Utc::now();
         let out: Vec<OrderBook> = market_ids
             .iter()
             .map(|id| {
-                // 对已知套利样本给出买卖价；其余给 None（不伪造未知市场的真实深度）。
-                let (best_bid, best_ask) = if id == "mock-arb" {
-                    (Some(0.39), Some(0.41))
+                // 对已知套利样本给出多档盘口；其余给 None（不伪造未知市场的真实深度）。
+                if id == "mock-arb" {
+                    let bid_levels = vec![
+                        PriceLevel { price: 0.39, size: 50.0, level: 1 },
+                        PriceLevel { price: 0.38, size: 100.0, level: 2 },
+                        PriceLevel { price: 0.37, size: 200.0, level: 3 },
+                        PriceLevel { price: 0.36, size: 150.0, level: 4 },
+                        PriceLevel { price: 0.35, size: 100.0, level: 5 },
+                    ];
+                    let ask_levels = vec![
+                        PriceLevel { price: 0.41, size: 60.0, level: 1 },
+                        PriceLevel { price: 0.42, size: 80.0, level: 2 },
+                        PriceLevel { price: 0.43, size: 120.0, level: 3 },
+                    ];
+                    let bid_vol: f64 = bid_levels.iter().map(|l| l.size).sum();
+                    let ask_vol: f64 = ask_levels.iter().map(|l| l.size).sum();
+                    OrderBook {
+                        market_id: id.clone(),
+                        best_bid: Some(0.39),
+                        best_ask: Some(0.41),
+                        spread: OrderBook::compute_spread(Some(0.39), Some(0.41)),
+                        bid_depth: Some(bid_vol),
+                        ask_depth: Some(ask_vol),
+                        bid_levels,
+                        ask_levels,
+                        bid_volume: bid_vol,
+                        ask_volume: ask_vol,
+                        timestamp: now,
+                        provider: "mock".into(),
+                    }
                 } else {
-                    (None, None)
-                };
-                OrderBook {
-                    market_id: id.clone(),
-                    best_bid,
-                    best_ask,
-                    spread: OrderBook::compute_spread(best_bid, best_ask),
-                    bid_depth: best_bid.map(|_| 100.0),
-                    ask_depth: best_ask.map(|_| 120.0),
-                    timestamp: now,
-                    provider: "mock".into(),
+                    OrderBook::empty(id, "mock")
                 }
             })
             .collect();
@@ -191,7 +212,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn orderbook_for_arb_has_bid_ask() {
+    async fn orderbook_for_arb_has_bid_ask_and_levels() {
         let p = MockProvider::default();
         let obs = p.fetch_orderbooks(&["mock-arb".into()]).await.expect("ob");
         assert_eq!(obs.len(), 1);
@@ -199,6 +220,11 @@ mod tests {
         assert_eq!(obs[0].best_ask, Some(0.41));
         let spread = obs[0].spread.expect("spread");
         assert!((spread - 0.02).abs() < 1e-9);
+        // 多档盘口
+        assert_eq!(obs[0].bid_levels.len(), 5);
+        assert_eq!(obs[0].ask_levels.len(), 3);
+        assert!((obs[0].bid_volume - 600.0).abs() < 1e-9); // 50+100+200+150+100
+        assert!((obs[0].ask_volume - 260.0).abs() < 1e-9); // 60+80+120
     }
 
     #[tokio::test]
@@ -227,5 +253,7 @@ mod tests {
         assert!(cap.supports_orderbook);
         assert!(cap.supports_bid_ask);
         assert!(cap.supports_real_arbitrage());
+        assert_eq!(cap.depth_levels, 5);
+        assert!(cap.supports_depth);
     }
 }

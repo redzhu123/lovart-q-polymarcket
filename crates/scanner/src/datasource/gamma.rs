@@ -39,7 +39,7 @@ impl GammaProvider {
         Self { client, debug }
     }
 
-    /// Gamma 能力声明（第六节）。
+    /// Gamma 能力声明（第六节 / V1.03 盘口深度扩展）。
     pub fn capability_value() -> ProviderCapability {
         ProviderCapability {
             supports_markets: true,
@@ -47,6 +47,8 @@ impl GammaProvider {
             supports_trades: false,
             supports_bid_ask: false,
             supports_liquidity: true,
+            depth_levels: 0,
+            supports_depth: false,
         }
     }
 }
@@ -492,6 +494,8 @@ mod tests {
         assert!(!cap.supports_bid_ask);
         assert!(!cap.supports_trades);
         assert!(!cap.supports_real_arbitrage());
+        assert_eq!(cap.depth_levels, 0);
+        assert!(!cap.supports_depth);
     }
 
     #[test]

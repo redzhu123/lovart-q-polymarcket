@@ -1,10 +1,11 @@
-//! pm-scanner::datasource：统一数据源层（V1.02）。
+//! pm-scanner::datasource：统一数据源层（V1.02 / V1.03 CLOB 扩展）。
 //!
 //! 重构整个数据层：所有市场数据经 [`MarketDataProvider`] Trait 统一获取，
 //! Scanner 不再直接访问 HTTP，只依赖 Trait + [`DataSourceManager`]。
 //!
 //! - [`MarketDataProvider`]：统一数据源接口（第一节）。
 //! - [`gamma::GammaProvider`]：Gamma API Provider（只提供市场/流动性，无订单簿/买卖价）。
+//! - [`clob::ClobProvider`]：CLOB API Provider（V1.03 新增 -- 订单簿/多档盘口/买卖价/成交记录）。
 //! - [`mock::MockProvider`]：测试用 Provider。
 //! - [`manager::DataSourceManager`]：统一管理 Provider + Cache，按 config 切换。
 //! - [`validator::Validator`]：数据合法性校验（第七节）。
@@ -16,6 +17,7 @@
 //! 现有交易/策略/Shadow/Execution 逻辑完全不感知本层 -- 它们仍只消费 `OppSnapshot`。
 
 pub mod cache;
+pub mod clob;
 pub mod diagnose;
 pub mod gamma;
 pub mod manager;
@@ -25,6 +27,7 @@ pub mod statistics;
 pub mod validator;
 
 pub use cache::MarketDataCache;
+pub use clob::ClobProvider;
 pub use diagnose::run_datasource_diagnose;
 pub use gamma::GammaProvider;
 pub use manager::{CacheInfo, DataSourceManager, FetchOutcome};

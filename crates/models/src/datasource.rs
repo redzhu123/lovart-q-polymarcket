@@ -99,9 +99,23 @@ impl UnifiedMarket {
     }
 }
 
-/// 订单簿模型（V1.02 第五节）。
+/// 单档盘口价格档位（V1.03 订单簿多档支持）。
+///
+/// 表示某一价格水平的挂单量，按价格从优到劣排序。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PriceLevel {
+    /// 价格（0~1）。
+    pub price: f64,
+    /// 该价格的挂单量。
+    pub size: f64,
+    /// 深度档位（1-indexed，1=最优价）。
+    pub level: usize,
+}
+
+/// 订单簿模型（V1.02 第五节 / V1.03 多档扩展）。
 ///
 /// Provider 不支持订单簿时返回 `None` / 空，**绝不伪造**。
+/// V1.03 新增多档盘口（bid_levels / ask_levels）与累计量。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderBook {
     /// 对应市场标识。
@@ -116,6 +130,14 @@ pub struct OrderBook {
     pub bid_depth: Option<f64>,
     /// 卖盘深度。不支持为 None。
     pub ask_depth: Option<f64>,
+    /// 多档买盘（从最优到最劣排序）。不支持或无深度时为空。
+    pub bid_levels: Vec<PriceLevel>,
+    /// 多档卖盘（从最优到最劣排序）。不支持或无深度时为空。
+    pub ask_levels: Vec<PriceLevel>,
+    /// 买盘累计量（所有买盘档位之和）。
+    pub bid_volume: f64,
+    /// 卖盘累计量（所有卖盘档位之和）。
+    pub ask_volume: f64,
     /// 快照时间（UTC）。
     pub timestamp: DateTime<Utc>,
     /// 数据来源 Provider 名称。
@@ -130,6 +152,24 @@ impl OrderBook {
             _ => None,
         }
     }
+
+    /// 创建空订单簿（Provider 不支持或查询失败时返回，绝不伪造数据）。
+    pub fn empty(market_id: &str, provider: &str) -> Self {
+        Self {
+            market_id: market_id.to_string(),
+            best_bid: None,
+            best_ask: None,
+            spread: None,
+            bid_depth: None,
+            ask_depth: None,
+            bid_levels: Vec::new(),
+            ask_levels: Vec::new(),
+            bid_volume: 0.0,
+            ask_volume: 0.0,
+            timestamp: Utc::now(),
+            provider: provider.to_string(),
+        }
+    }
 }
 
 /// 单市场价格快照（供 `fetch_prices` 用）。
@@ -142,7 +182,7 @@ pub struct PriceQuote {
     pub provider: String,
 }
 
-/// Provider 能力声明（V1.02 第六节）。
+/// Provider 能力声明（V1.02 第六节 / V1.03 盘口深度扩展）。
 ///
 /// 每个 Provider 声明自己支持的数据维度；程序启动时打印，便于一眼看出
 /// 当前数据源能否支撑真实套利（需 OrderBook / BidAsk）。
@@ -158,6 +198,10 @@ pub struct ProviderCapability {
     pub supports_bid_ask: bool,
     /// 流动性。
     pub supports_liquidity: bool,
+    /// 盘口深度档位数（0=不支持多档深度）。
+    pub depth_levels: usize,
+    /// 是否支持多档深度（depth_levels > 0）。
+    pub supports_depth: bool,
 }
 
 impl ProviderCapability {
@@ -237,6 +281,8 @@ mod tests {
             supports_trades: false,
             supports_bid_ask: false,
             supports_liquidity: true,
+            depth_levels: 0,
+            supports_depth: false,
         };
         assert!(!gamma.supports_real_arbitrage());
         let clob = ProviderCapability {
@@ -245,6 +291,8 @@ mod tests {
             supports_trades: true,
             supports_bid_ask: true,
             supports_liquidity: true,
+            depth_levels: 10,
+            supports_depth: true,
         };
         assert!(clob.supports_real_arbitrage());
     }
