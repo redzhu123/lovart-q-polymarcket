@@ -55,7 +55,11 @@ impl Middleware for RequestLogger {
 
     async fn on_response(&self, ctx: &MiddlewareContext) {
         let status = ctx.status.unwrap_or(0);
-        let icon = if (200..300).contains(&status) { "✅" } else { "❌" };
+        let icon = if (200..300).contains(&status) {
+            "✅"
+        } else {
+            "❌"
+        };
 
         tracing::info!(
             module = %ctx.module,

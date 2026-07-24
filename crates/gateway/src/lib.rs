@@ -45,8 +45,8 @@ pub mod types;
 
 // ---- 核心导出 ----
 pub use adapter::{
-    apply_result_to_order, order_to_request, parse_polymarket_side, request_to_order,
-    to_polymarket_side, PolymarketBalanceJson, PolymarketOrderJson, PolymarketPositionJson,
+    PolymarketBalanceJson, PolymarketOrderJson, PolymarketPositionJson, apply_result_to_order,
+    order_to_request, parse_polymarket_side, request_to_order, to_polymarket_side,
 };
 pub use config::GatewayConfig;
 pub use diagnostics::{
@@ -56,9 +56,7 @@ pub use diagnostics::{
 };
 pub use error::GatewayError;
 pub use health::{HealthChecker, HealthRecord, HealthReport};
-pub use metrics::prometheus::{
-    Counter, Gauge, GatewayPrometheusMetrics, Histogram,
-};
+pub use metrics::prometheus::{Counter, GatewayPrometheusMetrics, Gauge, Histogram};
 pub use metrics::{GatewayMetrics, GatewayMetricsRecord};
 pub use mock::MockGateway;
 pub use polymarket::PolymarketGateway;
@@ -66,11 +64,11 @@ pub use ratelimit::RateLimiter;
 pub use retry::{Backoff, CircuitBreaker, CircuitState, RetryError, RetryExecutor};
 pub use sync::{SyncManager, SyncReport};
 pub use traits::ExchangeGateway;
-pub use transport::rest::{HttpRequest, HttpMethod, HttpResponse, HttpTransport};
+pub use transport::rest::{HttpMethod, HttpRequest, HttpResponse, HttpTransport};
 pub use transport::websocket::{WsMessage, WsTransport};
 pub use types::{
-    Balance, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, OrderType,
-    Position, TimeInForce,
+    Balance, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, OrderType, Position,
+    TimeInForce,
 };
 
 // ============================================================================
@@ -120,9 +118,9 @@ pub fn create_polymarket_gateway() -> Box<dyn ExchangeGateway> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pm_execution::order::Direction;
-    use pm_core::Side;
     use chrono::Local;
+    use pm_core::Side;
+    use pm_execution::order::Direction;
 
     /// 完整 Gateway 生命周期测试（Mock）。
     #[tokio::test]
@@ -151,7 +149,14 @@ mod tests {
 
         // 6. 下单
         let req = OrderRequest::new(
-            "mkt-1", Direction::Yes, Side::Buy, 0.45, 100.0, "S", "R", "O",
+            "mkt-1",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S",
+            "R",
+            "O",
         );
         let result = gateway.submit_order(&req, Local::now()).await;
         assert!(!result.gateway_order_id.is_empty());
@@ -170,7 +175,14 @@ mod tests {
 
         // 10. 替换
         let req2 = OrderRequest::new(
-            "mkt-2", Direction::No, Side::Sell, 0.50, 200.0, "S", "R", "O",
+            "mkt-2",
+            Direction::No,
+            Side::Sell,
+            0.50,
+            200.0,
+            "S",
+            "R",
+            "O",
         );
         let replace = gateway.replace_order("MOCK-old", &req2, Local::now()).await;
         assert!(!replace.gateway_order_id.is_empty());
@@ -183,7 +195,14 @@ mod tests {
         assert!(!gateway.live_enabled());
 
         let req = OrderRequest::new(
-            "mkt-1", Direction::Yes, Side::Buy, 0.45, 100.0, "S", "R", "O",
+            "mkt-1",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S",
+            "R",
+            "O",
         );
         let result = gateway.submit_order(&req, Local::now()).await;
         assert!(!result.success);
@@ -214,7 +233,14 @@ mod tests {
     #[test]
     fn adapter_integration() {
         let req = OrderRequest::new(
-            "mkt-1", Direction::Yes, Side::Buy, 0.45, 100.0, "S", "R", "O",
+            "mkt-1",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S",
+            "R",
+            "O",
         );
         let now = Local::now();
         let mut order = request_to_order(&req, "EX-001", now);

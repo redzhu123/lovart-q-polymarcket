@@ -46,13 +46,13 @@ pub mod validator;
 pub mod prelude {
     pub use crate::client::config::{ApiTestConfig, ClientMode};
     pub use crate::client::http::{ApiClient, ApiResponse};
-    pub use crate::validator::field::FieldValidator;
-    pub use crate::validator::response::{ResponseValidator, ValidationResult};
-    pub use crate::validator::schema::JsonSchemaValidator;
     pub use crate::contract::{ContractTest, HttpMethod};
     pub use crate::live::LiveGuard;
     pub use crate::report::generator::ReportGenerator;
     pub use crate::report::types::TestReport;
+    pub use crate::validator::field::FieldValidator;
+    pub use crate::validator::response::{ResponseValidator, ValidationResult};
+    pub use crate::validator::schema::JsonSchemaValidator;
 }
 
 // ============================================================================
@@ -60,7 +60,10 @@ pub mod prelude {
 // ============================================================================
 
 /// 创建 Mock 模式的测试环境。
-pub fn mock_env() -> (crate::client::http::ApiClient, crate::validator::response::ResponseValidator) {
+pub fn mock_env() -> (
+    crate::client::http::ApiClient,
+    crate::validator::response::ResponseValidator,
+) {
     use crate::client::config::ApiTestConfig;
     use crate::client::http::ApiClient;
     use crate::validator::response::ResponseValidator;
@@ -76,7 +79,10 @@ pub fn mock_env() -> (crate::client::http::ApiClient, crate::validator::response
 }
 
 /// 创建 Live 模式的测试环境。
-pub fn live_env() -> (crate::client::http::ApiClient, crate::validator::response::ResponseValidator) {
+pub fn live_env() -> (
+    crate::client::http::ApiClient,
+    crate::validator::response::ResponseValidator,
+) {
     use crate::client::config::ApiTestConfig;
     use crate::client::http::ApiClient;
     use crate::validator::response::ResponseValidator;

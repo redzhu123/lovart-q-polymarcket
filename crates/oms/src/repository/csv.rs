@@ -22,7 +22,7 @@ use std::sync::Mutex;
 
 use chrono::{DateTime, Local, TimeZone};
 
-use crate::events::{event_to_csv_row, OrderEvent, OMS_EVENTS_HEADER};
+use crate::events::{OMS_EVENTS_HEADER, OrderEvent, event_to_csv_row};
 use crate::order::{Order, OrderStatus, StatusChange};
 
 use super::{OrderRepository, RepositoryHealth};
@@ -269,11 +269,7 @@ impl OrderRepository for CsvRepository {
         Ok(removed)
     }
 
-    fn append_status_change(
-        &self,
-        order_id: &str,
-        change: &StatusChange,
-    ) -> anyhow::Result<()> {
+    fn append_status_change(&self, order_id: &str, change: &StatusChange) -> anyhow::Result<()> {
         let mut sc = self.status_changes.lock().unwrap();
         sc.entry(order_id.to_string())
             .or_insert_with(Vec::new)
@@ -383,7 +379,11 @@ fn order_to_csv_row(o: &Order) -> [String; 27] {
         o.retry_count.to_string(),
         o.priority.to_string(),
         o.notes.clone(),
-        if o.simulation_only { "true".into() } else { "false".into() },
+        if o.simulation_only {
+            "true".into()
+        } else {
+            "false".into()
+        },
     ]
 }
 
@@ -666,7 +666,10 @@ mod tests {
             repo.save(&o).unwrap();
         }
         let counts = repo.count_by_status().unwrap();
-        let validated = counts.iter().find(|(s, _)| *s == OrderStatus::Validated).unwrap();
+        let validated = counts
+            .iter()
+            .find(|(s, _)| *s == OrderStatus::Validated)
+            .unwrap();
         assert_eq!(validated.1, 1);
     }
 

@@ -242,7 +242,11 @@ impl ExecutionQueue {
     /// 按 order_id 移除订单。
     pub fn remove(&mut self, order_id: &str) -> Option<Order> {
         // 先查 retry buffer
-        if let Some(pos) = self.retry_buffer.iter().position(|o| o.order_id == order_id) {
+        if let Some(pos) = self
+            .retry_buffer
+            .iter()
+            .position(|o| o.order_id == order_id)
+        {
             return self.retry_buffer.remove(pos);
         }
         // 再查主队列
@@ -304,7 +308,14 @@ impl ExecutionQueue {
         println!("  当前队列长度 : {}", self.orders.len());
         println!("  最大容量     : {}", self.config.max_size);
         println!("  重试缓冲     : {}", self.retry_buffer.len());
-        println!("  状态         : {}", if self.paused { "⏸ 已暂停" } else { "▶ 运行中" });
+        println!(
+            "  状态         : {}",
+            if self.paused {
+                "⏸ 已暂停"
+            } else {
+                "▶ 运行中"
+            }
+        );
         println!("  累计入队     : {}", self.total_enqueued);
         println!("  累计出队     : {}", self.total_dequeued);
         println!("  累计重试     : {}", self.total_retries);
@@ -312,13 +323,21 @@ impl ExecutionQueue {
 
         if !self.orders.is_empty() {
             println!("  队列内容：");
-            println!("  {:<14} {:<10} {:<6} {:<8} {:<8} {:<10}",
-                "订单ID", "优先级", "方向", "价格", "数量", "重试");
+            println!(
+                "  {:<14} {:<10} {:<6} {:<8} {:<8} {:<10}",
+                "订单ID", "优先级", "方向", "价格", "数量", "重试"
+            );
             println!("  {}", "-".repeat(60));
             for o in &self.orders {
-                println!("  {:<14} {:<10} {:<6} {:<8.4} {:<8.2} {:<10}",
-                    o.order_id, o.priority, o.direction.as_zh(),
-                    o.price, o.quantity, o.retry_count);
+                println!(
+                    "  {:<14} {:<10} {:<6} {:<8.4} {:<8.2} {:<10}",
+                    o.order_id,
+                    o.priority,
+                    o.direction.as_zh(),
+                    o.price,
+                    o.quantity,
+                    o.retry_count
+                );
             }
         }
     }
@@ -338,10 +357,18 @@ mod tests {
     fn make_order(id: &str, priority: u32) -> Order {
         let now = Local::now();
         let mut o = Order::new(
-            id.into(), format!("CLI-{}", id), "mkt-1".into(), "mock".into(),
-            Direction::Yes, Side::Buy,
-            0.45, 100.0,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            id.into(),
+            format!("CLI-{}", id),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         );
         o.priority = priority;
         o
@@ -456,7 +483,10 @@ mod tests {
 
         let result = q.retry("EX-001", now);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), QueueError::MaxRetriesReached { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            QueueError::MaxRetriesReached { .. }
+        ));
     }
 
     #[test]

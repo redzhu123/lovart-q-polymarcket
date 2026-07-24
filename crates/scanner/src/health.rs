@@ -74,10 +74,7 @@ impl HealthReport {
 ///
 /// 始终返回 `HealthReport`；各项失败记录为 `CheckStatus::Fail`，由调用方决定是否阻断。
 /// API 与 JSON 共用一次 `provider.health_check()` 探测：先判 HTTP 状态，再判 JSON 解析。
-pub async fn run_health_check(
-    provider: &dyn MarketDataProvider,
-    cfg: &Config,
-) -> HealthReport {
+pub async fn run_health_check(provider: &dyn MarketDataProvider, cfg: &Config) -> HealthReport {
     let mut report = HealthReport::default();
 
     let (s, d) = check_config(cfg).await;
@@ -116,10 +113,7 @@ pub async fn run_health_check(
 
 async fn check_config(cfg: &Config) -> (CheckStatus, String) {
     if cfg.scanner.scan_interval_secs == 0 {
-        return (
-            CheckStatus::Fail,
-            "scanner.scan_interval_secs == 0".into(),
-        );
+        return (CheckStatus::Fail, "scanner.scan_interval_secs == 0".into());
     }
     if cfg.scanner.opportunity_threshold <= 0.0 || cfg.scanner.opportunity_threshold > 2.0 {
         return (
@@ -216,7 +210,10 @@ async fn check_memory() -> (CheckStatus, String) {
 /// API 检查：依据探测的 HTTP 状态码（status==0 表示请求未到达服务端）。
 fn check_api(probe: &HealthProbe) -> (CheckStatus, String) {
     if probe.status >= 200 && probe.status < 300 {
-        (CheckStatus::Ok, format!("HTTP {}（{} 毫秒）", probe.status, probe.latency_ms))
+        (
+            CheckStatus::Ok,
+            format!("HTTP {}（{} 毫秒）", probe.status, probe.latency_ms),
+        )
     } else if probe.status == 0 {
         (CheckStatus::Fail, probe.detail.clone())
     } else {
@@ -228,7 +225,10 @@ fn check_api(probe: &HealthProbe) -> (CheckStatus, String) {
 fn check_json(probe: &HealthProbe) -> (CheckStatus, String) {
     if probe.status >= 200 && probe.status < 300 {
         if probe.ok {
-            (CheckStatus::Ok, format!("解析 {} 个市场", probe.market_count))
+            (
+                CheckStatus::Ok,
+                format!("解析 {} 个市场", probe.market_count),
+            )
         } else {
             (CheckStatus::Fail, "JSON 解析失败".into())
         }

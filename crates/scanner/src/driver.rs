@@ -25,21 +25,21 @@ use tracing;
 use pm_execution::{ExecEvent, ExecParams, ExecutionEngine};
 use pm_metrics::Metrics;
 use pm_models::{Config, FinishedOpportunity, LogLevel, TrackUpdate};
+use pm_opportunity::{Opportunity, OpportunityEngine, OpportunityStatistics};
 use pm_paper::{OrderRecord, PaperTradingEngine, PortfolioRecord, PositionRecord};
 use pm_portfolio::RiskPolicy;
 use pm_recorder::LifecycleRecord;
 use pm_shadow::{ShadowEngine, ShadowTradeRecord};
-use pm_opportunity::{Opportunity, OpportunityEngine, OpportunityStatistics};
 use pm_strategy::{DefaultStrategy, ScanContext, ScanEvents, Strategy};
 use pm_tracker::OpportunityTracker;
 
 use crate::datasource::{
-    DataStatistics, DataSourceManager, FetchOutcome, MarketSnapshot, Validator,
+    DataSourceManager, DataStatistics, FetchOutcome, MarketSnapshot, Validator,
 };
 use crate::display;
 use crate::health;
 use crate::market;
-use crate::pipeline::{print_module_stats_table, print_pipeline_timeline, ModuleStats};
+use crate::pipeline::{ModuleStats, print_module_stats_table, print_pipeline_timeline};
 use crate::stats::{FetchStats, ScannerStats};
 
 /// scan 模式入口：连续扫描 + Shadow + Paper + Execution Simulator。
@@ -80,7 +80,10 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
     println!();
     println!("初始资金");
     println!();
-    println!("{} USDC", pm_utils::fmt_money(cfg.portfolio.initial_capital));
+    println!(
+        "{} USDC",
+        pm_utils::fmt_money(cfg.portfolio.initial_capital)
+    );
     println!();
     println!("最大持仓数");
     println!();
@@ -88,11 +91,16 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
     println!();
     println!("单笔持仓上限");
     println!();
-    println!("{} USDC", pm_utils::fmt_money(cfg.portfolio.max_position_size));
+    println!(
+        "{} USDC",
+        pm_utils::fmt_money(cfg.portfolio.max_position_size)
+    );
     println!();
     println!("仅模拟 -- 无钱包 / 无下单 / 无签名");
     let mut paper = PaperTradingEngine::new(cfg.portfolio.initial_capital, policy);
-    paper.load_order_base(pm_paper::records::load_order_base(&cfg.paths.paper_orders_csv));
+    paper.load_order_base(pm_paper::records::load_order_base(
+        &cfg.paths.paper_orders_csv,
+    ));
 
     // Execution Simulator 引擎：与 Paper 同初始资金，order_id 从历史 CSV 行数续编号。
     let exec_params = ExecParams {
@@ -174,7 +182,10 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
         println!();
         println!("{}", display::SEP);
         println!();
-        println!("⏳ 等待 {} 秒后开始下一轮扫描……", cfg.scanner.scan_interval_secs);
+        println!(
+            "⏳ 等待 {} 秒后开始下一轮扫描……",
+            cfg.scanner.scan_interval_secs
+        );
         println!();
 
         // 等待后再次扫描；期间可被 Ctrl+C 中断
@@ -371,7 +382,10 @@ async fn scan_once(
     let mut events = ScanEvents::default();
 
     // V1.04：同时迭代 OppSnapshot（给 Tracker）和 Opportunity（给 Strategy）
-    for (snap, opp) in enriched_snaps.iter().zip(engine_output.opportunities.iter()) {
+    for (snap, opp) in enriched_snaps
+        .iter()
+        .zip(engine_output.opportunities.iter())
+    {
         seen_keys.insert(snap.question.clone());
         let ev = tracker.observe(snap, now_dt);
         let is_new = ev.is_new;
@@ -464,8 +478,7 @@ async fn scan_once(
             display::print_finished(&finished);
         }
         // 写入 opportunities.csv
-        let records: Vec<LifecycleRecord> =
-            finished.iter().map(LifecycleRecord::from).collect();
+        let records: Vec<LifecycleRecord> = finished.iter().map(LifecycleRecord::from).collect();
         let _written = pm_recorder::append_records(&records, &cfg.paths.opportunities_csv);
         if level >= LogLevel::Info {
             println!("已保存至 CSV");
@@ -513,11 +526,8 @@ async fn scan_once(
 
     // 写入本轮新建的 BUY 订单
     if !events.paper_opens.is_empty() {
-        let order_recs: Vec<OrderRecord> = events
-            .paper_opens
-            .iter()
-            .map(OrderRecord::from)
-            .collect();
+        let order_recs: Vec<OrderRecord> =
+            events.paper_opens.iter().map(OrderRecord::from).collect();
         let _o = pm_paper::append_orders(&order_recs, &cfg.paths.paper_orders_csv);
     }
 
@@ -540,8 +550,10 @@ async fn scan_once(
     // 写入本轮终态订单到 execution_orders.csv
     let drained = exec.drain_terminal();
     if !drained.is_empty() {
-        let recs: Vec<pm_execution::ExecutionOrderRecord> =
-            drained.iter().map(pm_execution::ExecutionOrderRecord::from).collect();
+        let recs: Vec<pm_execution::ExecutionOrderRecord> = drained
+            .iter()
+            .map(pm_execution::ExecutionOrderRecord::from)
+            .collect();
         let _ = pm_execution::append_orders(&recs, &cfg.paths.execution_csv);
         if level >= LogLevel::Info {
             println!("执行订单已保存至 CSV");
@@ -733,12 +745,25 @@ fn opp_from_snap(snap: &pm_models::OppSnapshot) -> Opportunity {
         "scanner".into(),
         chrono::Utc::now(),
         OpportunityType::Unknown,
-        50.0, 0.5, 50,
-        25.0, 20.0, 0.0, 10.0, 5.0, 10.0,
-        0.01, 1.0,
-        snap.yes_price, snap.no_price, snap.sum,
-        None, snap.volume, snap.liquidity,
-        None, None,
+        50.0,
+        0.5,
+        50,
+        25.0,
+        20.0,
+        0.0,
+        10.0,
+        5.0,
+        10.0,
+        0.01,
+        1.0,
+        snap.yes_price,
+        snap.no_price,
+        snap.sum,
+        None,
+        snap.volume,
+        snap.liquidity,
+        None,
+        None,
     )
 }
 

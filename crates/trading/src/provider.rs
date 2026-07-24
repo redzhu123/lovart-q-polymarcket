@@ -43,7 +43,11 @@ pub struct HealthStatus {
 impl HealthStatus {
     /// 健康摘要（中文）。
     pub fn summary_zh(&self) -> String {
-        let status = if self.healthy { "✅ 健康" } else { "❌ 异常" };
+        let status = if self.healthy {
+            "✅ 健康"
+        } else {
+            "❌ 异常"
+        };
         format!(
             "{} | Provider: {} | 状态: {} | HTTP: {} | WS: {} | Session: {} | 延迟: {}ms",
             status,

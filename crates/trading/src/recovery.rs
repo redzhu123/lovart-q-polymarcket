@@ -272,7 +272,11 @@ impl RecoveryEngine {
             failed,
             self.retry_count,
             self.max_retries,
-            if self.auto_recover { "启用" } else { "禁用" },
+            if self.auto_recover {
+                "启用"
+            } else {
+                "禁用"
+            },
         )
     }
 }

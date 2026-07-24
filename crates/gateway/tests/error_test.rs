@@ -150,8 +150,7 @@ fn error_to_failed_result() {
 #[test]
 fn error_from_api_client_error() {
     init_logging();
-    let api_err =
-        pm_api_test::client::http::ApiClientError::RequestFailed("连接超时".into());
+    let api_err = pm_api_test::client::http::ApiClientError::RequestFailed("连接超时".into());
     let gw_err: GatewayError = api_err.into();
     assert_eq!(gw_err.code(), "GW_NET_001");
     assert!(gw_err.is_retryable());

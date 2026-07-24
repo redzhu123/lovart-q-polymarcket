@@ -230,11 +230,7 @@ impl StateMachine {
         }
 
         if !Self::can_transition(self.current, to) {
-            let err = format!(
-                "非法状态转换: {} -> {}",
-                self.current.as_zh(),
-                to.as_zh()
-            );
+            let err = format!("非法状态转换: {} -> {}", self.current.as_zh(), to.as_zh());
             tracing::error!("{}", err);
             // 非法转换 -> Failed
             self.force_failed(&err);
@@ -323,17 +319,44 @@ mod tests {
     #[test]
     fn happy_path_full_lifecycle() {
         let mut sm = StateMachine::new();
-        assert!(sm.transition(WorkflowState::LoadingMarket, "开始加载市场").is_ok());
-        assert!(sm.transition(WorkflowState::LoadingOrderBook, "市场加载完成").is_ok());
-        assert!(sm.transition(WorkflowState::CheckingBalance, "订单簿加载完成").is_ok());
-        assert!(sm.transition(WorkflowState::BuildingOrder, "开始构建订单").is_ok());
-        assert!(sm.transition(WorkflowState::SubmittingOrder, "DryRun 提交").is_ok());
-        assert!(sm.transition(WorkflowState::WaitingResult, "等待结果").is_ok());
+        assert!(
+            sm.transition(WorkflowState::LoadingMarket, "开始加载市场")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::LoadingOrderBook, "市场加载完成")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::CheckingBalance, "订单簿加载完成")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::BuildingOrder, "开始构建订单")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::SubmittingOrder, "DryRun 提交")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::WaitingResult, "等待结果")
+                .is_ok()
+        );
         assert!(sm.transition(WorkflowState::SyncOrder, "同步订单").is_ok());
         assert!(sm.transition(WorkflowState::SyncTrade, "同步成交").is_ok());
-        assert!(sm.transition(WorkflowState::SyncPosition, "同步持仓").is_ok());
-        assert!(sm.transition(WorkflowState::SyncBalance, "同步余额").is_ok());
-        assert!(sm.transition(WorkflowState::Completed, "生命周期完成").is_ok());
+        assert!(
+            sm.transition(WorkflowState::SyncPosition, "同步持仓")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::SyncBalance, "同步余额")
+                .is_ok()
+        );
+        assert!(
+            sm.transition(WorkflowState::Completed, "生命周期完成")
+                .is_ok()
+        );
         assert!(sm.is_completed());
         assert_eq!(sm.history().len(), 11);
     }
@@ -345,7 +368,10 @@ mod tests {
         sm.transition(WorkflowState::LoadingOrderBook, "").ok();
         sm.transition(WorkflowState::CheckingBalance, "").ok();
         // 只读路径：直接进入 SyncPosition
-        assert!(sm.transition(WorkflowState::SyncPosition, "只读跳过下单").is_ok());
+        assert!(
+            sm.transition(WorkflowState::SyncPosition, "只读跳过下单")
+                .is_ok()
+        );
         assert!(sm.transition(WorkflowState::SyncBalance, "").is_ok());
         assert!(sm.transition(WorkflowState::Completed, "").is_ok());
         assert!(sm.is_completed());

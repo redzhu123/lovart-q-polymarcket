@@ -20,9 +20,8 @@ async fn main() -> Result<()> {
         pm_models::LogLevel::Debug => "debug",
         pm_models::LogLevel::Trace => "trace",
     };
-    let filter = format!(
-        "{level_filter},hyper=warn,hyper_util=warn,reqwest=warn,tower=warn,rustls=warn"
-    );
+    let filter =
+        format!("{level_filter},hyper=warn,hyper_util=warn,reqwest=warn,tower=warn,rustls=warn");
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

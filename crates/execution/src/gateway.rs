@@ -66,12 +66,7 @@ impl GatewayResult {
     }
 
     /// 部分成交。
-    pub fn partially_filled(
-        order_id: &str,
-        filled: f64,
-        avg_price: f64,
-        latency_ms: u64,
-    ) -> Self {
+    pub fn partially_filled(order_id: &str, filled: f64, avg_price: f64, latency_ms: u64) -> Self {
         Self {
             success: true,
             gateway_order_id: order_id.to_string(),
@@ -300,10 +295,18 @@ mod tests {
     fn test_order() -> Order {
         let now = Local::now();
         Order::new(
-            "EX-001".into(), "CLI-001".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, Side::Buy,
-            0.45, 100.0,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            "EX-001".into(),
+            "CLI-001".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         )
     }
 

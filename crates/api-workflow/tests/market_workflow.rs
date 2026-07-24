@@ -16,7 +16,11 @@ async fn loading_market_step_loads_markets() {
     let mut engine = WorkflowEngine::new(cfg);
     let report = engine.run_full_lifecycle().await;
 
-    assert!(report.success, "完整生命周期应成功: {}", report.summary_zh());
+    assert!(
+        report.success,
+        "完整生命周期应成功: {}",
+        report.summary_zh()
+    );
 
     let market_step = report
         .trace
@@ -43,5 +47,9 @@ async fn market_call_appears_in_api_sequence() {
 
     let first_read = report.api_sequence.first();
     assert!(first_read.is_some(), "应至少有一条 API 调用");
-    assert_eq!(first_read.unwrap().path, "/markets", "首条 API 调用应为 /markets");
+    assert_eq!(
+        first_read.unwrap().path,
+        "/markets",
+        "首条 API 调用应为 /markets"
+    );
 }

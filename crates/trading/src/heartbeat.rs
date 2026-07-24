@@ -41,11 +41,7 @@ pub struct HeartbeatResult {
 impl HeartbeatResult {
     /// 健康摘要（单行中文）。
     pub fn summary_one_line(&self) -> String {
-        let status = if self.all_healthy {
-            "✅"
-        } else {
-            "❌"
-        };
+        let status = if self.all_healthy { "✅" } else { "❌" };
         format!(
             "{} [{}] {} | HTTP:{} WS:{} Session:{} | {}ms",
             status,
@@ -67,16 +63,28 @@ impl HeartbeatResult {
         };
         let mut lines = vec![
             format!("════════════════════════════════"),
-            format!("  {} - {}", status, self.timestamp.format("%Y-%m-%d %H:%M:%S")),
+            format!(
+                "  {} - {}",
+                status,
+                self.timestamp.format("%Y-%m-%d %H:%M:%S")
+            ),
             format!("════════════════════════════════"),
             format!("  Provider   : {} ({})", self.provider, self.state.as_zh()),
             format!(
                 "  HTTP       : {}",
-                if self.http_healthy { "✅ 正常" } else { "❌ 异常" }
+                if self.http_healthy {
+                    "✅ 正常"
+                } else {
+                    "❌ 异常"
+                }
             ),
             format!(
                 "  WebSocket  : {}",
-                if self.ws_healthy { "✅ 正常" } else { "❌ 异常" }
+                if self.ws_healthy {
+                    "✅ 正常"
+                } else {
+                    "❌ 异常"
+                }
             ),
             format!(
                 "  Session    : {}",
@@ -147,10 +155,7 @@ impl Heartbeat {
     }
 
     /// 执行心跳检查。
-    pub async fn beat(
-        &mut self,
-        provider: &dyn TradingProvider,
-    ) -> HeartbeatResult {
+    pub async fn beat(&mut self, provider: &dyn TradingProvider) -> HeartbeatResult {
         self.beat_count += 1;
         let now = Utc::now();
         self.last_heartbeat = Some(now);
@@ -208,11 +213,19 @@ impl Heartbeat {
         info!("  Provider  : {}", provider.name());
         info!(
             "  HTTP      : {}",
-            if health.http_ok { "✅ 正常" } else { "❌ 异常" }
+            if health.http_ok {
+                "✅ 正常"
+            } else {
+                "❌ 异常"
+            }
         );
         info!(
             "  WebSocket : {}",
-            if health.ws_ok { "✅ 正常" } else { "❌ 异常" }
+            if health.ws_ok {
+                "✅ 正常"
+            } else {
+                "❌ 异常"
+            }
         );
         info!(
             "  Session   : {}",
@@ -240,9 +253,7 @@ impl Heartbeat {
     /// 是否应该执行心跳（距上次心跳超过间隔）。
     pub fn should_beat(&self) -> bool {
         match self.last_heartbeat {
-            Some(last) => {
-                Utc::now() - last >= Duration::seconds(self.interval_secs as i64)
-            }
+            Some(last) => Utc::now() - last >= Duration::seconds(self.interval_secs as i64),
             None => true,
         }
     }

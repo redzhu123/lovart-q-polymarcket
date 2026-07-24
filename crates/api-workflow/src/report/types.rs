@@ -104,12 +104,8 @@ impl WorkflowReport {
         let mode = trace.mode.clone();
         let success = validation.passed && failed_steps == 0;
 
-        let health_score = Self::compute_health_score(
-            success,
-            failed_steps,
-            &validation,
-            avg_duration_ms,
-        );
+        let health_score =
+            Self::compute_health_score(success, failed_steps, &validation, avg_duration_ms);
 
         Self {
             run_id: trace.run_id.clone(),
@@ -165,7 +161,11 @@ impl WorkflowReport {
             self.avg_duration_ms,
             self.total_duration_ms,
             self.health_score,
-            if self.validation.passed { "通过" } else { "失败" },
+            if self.validation.passed {
+                "通过"
+            } else {
+                "失败"
+            },
         )
     }
 }

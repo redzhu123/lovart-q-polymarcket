@@ -92,10 +92,7 @@ impl LiquidityAnalyzer {
         println!("卖盘流动性      : {:.2}", report.ask_liquidity);
         println!("总流动性        : {:.2}", report.total_liquidity);
         println!("买卖失衡度      : {:.2}%", report.imbalance * 100.0);
-        println!(
-            "流动性评分      : {:.1} / 100",
-            report.liquidity_score
-        );
+        println!("流动性评分      : {:.1} / 100", report.liquidity_score);
         println!();
     }
 
@@ -203,10 +200,7 @@ mod tests {
 
     #[test]
     fn analyze_all_returns_correct_count() {
-        let obs = vec![
-            ob_with_volume(100.0, 200.0),
-            ob_with_volume(300.0, 100.0),
-        ];
+        let obs = vec![ob_with_volume(100.0, 200.0), ob_with_volume(300.0, 100.0)];
         let reports = LiquidityAnalyzer::analyze_all(&obs);
         assert_eq!(reports.len(), 2);
     }

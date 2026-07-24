@@ -96,13 +96,9 @@ pub enum ExecutionEvent {
         timestamp: DateTime<Local>,
     },
     /// 队列暂停。
-    QueuePaused {
-        timestamp: DateTime<Local>,
-    },
+    QueuePaused { timestamp: DateTime<Local> },
     /// 队列恢复。
-    QueueResumed {
-        timestamp: DateTime<Local>,
-    },
+    QueueResumed { timestamp: DateTime<Local> },
 }
 
 impl ExecutionEvent {
@@ -287,10 +283,22 @@ impl From<&ExecutionEvent> for EventRecord {
             ExecutionEvent::OrderQueued { position, .. } => format!("位置: {}", position),
             ExecutionEvent::OrderSubmitted { gateway, .. } => format!("Gateway: {}", gateway),
             ExecutionEvent::OrderAccepted { gateway, .. } => format!("Gateway: {}", gateway),
-            ExecutionEvent::OrderPartiallyFilled { filled, remaining, price, .. } => {
-                format!("成交: {:.2}  剩余: {:.2}  价格: {:.4}", filled, remaining, price)
+            ExecutionEvent::OrderPartiallyFilled {
+                filled,
+                remaining,
+                price,
+                ..
+            } => {
+                format!(
+                    "成交: {:.2}  剩余: {:.2}  价格: {:.4}",
+                    filled, remaining, price
+                )
             }
-            ExecutionEvent::OrderFilled { avg_price, slippage, .. } => {
+            ExecutionEvent::OrderFilled {
+                avg_price,
+                slippage,
+                ..
+            } => {
                 format!("均价: {:.4}  滑点: {:.2}%", avg_price, slippage * 100.0)
             }
             ExecutionEvent::OrderRejected { reason, .. } => reason.clone(),

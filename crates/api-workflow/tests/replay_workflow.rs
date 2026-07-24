@@ -20,7 +20,10 @@ async fn replay_completes_from_fixtures() {
     };
 
     // Mock 客户端，不访问网络
-    assert_eq!(cfg.to_api_test_config().mode, pm_api_test::client::config::ClientMode::Mock);
+    assert_eq!(
+        cfg.to_api_test_config().mode,
+        pm_api_test::client::config::ClientMode::Mock
+    );
 
     let report = pm_api_workflow::run_replay(&cfg).await.unwrap();
 

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use jsonschema::{Draft, Validator, ValidationError};
+use jsonschema::{Draft, ValidationError, Validator};
 use serde_json::Value;
 use tracing;
 
@@ -26,7 +26,10 @@ impl SchemaResult {
     /// 中文摘要。
     pub fn summary_zh(&self) -> String {
         if self.passed {
-            format!("Schema '{}' ✅ 通过 ({}ms)", self.schema_name, self.duration_ms)
+            format!(
+                "Schema '{}' ✅ 通过 ({}ms)",
+                self.schema_name, self.duration_ms
+            )
         } else {
             format!(
                 "Schema '{}' ❌ 失败 — {} 个错误 ({}ms)",
@@ -55,14 +58,26 @@ impl JsonSchemaValidator {
         // 加载并编译所有 Schema
         let schema_sources: &[(&str, &str)] = &[
             ("markets", include_str!("../../schemas/markets.schema.json")),
-            ("market-detail", include_str!("../../schemas/market-detail.schema.json")),
-            ("orderbook", include_str!("../../schemas/orderbook.schema.json")),
+            (
+                "market-detail",
+                include_str!("../../schemas/market-detail.schema.json"),
+            ),
+            (
+                "orderbook",
+                include_str!("../../schemas/orderbook.schema.json"),
+            ),
             ("trades", include_str!("../../schemas/trades.schema.json")),
             ("balance", include_str!("../../schemas/balance.schema.json")),
             ("orders", include_str!("../../schemas/orders.schema.json")),
-            ("positions", include_str!("../../schemas/positions.schema.json")),
+            (
+                "positions",
+                include_str!("../../schemas/positions.schema.json"),
+            ),
             ("error", include_str!("../../schemas/error.schema.json")),
-            ("server-time", include_str!("../../schemas/server-time.schema.json")),
+            (
+                "server-time",
+                include_str!("../../schemas/server-time.schema.json"),
+            ),
         ];
 
         for (name, source) in schema_sources {
@@ -89,8 +104,8 @@ impl JsonSchemaValidator {
 
     /// 编译单个 Schema。
     fn compile_schema(source: &str) -> Result<Validator, String> {
-        let schema_value: Value = serde_json::from_str(source)
-            .map_err(|e| format!("Schema JSON 解析失败: {}", e))?;
+        let schema_value: Value =
+            serde_json::from_str(source).map_err(|e| format!("Schema JSON 解析失败: {}", e))?;
 
         // jsonschema 0.26 uses Validator::new with draft selection
         let validator = Validator::options()
@@ -258,7 +273,11 @@ mod tests {
         let validator = JsonSchemaValidator::new();
         let data = serde_json::json!({"timestamp": 1712345678});
         let result = validator.validate("server-time", &data);
-        assert!(result.passed, "Server time schema should pass: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Server time schema should pass: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -277,7 +296,11 @@ mod tests {
             "allowance": "10000000000"
         });
         let result = validator.validate("balance", &data);
-        assert!(result.passed, "Balance schema should pass: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Balance schema should pass: {:?}",
+            result.errors
+        );
     }
 
     #[test]
@@ -291,7 +314,11 @@ mod tests {
             "hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
         });
         let result = validator.validate("orderbook", &data);
-        assert!(result.passed, "OrderBook schema should pass: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "OrderBook schema should pass: {:?}",
+            result.errors
+        );
     }
 
     #[test]

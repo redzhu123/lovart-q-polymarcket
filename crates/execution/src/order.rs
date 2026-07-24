@@ -132,7 +132,12 @@ pub struct StatusChange {
 }
 
 impl StatusChange {
-    pub fn new(from: OrderStatus, to: OrderStatus, reason: &str, timestamp: DateTime<Local>) -> Self {
+    pub fn new(
+        from: OrderStatus,
+        to: OrderStatus,
+        reason: &str,
+        timestamp: DateTime<Local>,
+    ) -> Self {
         Self {
             from,
             to,
@@ -274,12 +279,8 @@ impl Order {
 
     /// 记录一次状态变化。
     fn record_status_change(&mut self, to: OrderStatus, reason: &str) {
-        self.status_history.push(StatusChange::new(
-            self.status,
-            to,
-            reason,
-            self.update_time,
-        ));
+        self.status_history
+            .push(StatusChange::new(self.status, to, reason, self.update_time));
     }
 
     /// 更新成交信息。
@@ -317,12 +318,25 @@ impl Order {
     /// 打印订单生命周期时间线（中文）。
     pub fn print_timeline(&self) {
         println!("订单 {} 生命周期：", self.order_id);
-        println!("  市场: {}  方向: {}  {}  @ {:.4} × {:.2}",
-            self.market_id, self.direction.as_zh(), self.side.as_str(), self.price, self.quantity);
-        println!("  状态: {}  成交: {:.2}/{:.2}  滑点: {:.2}%",
-            self.status.as_zh(), self.filled, self.quantity, self.slippage * 100.0);
-        println!("  策略: {}  风控: {}  机会: {}",
-            self.strategy_id, self.risk_id, self.opportunity_id);
+        println!(
+            "  市场: {}  方向: {}  {}  @ {:.4} × {:.2}",
+            self.market_id,
+            self.direction.as_zh(),
+            self.side.as_str(),
+            self.price,
+            self.quantity
+        );
+        println!(
+            "  状态: {}  成交: {:.2}/{:.2}  滑点: {:.2}%",
+            self.status.as_zh(),
+            self.filled,
+            self.quantity,
+            self.slippage * 100.0
+        );
+        println!(
+            "  策略: {}  风控: {}  机会: {}",
+            self.strategy_id, self.risk_id, self.opportunity_id
+        );
         println!();
         println!("  状态变化历史：");
         for change in &self.status_history {

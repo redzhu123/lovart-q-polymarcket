@@ -105,7 +105,10 @@ pub struct ValidationResult {
 impl ValidationResult {
     pub fn from_outcomes(outcomes: Vec<ValidationOutcome>) -> Self {
         let all_passed = outcomes.iter().all(|o| o.passed);
-        Self { outcomes, all_passed }
+        Self {
+            outcomes,
+            all_passed,
+        }
     }
 
     /// 中文摘要。
@@ -141,7 +144,9 @@ pub trait ValidationRule: Send + Sync {
 /// 价格合法：> 0、有限、非 NaN、≤ 0.99（市场二元期权）。
 pub struct PriceRule;
 impl ValidationRule for PriceRule {
-    fn name(&self) -> &str { "价格合法" }
+    fn name(&self) -> &str {
+        "价格合法"
+    }
     fn check(&self, order: &Order, _: &ValidationContext) -> ValidationOutcome {
         let p = order.price;
         if !p.is_finite() {
@@ -160,7 +165,9 @@ impl ValidationRule for PriceRule {
 /// 数量合法：> 0、有限、非 NaN。
 pub struct QuantityRule;
 impl ValidationRule for QuantityRule {
-    fn name(&self) -> &str { "数量合法" }
+    fn name(&self) -> &str {
+        "数量合法"
+    }
     fn check(&self, order: &Order, _: &ValidationContext) -> ValidationOutcome {
         let q = order.quantity;
         if !q.is_finite() {
@@ -176,7 +183,9 @@ impl ValidationRule for QuantityRule {
 /// 余额满足：订单名义金额不超过账户可用余额（如果是 Buy）。
 pub struct BalanceRule;
 impl ValidationRule for BalanceRule {
-    fn name(&self) -> &str { "余额满足" }
+    fn name(&self) -> &str {
+        "余额满足"
+    }
     fn check(&self, order: &Order, ctx: &ValidationContext) -> ValidationOutcome {
         // Sell 不消耗余额
         if matches!(order.side, Side::Sell) {
@@ -199,7 +208,9 @@ impl ValidationRule for BalanceRule {
 /// 市场开放：市场未关闭（ctx.market_open = true）。
 pub struct MarketStateRule;
 impl ValidationRule for MarketStateRule {
-    fn name(&self) -> &str { "市场开放" }
+    fn name(&self) -> &str {
+        "市场开放"
+    }
     fn check(&self, _: &Order, ctx: &ValidationContext) -> ValidationOutcome {
         if !ctx.market_open {
             return ValidationOutcome::fail(self.name(), "市场已关闭，禁止下单");
@@ -211,7 +222,9 @@ impl ValidationRule for MarketStateRule {
 /// 参数完整：market_id / client_order_id / strategy_id 非空。
 pub struct CompletenessRule;
 impl ValidationRule for CompletenessRule {
-    fn name(&self) -> &str { "参数完整" }
+    fn name(&self) -> &str {
+        "参数完整"
+    }
     fn check(&self, order: &Order, _: &ValidationContext) -> ValidationOutcome {
         if order.market_id.trim().is_empty() {
             return ValidationOutcome::fail(self.name(), "market_id 不能为空");
@@ -229,15 +242,14 @@ impl ValidationRule for CompletenessRule {
 /// 订单类型 / 有效期一致：Market 单不接受 IOC（市场无此语义）。
 pub struct OrderTypeCoherenceRule;
 impl ValidationRule for OrderTypeCoherenceRule {
-    fn name(&self) -> &str { "订单类型一致" }
+    fn name(&self) -> &str {
+        "订单类型一致"
+    }
     fn check(&self, order: &Order, _: &ValidationContext) -> ValidationOutcome {
         if matches!(order.order_type, OrderType::Market)
             && matches!(order.time_in_force, TimeInForce::Ioc)
         {
-            return ValidationOutcome::fail(
-                self.name(),
-                "市价单不接受 IOC（应使用 FOK 或 GTC）",
-            );
+            return ValidationOutcome::fail(self.name(), "市价单不接受 IOC（应使用 FOK 或 GTC）");
         }
         ValidationOutcome::pass(self.name())
     }
@@ -246,7 +258,9 @@ impl ValidationRule for OrderTypeCoherenceRule {
 /// 活跃订单数上限：未超过 OMS 配置的 max_active_orders。
 pub struct ActiveOrderLimitRule;
 impl ValidationRule for ActiveOrderLimitRule {
-    fn name(&self) -> &str { "活跃订单上限" }
+    fn name(&self) -> &str {
+        "活跃订单上限"
+    }
     fn check(&self, _: &Order, ctx: &ValidationContext) -> ValidationOutcome {
         if ctx.active_order_count >= ctx.max_active_orders {
             return ValidationOutcome::fail(
@@ -264,7 +278,9 @@ impl ValidationRule for ActiveOrderLimitRule {
 /// 方向合法：Direction 必须为 Yes / No 之一（强制类型）。
 pub struct DirectionRule;
 impl ValidationRule for DirectionRule {
-    fn name(&self) -> &str { "方向合法" }
+    fn name(&self) -> &str {
+        "方向合法"
+    }
     fn check(&self, order: &Order, _: &ValidationContext) -> ValidationOutcome {
         match order.direction {
             Direction::Yes | Direction::No => ValidationOutcome::pass(self.name()),
@@ -275,15 +291,14 @@ impl ValidationRule for DirectionRule {
 /// 状态前置：仅 Created 状态的订单可被 Validator 校验。
 pub struct StatePreconditionRule;
 impl ValidationRule for StatePreconditionRule {
-    fn name(&self) -> &str { "状态前置" }
+    fn name(&self) -> &str {
+        "状态前置"
+    }
     fn check(&self, order: &Order, _: &ValidationContext) -> ValidationOutcome {
         if order.status != OrderStatus::Created {
             return ValidationOutcome::fail(
                 self.name(),
-                &format!(
-                    "仅 Created 状态可校验，当前状态：{}",
-                    order.status.as_zh()
-                ),
+                &format!("仅 Created 状态可校验，当前状态：{}", order.status.as_zh()),
             );
         }
         ValidationOutcome::pass(self.name())
@@ -338,11 +353,8 @@ impl Validator {
 
     /// 执行校验。
     pub fn validate(&self, order: &Order, ctx: &ValidationContext) -> ValidationResult {
-        let outcomes: Vec<ValidationOutcome> = self
-            .rules
-            .iter()
-            .map(|r| r.check(order, ctx))
-            .collect();
+        let outcomes: Vec<ValidationOutcome> =
+            self.rules.iter().map(|r| r.check(order, ctx)).collect();
         let result = ValidationResult::from_outcomes(outcomes);
         if result.all_passed {
             tracing::info!(

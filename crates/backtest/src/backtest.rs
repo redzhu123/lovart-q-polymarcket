@@ -29,10 +29,7 @@ pub fn run_backtest(cfg: &Config) -> Result<()> {
     println!();
     println!("Loaded {} opportunities", opps.len());
     println!("Strategy: {}", strategy_name);
-    println!(
-        "Entry slippage: {:.2}% (Simulation Only)",
-        slippage * 100.0
-    );
+    println!("Entry slippage: {:.2}% (Simulation Only)", slippage * 100.0);
     println!();
     println!("Backtesting...");
     println!();
@@ -86,8 +83,8 @@ pub fn run_backtest(cfg: &Config) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pm_models::ReplayOpportunity;
     use chrono::Local;
+    use pm_models::ReplayOpportunity;
 
     fn opp(question: &str, best_sum: f64, last_yes: f64, last_no: f64) -> ReplayOpportunity {
         let now = Local::now();
@@ -116,7 +113,12 @@ mod tests {
         let mut trades = Vec::new();
         for opp in &opps {
             let entry_sum = opp.best_sum * (1.0 + 0.005);
-            shadow.open_trade(&opp.question, entry_sum / 2.0, entry_sum / 2.0, opp.start_time);
+            shadow.open_trade(
+                &opp.question,
+                entry_sum / 2.0,
+                entry_sum / 2.0,
+                opp.start_time,
+            );
             let finished = FinishedOpportunity {
                 question: opp.question.clone(),
                 start_time: opp.start_time,
@@ -135,7 +137,10 @@ mod tests {
         }
         assert_eq!(trades.len(), 2);
         // 至少一盈一亏
-        let pnls: Vec<f64> = trades.iter().map(|t| t.estimated_pnl.unwrap_or(0.0)).collect();
+        let pnls: Vec<f64> = trades
+            .iter()
+            .map(|t| t.estimated_pnl.unwrap_or(0.0))
+            .collect();
         assert!(pnls.iter().any(|p| *p > 0.0));
         assert!(pnls.iter().any(|p| *p < 0.0));
     }

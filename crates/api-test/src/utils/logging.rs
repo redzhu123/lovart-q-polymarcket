@@ -13,8 +13,7 @@ use tracing_subscriber::EnvFilter;
 /// pm_api_test::utils::logging::init_logging();
 /// ```
 pub fn init_logging() {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -26,8 +25,7 @@ pub fn init_logging() {
 
 /// 初始化带级别的日志。
 pub fn init_logging_with_level(level: &str) {
-    let filter = EnvFilter::try_from_env("PM_API_LOG")
-        .unwrap_or_else(|_| EnvFilter::new(level));
+    let filter = EnvFilter::try_from_env("PM_API_LOG").unwrap_or_else(|_| EnvFilter::new(level));
 
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -69,10 +67,18 @@ pub fn log_test_end(test_name: &str, passed: bool) {
 
 /// 记录 API 调用。
 pub fn log_api_call(method: &str, url: &str, status: u16, latency_ms: u64) {
-    let status_icon = if status >= 200 && status < 300 { "✅" } else { "❌" };
+    let status_icon = if status >= 200 && status < 300 {
+        "✅"
+    } else {
+        "❌"
+    };
     tracing::info!(
         "[API] {} {} → HTTP {} {} | 耗时: {}ms",
-        method, url, status, status_icon, latency_ms
+        method,
+        url,
+        status,
+        status_icon,
+        latency_ms
     );
 }
 
@@ -80,9 +86,20 @@ pub fn log_api_call(method: &str, url: &str, status: u16, latency_ms: u64) {
 pub fn log_check(name: &str, passed: bool, detail: &str) {
     let icon = if passed { "✅" } else { "❌" };
     if detail.is_empty() {
-        tracing::info!("    {} {} {}", icon, name, if passed { "通过" } else { "失败" });
+        tracing::info!(
+            "    {} {} {}",
+            icon,
+            name,
+            if passed { "通过" } else { "失败" }
+        );
     } else {
-        tracing::info!("    {} {} {} — {}", icon, name, if passed { "通过" } else { "失败" }, detail);
+        tracing::info!(
+            "    {} {} {} — {}",
+            icon,
+            name,
+            if passed { "通过" } else { "失败" },
+            detail
+        );
     }
 }
 

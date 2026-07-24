@@ -262,10 +262,7 @@ impl ExchangeGateway for PolymarketGateway {
                 let mut no_price = None;
                 if let Some(tokens) = tokens {
                     for token in tokens {
-                        let outcome = token
-                            .get("outcome")
-                            .and_then(|o| o.as_str())
-                            .unwrap_or("");
+                        let outcome = token.get("outcome").and_then(|o| o.as_str()).unwrap_or("");
                         let price = token
                             .get("price")
                             .and_then(|p| p.as_str())
@@ -316,10 +313,16 @@ impl ExchangeGateway for PolymarketGateway {
             .map(|arr| {
                 arr.iter()
                     .filter_map(|b| {
-                        let price =
-                            b.get("price").and_then(|p| p.as_str())?.parse::<f64>().ok()?;
-                        let size =
-                            b.get("size").and_then(|s| s.as_str())?.parse::<f64>().ok()?;
+                        let price = b
+                            .get("price")
+                            .and_then(|p| p.as_str())?
+                            .parse::<f64>()
+                            .ok()?;
+                        let size = b
+                            .get("size")
+                            .and_then(|s| s.as_str())?
+                            .parse::<f64>()
+                            .ok()?;
                         Some(BookLevel { price, size })
                     })
                     .collect()
@@ -333,10 +336,16 @@ impl ExchangeGateway for PolymarketGateway {
             .map(|arr| {
                 arr.iter()
                     .filter_map(|a| {
-                        let price =
-                            a.get("price").and_then(|p| p.as_str())?.parse::<f64>().ok()?;
-                        let size =
-                            a.get("size").and_then(|s| s.as_str())?.parse::<f64>().ok()?;
+                        let price = a
+                            .get("price")
+                            .and_then(|p| p.as_str())?
+                            .parse::<f64>()
+                            .ok()?;
+                        let size = a
+                            .get("size")
+                            .and_then(|s| s.as_str())?
+                            .parse::<f64>()
+                            .ok()?;
                         Some(BookLevel { price, size })
                     })
                     .collect()
@@ -447,11 +456,7 @@ impl ExchangeGateway for PolymarketGateway {
                 m.record_order_rejected();
 
                 tracing::error!(error = %err, latency_ms, "Polymarket 下单失败");
-                GatewayResult::failed(
-                    &request.client_order_id,
-                    &format!("{}", err),
-                    latency_ms,
-                )
+                GatewayResult::failed(&request.client_order_id, &format!("{}", err), latency_ms)
             }
         }
     }
@@ -472,11 +477,17 @@ impl ExchangeGateway for PolymarketGateway {
         match resp {
             Ok(http_resp) => {
                 if http_resp.is_success() {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, true);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, true);
                     tracing::info!(order_id, "Polymarket 订单已取消");
                     GatewayResult::cancelled(order_id, "订单已取消", latency_ms)
                 } else {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, false);
                     GatewayResult::failed(
                         order_id,
                         &format!("取消订单失败: HTTP {}", http_resp.status),
@@ -485,7 +496,10 @@ impl ExchangeGateway for PolymarketGateway {
                 }
             }
             Err(err) => {
-                self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, false);
                 GatewayResult::failed(order_id, &format!("{}", err), latency_ms)
             }
         }
@@ -515,7 +529,10 @@ impl ExchangeGateway for PolymarketGateway {
         match resp {
             Ok(http_resp) => {
                 if http_resp.is_success() {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, true);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, true);
                     let status = http_resp
                         .body
                         .get("status")
@@ -523,7 +540,10 @@ impl ExchangeGateway for PolymarketGateway {
                         .unwrap_or("UNKNOWN");
                     GatewayResult::accepted(order_id, &format!("订单状态: {}", status), latency_ms)
                 } else {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, false);
                     GatewayResult::failed(
                         order_id,
                         &format!("查询订单失败: HTTP {}", http_resp.status),
@@ -532,7 +552,10 @@ impl ExchangeGateway for PolymarketGateway {
                 }
             }
             Err(err) => {
-                self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, false);
                 GatewayResult::failed(order_id, &format!("{}", err), latency_ms)
             }
         }
@@ -547,7 +570,10 @@ impl ExchangeGateway for PolymarketGateway {
         match resp {
             Ok(http_resp) => {
                 if http_resp.is_success() {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, true);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, true);
                     http_resp
                         .body
                         .as_array()
@@ -555,10 +581,8 @@ impl ExchangeGateway for PolymarketGateway {
                             orders
                                 .iter()
                                 .map(|o| {
-                                    let id = o
-                                        .get("id")
-                                        .and_then(|i| i.as_str())
-                                        .unwrap_or("unknown");
+                                    let id =
+                                        o.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
                                     let status = o
                                         .get("status")
                                         .and_then(|s| s.as_str())
@@ -573,12 +597,18 @@ impl ExchangeGateway for PolymarketGateway {
                         })
                         .unwrap_or_default()
                 } else {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, false);
                     Vec::new()
                 }
             }
             Err(_) => {
-                self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, false);
                 Vec::new()
             }
         }
@@ -607,14 +637,20 @@ impl ExchangeGateway for PolymarketGateway {
         match resp {
             Ok(http_resp) => {
                 if !http_resp.is_success() {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, false);
                     anyhow::bail!(
                         "Polymarket 余额查询失败: HTTP {} ({}ms)",
                         http_resp.status,
                         latency_ms
                     );
                 }
-                self.metrics.lock().unwrap().record_api_call(latency_ms, true);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, true);
 
                 let available = http_resp
                     .body
@@ -636,7 +672,10 @@ impl ExchangeGateway for PolymarketGateway {
                 })
             }
             Err(err) => {
-                self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, false);
                 anyhow::bail!("Polymarket 余额查询失败: {} ({}ms)", err, latency_ms)
             }
         }
@@ -651,14 +690,20 @@ impl ExchangeGateway for PolymarketGateway {
         match resp {
             Ok(http_resp) => {
                 if !http_resp.is_success() {
-                    self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                    self.metrics
+                        .lock()
+                        .unwrap()
+                        .record_api_call(latency_ms, false);
                     anyhow::bail!(
                         "Polymarket 持仓查询失败: HTTP {} ({}ms)",
                         http_resp.status,
                         latency_ms
                     );
                 }
-                self.metrics.lock().unwrap().record_api_call(latency_ms, true);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, true);
 
                 let positions: Vec<Position> = http_resp
                     .body
@@ -726,7 +771,10 @@ impl ExchangeGateway for PolymarketGateway {
                 Ok(positions)
             }
             Err(err) => {
-                self.metrics.lock().unwrap().record_api_call(latency_ms, false);
+                self.metrics
+                    .lock()
+                    .unwrap()
+                    .record_api_call(latency_ms, false);
                 anyhow::bail!("Polymarket 持仓查询失败: {} ({}ms)", err, latency_ms)
             }
         }
@@ -807,8 +855,8 @@ impl ExchangeGateway for PolymarketGateway {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pm_execution::order::Direction;
     use pm_core::Side;
+    use pm_execution::order::Direction;
 
     fn test_config() -> GatewayConfig {
         GatewayConfig {
@@ -822,7 +870,14 @@ mod tests {
     async fn polymarket_gateway_dry_run_rejects_orders() {
         let gw = PolymarketGateway::new(test_config());
         let req = OrderRequest::new(
-            "mkt-1", Direction::Yes, Side::Buy, 0.45, 100.0, "S", "R", "O",
+            "mkt-1",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S",
+            "R",
+            "O",
         );
         let result = gw.submit_order(&req, Local::now()).await;
         assert!(!result.success);

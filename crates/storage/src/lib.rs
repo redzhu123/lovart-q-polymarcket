@@ -116,7 +116,9 @@ pub fn append_records<T: Serialize>(path: impl AsRef<Path>, records: &[T]) -> us
             return 0;
         }
     };
-    let mut wtr = csv::WriterBuilder::new().has_headers(false).from_writer(file);
+    let mut wtr = csv::WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(file);
     let mut written = 0usize;
     for r in records {
         if let Err(e) = wtr.serialize(r) {

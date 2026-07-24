@@ -8,7 +8,7 @@ use crate::config::{WorkflowConfig, WorkflowMode};
 use crate::engine::WorkflowEngine;
 use crate::report::types::WorkflowReport;
 
-use super::{verify_fixtures, Workflow};
+use super::{Workflow, verify_fixtures};
 
 /// Replay Workflow。
 pub struct ReplayWorkflow {

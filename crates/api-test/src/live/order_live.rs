@@ -19,10 +19,7 @@ use crate::validator::response::{CheckResult, ValidationResult};
 /// # 安全
 ///
 /// 此函数在 `enable_live=false` 时直接返回拒绝结果。
-pub async fn test_live_order_flow(
-    client: &ApiClient,
-    guard: &LiveGuard,
-) -> ValidationResult {
+pub async fn test_live_order_flow(client: &ApiClient, guard: &LiveGuard) -> ValidationResult {
     let mut result = ValidationResult::new("Live 订单流程");
 
     // 安全门
@@ -64,7 +61,9 @@ pub async fn test_live_order_flow(
     tracing::info!("📤 发送订单...");
     match client.post("/order", Some(&order_body)).await {
         Ok(resp) => {
-            let order_id = resp.body.get("orderID")
+            let order_id = resp
+                .body
+                .get("orderID")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
 

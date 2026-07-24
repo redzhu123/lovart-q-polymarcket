@@ -23,14 +23,12 @@ pub async fn test_server_time(
     let response = client.get(&contract.path).await;
 
     match response {
-        Ok(resp) => {
-            validator.validate_simple(
-                &contract.name,
-                &resp,
-                &contract.schema_name,
-                contract.expected_status,
-            )
-        }
+        Ok(resp) => validator.validate_simple(
+            &contract.name,
+            &resp,
+            &contract.schema_name,
+            contract.expected_status,
+        ),
         Err(e) => {
             let mut result = ValidationResult::new(&contract.name);
             result.add_error(&format!("请求失败: {}", e));
@@ -100,7 +98,11 @@ mod tests {
         let validator = ResponseValidator::new();
 
         let result = test_server_time(&client, &validator).await;
-        assert!(result.passed, "Server time test failed: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Server time test failed: {:?}",
+            result.errors
+        );
     }
 
     #[tokio::test]

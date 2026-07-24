@@ -7,7 +7,7 @@
 //! **安全**：提交订单步骤仅构建请求并校验参数，不发送（dry_run=true）。
 
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use pm_api_test::client::http::ApiClient;
 use pm_api_test::validator::response::ResponseValidator;
@@ -42,7 +42,11 @@ impl WorkflowEngine {
         let run_id = format!("wf-{}", Utc::now().format("%Y%m%d-%H%M%S%3f"));
 
         tracing::info!("═══════════════════════════════════════════════════════════");
-        tracing::info!("  Workflow Engine 启动 | run_id={} | 模式={}", run_id, config.mode.as_zh());
+        tracing::info!(
+            "  Workflow Engine 启动 | run_id={} | 模式={}",
+            run_id,
+            config.mode.as_zh()
+        );
         tracing::info!("═══════════════════════════════════════════════════════════");
 
         Self {
@@ -169,7 +173,9 @@ impl WorkflowEngine {
 
     /// 加载市场列表：GET /markets。
     async fn step_loading_market(&mut self) -> StepRecord {
-        let _ = self.sm.transition(WorkflowState::LoadingMarket, "开始加载市场列表");
+        let _ = self
+            .sm
+            .transition(WorkflowState::LoadingMarket, "开始加载市场列表");
         let mut step = StepRecord::start(WorkflowState::LoadingMarket);
 
         match self.client.get("/markets").await {
@@ -193,7 +199,9 @@ impl WorkflowEngine {
     /// 加载订单簿：GET /book?token_id=。
     async fn step_loading_orderbook(&mut self) -> StepRecord {
         let path = format!("/book?token_id={}", self.config.target_token_id);
-        let _ = self.sm.transition(WorkflowState::LoadingOrderBook, "开始加载订单簿");
+        let _ = self
+            .sm
+            .transition(WorkflowState::LoadingOrderBook, "开始加载订单簿");
         let mut step = StepRecord::start(WorkflowState::LoadingOrderBook);
 
         match self.client.get(&path).await {
@@ -216,7 +224,9 @@ impl WorkflowEngine {
 
     /// 检查余额：GET /balances。
     async fn step_checking_balance(&mut self) -> StepRecord {
-        let _ = self.sm.transition(WorkflowState::CheckingBalance, "开始检查余额");
+        let _ = self
+            .sm
+            .transition(WorkflowState::CheckingBalance, "开始检查余额");
         let mut step = StepRecord::start(WorkflowState::CheckingBalance);
 
         if self.should_skip_authed_read() {
@@ -225,7 +235,11 @@ impl WorkflowEngine {
             match self.client.get("/balances").await {
                 Ok(resp) => {
                     step.add_api_call(ApiCallRecord::from_response(
-                        "GET", "/balances", None, &resp, false,
+                        "GET",
+                        "/balances",
+                        None,
+                        &resp,
+                        false,
                     ));
                     if resp.is_success() {
                         step.add_note(&format!("余额查询成功（HTTP {}）", resp.status));
@@ -243,7 +257,9 @@ impl WorkflowEngine {
 
     /// 构建订单（本地）：构造 CLOB V2 订单 JSON，不发送。
     async fn step_building_order(&mut self) -> StepRecord {
-        let _ = self.sm.transition(WorkflowState::BuildingOrder, "开始构建订单");
+        let _ = self
+            .sm
+            .transition(WorkflowState::BuildingOrder, "开始构建订单");
         let mut step = StepRecord::start(WorkflowState::BuildingOrder);
 
         let order_json = self.build_order_json();
@@ -267,7 +283,9 @@ impl WorkflowEngine {
 
     /// 提交订单（DryRun）：校验参数，不发送。
     async fn step_submitting_order_dryrun(&mut self) -> StepRecord {
-        let _ = self.sm.transition(WorkflowState::SubmittingOrder, "DryRun 提交订单");
+        let _ = self
+            .sm
+            .transition(WorkflowState::SubmittingOrder, "DryRun 提交订单");
         let mut step = StepRecord::start(WorkflowState::SubmittingOrder);
 
         // 参数校验（本地）
@@ -298,7 +316,9 @@ impl WorkflowEngine {
 
     /// 等待结果（DryRun 模拟）。
     async fn step_waiting_result(&mut self) -> StepRecord {
-        let _ = self.sm.transition(WorkflowState::WaitingResult, "等待订单结果");
+        let _ = self
+            .sm
+            .transition(WorkflowState::WaitingResult, "等待订单结果");
         let mut step = StepRecord::start(WorkflowState::WaitingResult);
         step.add_note("DryRun 模拟: 订单已接受");
         step.add_note("DryRun 模拟: 订单已成交（Filled）");
@@ -363,7 +383,11 @@ impl WorkflowEngine {
             match self.client.get("/positions").await {
                 Ok(resp) => {
                     step.add_api_call(ApiCallRecord::from_response(
-                        "GET", "/positions", None, &resp, false,
+                        "GET",
+                        "/positions",
+                        None,
+                        &resp,
+                        false,
                     ));
                     if resp.is_success() {
                         step.add_note(&format!("持仓查询成功（HTTP {}）", resp.status));
@@ -390,7 +414,11 @@ impl WorkflowEngine {
             match self.client.get("/balances").await {
                 Ok(resp) => {
                     step.add_api_call(ApiCallRecord::from_response(
-                        "GET", "/balances", None, &resp, false,
+                        "GET",
+                        "/balances",
+                        None,
+                        &resp,
+                        false,
                     ));
                     if resp.is_success() {
                         step.add_note(&format!("余额同步成功（HTTP {}）", resp.status));
@@ -423,7 +451,8 @@ impl WorkflowEngine {
     fn finish_step(&mut self, step: &mut StepRecord) {
         step.finish();
         if !step.success {
-            self.sm.force_failed(step.failure_reason.as_deref().unwrap_or("未知原因"));
+            self.sm
+                .force_failed(step.failure_reason.as_deref().unwrap_or("未知原因"));
         }
         let recorded = step.clone();
         self.recorder.record(recorded);
@@ -472,7 +501,11 @@ mod tests {
         let mut engine = WorkflowEngine::new(cfg);
         let report = engine.run_full_lifecycle().await;
 
-        assert!(report.success, "DryRun 完整生命周期应成功: {}", report.summary_zh());
+        assert!(
+            report.success,
+            "DryRun 完整生命周期应成功: {}",
+            report.summary_zh()
+        );
         assert!(report.validation.passed);
         assert_eq!(engine.current_state(), WorkflowState::Completed);
         // 11 个步骤 + Completed = 实际步骤数 = 11（含 Completed）
@@ -491,7 +524,11 @@ mod tests {
         let report = engine.run_readonly_lifecycle().await;
 
         // Mock 模式下未认证 -> 跳过 balance/position，但 markets/orderbook 读取成功
-        assert!(report.validation.passed, "只读路径应通过: {}", report.summary_zh());
+        assert!(
+            report.validation.passed,
+            "只读路径应通过: {}",
+            report.summary_zh()
+        );
     }
 
     #[tokio::test]
@@ -516,7 +553,10 @@ mod tests {
         let engine = WorkflowEngine::new(cfg);
         let order = engine.build_order_json();
         assert_eq!(order["order"]["side"], "BUY");
-        assert_eq!(order["order"]["tokenId"], WorkflowConfig::default().target_token_id);
+        assert_eq!(
+            order["order"]["tokenId"],
+            WorkflowConfig::default().target_token_id
+        );
         assert_eq!(order["orderType"], "GTC");
     }
 }

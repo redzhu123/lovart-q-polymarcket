@@ -128,7 +128,10 @@ impl OpportunityStatistics {
         println!();
         println!("  高优先级（≥80）    : {}", self.high_priority);
         println!("  平均 ROI           : {:.2}%", self.avg_roi() * 100.0);
-        println!("  平均置信度         : {:.0}%", self.avg_confidence() * 100.0);
+        println!(
+            "  平均置信度         : {:.0}%",
+            self.avg_confidence() * 100.0
+        );
         println!("  最高评分           : {:.1}", self.max_score);
         if self.kept > 0 {
             println!("  最低评分           : {:.1}", self.min_score);
@@ -194,12 +197,18 @@ mod tests {
         // Total ROI = 0.05*2 + 0.10*4 = 0.10 + 0.40 = 0.50
         // Avg = 0.50 / 6 = 0.0833...
         let avg = s.avg_roi();
-        assert!((avg - 0.08333).abs() < 0.01, "avg ROI should be ~0.083, got {avg}");
+        assert!(
+            (avg - 0.08333).abs() < 0.01,
+            "avg ROI should be ~0.083, got {avg}"
+        );
 
         // Total confidence = 0.8*2 + 0.9*4 = 1.6 + 3.6 = 5.2
         // Avg = 5.2 / 6 = 0.866...
         let avg_conf = s.avg_confidence();
-        assert!((avg_conf - 0.8666).abs() < 0.02, "avg confidence should be ~0.867, got {avg_conf}");
+        assert!(
+            (avg_conf - 0.8666).abs() < 0.02,
+            "avg confidence should be ~0.867, got {avg_conf}"
+        );
     }
 
     #[test]

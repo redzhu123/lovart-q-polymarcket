@@ -119,13 +119,10 @@ async fn live_generate_report() {
     let client = live_client();
     let validator = ResponseValidator::new();
 
-    let report = pm_api_test::run_full_suite_and_report(
-        &client,
-        &validator,
-        "crates/api-test/reports",
-    )
-    .await
-    .unwrap();
+    let report =
+        pm_api_test::run_full_suite_and_report(&client, &validator, "crates/api-test/reports")
+            .await
+            .unwrap();
 
     assert!(report.summary.total_endpoints > 0);
     tracing::info!("{}", report.summary_zh());

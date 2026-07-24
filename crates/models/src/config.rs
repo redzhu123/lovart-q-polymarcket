@@ -243,15 +243,33 @@ fn default_max_fill_delay() -> u32 {
 fn default_max_wait_scans() -> u32 {
     5
 }
-fn default_max_queue_size() -> usize { 1000 }
-fn default_max_retries() -> u32 { 3 }
-fn default_retry_delay_ms() -> u64 { 1000 }
-fn default_timeout_ms() -> u64 { 30000 }
-fn default_max_orders_per_second() -> u32 { 10 }
-fn default_burst_size() -> u32 { 5 }
-fn default_exec_gateway() -> String { "mock".into() }
-fn default_exec_events_csv() -> String { "data/execution_events.csv".into() }
-fn default_exec_report_csv() -> String { "data/execution_report.csv".into() }
+fn default_max_queue_size() -> usize {
+    1000
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_retry_delay_ms() -> u64 {
+    1000
+}
+fn default_timeout_ms() -> u64 {
+    30000
+}
+fn default_max_orders_per_second() -> u32 {
+    10
+}
+fn default_burst_size() -> u32 {
+    5
+}
+fn default_exec_gateway() -> String {
+    "mock".into()
+}
+fn default_exec_events_csv() -> String {
+    "data/execution_events.csv".into()
+}
+fn default_exec_report_csv() -> String {
+    "data/execution_report.csv".into()
+}
 
 impl Default for ExecutionConfig {
     fn default() -> Self {
@@ -336,26 +354,66 @@ pub struct RiskConfig {
     pub risk_dashboard_csv: String,
 }
 
-fn default_position_sizer() -> String { "Fixed".into() }
-fn default_fixed_size() -> f64 { 100.0 }
-fn default_risk_ratio() -> f64 { 0.01 }
-fn default_max_daily_loss() -> f64 { 1000.0 }
-fn default_max_open_orders() -> usize { 20 }
-fn default_max_single_capital() -> f64 { 500.0 }
-fn default_max_capital_usage() -> f64 { 0.5 }
-fn default_max_consecutive_losses() -> usize { 5 }
-fn default_max_drawdown() -> f64 { 0.2 }
-fn default_max_market_exposure() -> f64 { 0.3 }
-fn default_max_category_exposure() -> f64 { 0.5 }
-fn default_max_side_exposure() -> f64 { 0.6 }
-fn default_min_liquidity() -> f64 { 100.0 }
-fn default_min_depth() -> f64 { 50.0 }
-fn default_max_slippage() -> f64 { 0.02 }
-fn default_max_volatility() -> f64 { 0.5 }
-fn default_accept_threshold() -> f64 { 70.0 }
-fn default_review_threshold() -> f64 { 40.0 }
-fn default_risk_events_csv() -> String { "data/risk_events.csv".into() }
-fn default_risk_dashboard_csv() -> String { "data/risk_dashboard.csv".into() }
+fn default_position_sizer() -> String {
+    "Fixed".into()
+}
+fn default_fixed_size() -> f64 {
+    100.0
+}
+fn default_risk_ratio() -> f64 {
+    0.01
+}
+fn default_max_daily_loss() -> f64 {
+    1000.0
+}
+fn default_max_open_orders() -> usize {
+    20
+}
+fn default_max_single_capital() -> f64 {
+    500.0
+}
+fn default_max_capital_usage() -> f64 {
+    0.5
+}
+fn default_max_consecutive_losses() -> usize {
+    5
+}
+fn default_max_drawdown() -> f64 {
+    0.2
+}
+fn default_max_market_exposure() -> f64 {
+    0.3
+}
+fn default_max_category_exposure() -> f64 {
+    0.5
+}
+fn default_max_side_exposure() -> f64 {
+    0.6
+}
+fn default_min_liquidity() -> f64 {
+    100.0
+}
+fn default_min_depth() -> f64 {
+    50.0
+}
+fn default_max_slippage() -> f64 {
+    0.02
+}
+fn default_max_volatility() -> f64 {
+    0.5
+}
+fn default_accept_threshold() -> f64 {
+    70.0
+}
+fn default_review_threshold() -> f64 {
+    40.0
+}
+fn default_risk_events_csv() -> String {
+    "data/risk_events.csv".into()
+}
+fn default_risk_dashboard_csv() -> String {
+    "data/risk_dashboard.csv".into()
+}
 
 impl Default for RiskConfig {
     fn default() -> Self {
@@ -498,12 +556,24 @@ impl Default for BacktestConfig {
 }
 
 // Gateway 默认值（V1.08）— 必须在 struct 前定义。
-fn default_retry_base_ms() -> u64 { 500 }
-fn default_retry_max_ms_val() -> u64 { 15000 }
-fn default_backoff_multiplier() -> f64 { 2.0 }
-fn default_cb_failure_threshold() -> u32 { 5 }
-fn default_cb_recovery_timeout_ms() -> u64 { 30000 }
-fn default_cb_half_open_max() -> u32 { 3 }
+fn default_retry_base_ms() -> u64 {
+    500
+}
+fn default_retry_max_ms_val() -> u64 {
+    15000
+}
+fn default_backoff_multiplier() -> f64 {
+    2.0
+}
+fn default_cb_failure_threshold() -> u32 {
+    5
+}
+fn default_cb_recovery_timeout_ms() -> u64 {
+    30000
+}
+fn default_cb_half_open_max() -> u32 {
+    3
+}
 
 /// Gateway 原始配置（V1.08）-- 从 config.toml [gateway] 段读取。
 #[derive(Debug, Clone, Deserialize)]
@@ -552,12 +622,24 @@ pub struct GatewayRawConfig {
     pub cb_half_open_max: u32,
 }
 
-fn default_gateway_type() -> String { "mock".into() }
-fn default_polymarket_api_url() -> String { "https://clob.polymarket.com".into() }
-fn default_polymarket_ws_url() -> String { "wss://ws.polymarket.com".into() }
-fn default_api_key_env() -> String { "POLYMARKET_API_KEY".into() }
-fn default_api_secret_env() -> String { "POLYMARKET_API_SECRET".into() }
-fn default_api_passphrase_env() -> String { "POLYMARKET_API_PASSPHRASE".into() }
+fn default_gateway_type() -> String {
+    "mock".into()
+}
+fn default_polymarket_api_url() -> String {
+    "https://clob.polymarket.com".into()
+}
+fn default_polymarket_ws_url() -> String {
+    "wss://ws.polymarket.com".into()
+}
+fn default_api_key_env() -> String {
+    "POLYMARKET_API_KEY".into()
+}
+fn default_api_secret_env() -> String {
+    "POLYMARKET_API_SECRET".into()
+}
+fn default_api_passphrase_env() -> String {
+    "POLYMARKET_API_PASSPHRASE".into()
+}
 
 impl Default for GatewayRawConfig {
     fn default() -> Self {
@@ -611,10 +693,10 @@ pub struct Config {
 impl Config {
     /// 从 `path` 读取并解析 `config.toml`。文件缺失或解析失败返回 Err。
     pub fn load(path: &str) -> Result<Self> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("读取配置文件失败: {}", path))?;
-        let cfg: Config = toml::from_str(&text)
-            .with_context(|| format!("解析配置文件失败: {}", path))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("读取配置文件失败: {}", path))?;
+        let cfg: Config =
+            toml::from_str(&text).with_context(|| format!("解析配置文件失败: {}", path))?;
         Ok(cfg)
     }
 

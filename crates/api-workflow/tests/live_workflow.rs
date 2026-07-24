@@ -27,17 +27,21 @@ async fn readonly_enforces_no_writes() {
         .iter()
         .filter(|c| c.is_write())
         .collect();
-    assert!(writes.is_empty(), "Live ReadOnly 不应包含任何写操作: {:?}", writes);
+    assert!(
+        writes.is_empty(),
+        "Live ReadOnly 不应包含任何写操作: {:?}",
+        writes
+    );
 
     // 不应出现下单相关状态
-    let has_write_state = report
-        .trace
-        .steps
-        .iter()
-        .any(|s| s.step.is_write_state());
+    let has_write_state = report.trace.steps.iter().any(|s| s.step.is_write_state());
     assert!(!has_write_state, "Live ReadOnly 不应包含下单相关步骤");
 
-    assert!(report.validation.passed, "只读校验应通过: {}", report.summary_zh());
+    assert!(
+        report.validation.passed,
+        "只读校验应通过: {}",
+        report.summary_zh()
+    );
 }
 
 #[tokio::test]

@@ -17,7 +17,9 @@ use pm_utils::{fmt_money, fmt_pct, fmt_pnl, fmt_qty, fmt_roi, fmt_scans, fmt_sum
 use pm_core::Side;
 use pm_paper::CloseOutcome;
 
-use crate::stats::{FetchStats, MarketRejection, MarketSample, PageStats, RoundAnalysis, ScannerStats};
+use crate::stats::{
+    FetchStats, MarketRejection, MarketSample, PageStats, RoundAnalysis, ScannerStats,
+};
 
 /// 主分隔线（等号）。
 pub const SEP: &str = "======================================";
@@ -748,7 +750,10 @@ pub fn print_scanner_debug(fetch: &FetchStats, analysis: &RoundAnalysis) {
     kv("因已关闭过滤", &analysis.filtered_closed.to_string());
     kv("因不活跃过滤", &analysis.filtered_inactive.to_string());
     kv("因缺价过滤", &analysis.filtered_missing_price.to_string());
-    kv("因数据无效过滤", &analysis.filtered_invalid_data.to_string());
+    kv(
+        "因数据无效过滤",
+        &analysis.filtered_invalid_data.to_string(),
+    );
     kv("因策略过滤", &analysis.filtered_strategy.to_string());
     kv("剩余", &analysis.remaining().to_string());
 
@@ -911,7 +916,10 @@ pub fn print_round_system_summary(
         .count();
 
     let (pass, reject) = match analysis {
-        Some(a) => (a.passed_strategy.to_string(), a.filtered_strategy.to_string()),
+        Some(a) => (
+            a.passed_strategy.to_string(),
+            a.filtered_strategy.to_string(),
+        ),
         None => ("未统计".into(), "未统计".into()),
     };
 
@@ -955,7 +963,11 @@ pub fn print_market_trace_dump(markets: &[UnifiedMarket]) {
             m.volume,
             m.liquidity,
             m.outcome_count,
-            if q.trim().is_empty() { "（无问题）" } else { &q },
+            if q.trim().is_empty() {
+                "（无问题）"
+            } else {
+                &q
+            },
             price_str
         );
     }
@@ -1013,7 +1025,10 @@ pub fn print_opportunity_engine_block(
             );
         }
         if output.opportunities.len() > display_count {
-            println!("... 及其他 {} 个机会", output.opportunities.len() - display_count);
+            println!(
+                "... 及其他 {} 个机会",
+                output.opportunities.len() - display_count
+            );
         }
     } else {
         println!("（本轮未发现符合条件的套利机会）");

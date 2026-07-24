@@ -84,22 +84,27 @@ impl Strategy for DefaultStrategy {
         if is_new {
             // 新机会：开一笔影子交易（每个机会仅一笔；重复时返回 None 忽略）
             if let Some(trade) =
-                ctx.shadow.open_trade(&opp.question, opp.yes_price, opp.no_price, ctx.now)
+                ctx.shadow
+                    .open_trade(&opp.question, opp.yes_price, opp.no_price, ctx.now)
             {
                 ctx.events.shadow_opened.push(trade);
             }
             // Paper Trading：自动 BUY 开仓（风控由 paper 内部 RiskManager 检查）
-            match ctx.paper.open_position(&opp.question, opp.yes_price, ctx.now) {
+            match ctx
+                .paper
+                .open_position(&opp.question, opp.yes_price, ctx.now)
+            {
                 OpenOutcome::Filled(o) => ctx.events.paper_opens.push(o),
                 OpenOutcome::Rejected(r) => {
-                    ctx.events
-                        .paper_rejections
-                        .push((opp.question.clone(), r));
+                    ctx.events.paper_rejections.push((opp.question.clone(), r));
                 }
             }
             // Execution Simulator：提交 BUY 订单（进入 Pending，等待成交模拟）
             let notional = ctx.execution.order_notional();
-            match ctx.execution.submit_buy(&opp.question, opp.yes_price, ctx.now) {
+            match ctx
+                .execution
+                .submit_buy(&opp.question, opp.yes_price, ctx.now)
+            {
                 SubmitOutcome::Accepted(id) => {
                     let qty = notional / opp.yes_price;
                     ctx.events.exec_events.push(ExecEvent::NewOrder {
@@ -130,12 +135,17 @@ impl Strategy for DefaultStrategy {
             ctx.events.shadow_closed.push(trade);
         }
         // Paper Trading：自动 SELL 平仓，exit 价取机会最后一次扫描的 YES 价
-        if let Some(outcome) = ctx.paper.close_position(&finished.question, finished.last_yes, ctx.now)
+        if let Some(outcome) =
+            ctx.paper
+                .close_position(&finished.question, finished.last_yes, ctx.now)
         {
             ctx.events.paper_closes.push(outcome);
         }
         // Execution Simulator：提交 SELL 平仓（BUY 已成交的持仓才平得了；仍在 Pending 则跳过）
-        match ctx.execution.submit_sell(&finished.question, finished.last_yes, ctx.now) {
+        match ctx
+            .execution
+            .submit_sell(&finished.question, finished.last_yes, ctx.now)
+        {
             SubmitOutcome::Accepted(_) => {} // 进入 Pending，成交后由 tick 产生 PositionClosed
             SubmitOutcome::Rejected(pm_execution::TerminalReason::NoPosition) => {} // BUY 还未成交，正常跳过
             SubmitOutcome::Rejected(reason) => {
@@ -167,15 +177,22 @@ fn opp_from_snap(snap: &OppSnapshot) -> Opportunity {
         50.0, // score
         0.5,  // confidence
         50,   // priority
-        25.0, 20.0, 0.0, 10.0, 5.0, 10.0, // dimension scores
-        0.02, 2.0,               // roi, profit
+        25.0,
+        20.0,
+        0.0,
+        10.0,
+        5.0,
+        10.0, // dimension scores
+        0.02,
+        2.0, // roi, profit
         snap.yes_price,
         snap.no_price,
         snap.sum,
-        None,                     // spread
+        None, // spread
         snap.volume,
         snap.liquidity,
-        None, None,               // bid/ask depth
+        None,
+        None, // bid/ask depth
     )
 }
 
@@ -232,7 +249,11 @@ mod tests {
 
         let s = snap("Q", 0.42, 0.50);
         let opp = opp_from_snap(&s);
-        strat.on_opportunity(&opp, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_opportunity(
+            &opp,
+            true,
+            &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events),
+        );
 
         assert_eq!(events.shadow_opened.len(), 1);
         assert_eq!(events.paper_opens.len(), 1);
@@ -240,7 +261,10 @@ mod tests {
         assert_eq!(events.exec_events.len(), 1); // NewOrder
         assert!(matches!(
             events.exec_events[0],
-            ExecEvent::NewOrder { side: Side::Buy, .. }
+            ExecEvent::NewOrder {
+                side: Side::Buy,
+                ..
+            }
         ));
     }
 
@@ -255,17 +279,29 @@ mod tests {
 
         let s1 = snap("Q", 0.42, 0.50);
         let opp1 = opp_from_snap(&s1);
-        strat.on_opportunity(&opp1, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_opportunity(
+            &opp1,
+            true,
+            &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events),
+        );
         // 第二轮：更新 -> mark
         let s2 = snap("Q", 0.45, 0.50);
         let opp2 = opp_from_snap(&s2);
         events = ScanEvents::default();
-        strat.on_opportunity(&opp2, false, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_opportunity(
+            &opp2,
+            false,
+            &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events),
+        );
         assert!(events.shadow_opened.is_empty());
         assert!(events.paper_opens.is_empty());
         // paper 持仓 current_price 应被 mark 到 0.45
         let pf = paper.portfolio();
-        let pos = pf.open_positions.iter().find(|p| p.question == "Q").expect("pos");
+        let pos = pf
+            .open_positions
+            .iter()
+            .find(|p| p.question == "Q")
+            .expect("pos");
         assert!((pos.current_price - 0.45).abs() < 1e-9);
     }
 
@@ -280,7 +316,11 @@ mod tests {
 
         let s = snap("Q", 0.42, 0.50);
         let opp = opp_from_snap(&s);
-        strat.on_opportunity(&opp, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_opportunity(
+            &opp,
+            true,
+            &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events),
+        );
 
         let finished = FinishedOpportunity {
             question: "Q".into(),
@@ -295,14 +335,19 @@ mod tests {
             liquidity: 0.0,
         };
         events = ScanEvents::default();
-        strat.on_close(&finished, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_close(
+            &finished,
+            &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events),
+        );
         assert_eq!(events.shadow_closed.len(), 1);
         assert_eq!(events.paper_closes.len(), 1);
         // execution submit_sell：BUY 未成交时 NoPosition 被吞，无 Rejected 事件
-        assert!(events
-            .exec_events
-            .iter()
-            .all(|e| !matches!(e, ExecEvent::Rejected { .. })));
+        assert!(
+            events
+                .exec_events
+                .iter()
+                .all(|e| !matches!(e, ExecEvent::Rejected { .. }))
+        );
     }
 
     #[test]
@@ -317,10 +362,20 @@ mod tests {
         // 先开仓
         let s = snap("Q", 0.42, 0.50);
         let opp = opp_from_snap(&s);
-        strat.on_opportunity(&opp, true, &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_opportunity(
+            &opp,
+            true,
+            &mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events),
+        );
         // on_scan 推进 exec tick（可能产生 Filled/PartiallyFilled 等）
         events = ScanEvents::default();
-        strat.on_scan(&mut ctx(now, &mut shadow, &mut paper, &mut exec, &mut events));
+        strat.on_scan(&mut ctx(
+            now,
+            &mut shadow,
+            &mut paper,
+            &mut exec,
+            &mut events,
+        ));
         // paper total_value 应已重估（持仓在）
         assert!(paper.portfolio().open_count() >= 1 || true);
     }

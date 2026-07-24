@@ -82,11 +82,7 @@ impl OrderRepository for SqliteRepository {
         Ok(false)
     }
 
-    fn append_status_change(
-        &self,
-        _order_id: &str,
-        _change: &StatusChange,
-    ) -> anyhow::Result<()> {
+    fn append_status_change(&self, _order_id: &str, _change: &StatusChange) -> anyhow::Result<()> {
         Ok(())
     }
 

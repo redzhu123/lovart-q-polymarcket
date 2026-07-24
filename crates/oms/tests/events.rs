@@ -1,11 +1,11 @@
 //! OMS 集成测试 — 事件总线（P2-04 第十节）。
 
-use std::sync::{Arc, Mutex};
 use chrono::Local;
 use pm_core::Side;
 use pm_execution::order::Direction;
 use pm_gateway::Balance;
 use pm_oms::prelude::*;
+use std::sync::{Arc, Mutex};
 
 /// 测试用订阅者：收集事件名。
 struct CollectSub {
@@ -25,7 +25,10 @@ impl Subscriber for CollectSub {
         &self.name
     }
     fn on_event(&self, event: &OrderEvent) -> anyhow::Result<()> {
-        self.sink.lock().unwrap().push(event.event_name_zh().to_string());
+        self.sink
+            .lock()
+            .unwrap()
+            .push(event.event_name_zh().to_string());
         Ok(())
     }
 }
@@ -97,7 +100,9 @@ fn custom_subscriber_receives_events() {
 fn subscriber_failure_does_not_break_publish() {
     struct FailSub;
     impl Subscriber for FailSub {
-        fn name(&self) -> &str { "fail" }
+        fn name(&self) -> &str {
+            "fail"
+        }
         fn on_event(&self, _: &OrderEvent) -> anyhow::Result<()> {
             Err(anyhow::anyhow!("模拟失败"))
         }

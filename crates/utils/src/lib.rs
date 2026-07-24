@@ -101,11 +101,7 @@ pub fn median(v: &[f64]) -> f64 {
 
 /// 比率（分母为 0 时返回 0.0）。
 pub fn ratio(n: u64, d: u64) -> f64 {
-    if d > 0 {
-        n as f64 / d as f64
-    } else {
-        0.0
-    }
+    if d > 0 { n as f64 / d as f64 } else { 0.0 }
 }
 
 /// 浮点近似比较（用于测试与不变式断言）。

@@ -46,7 +46,10 @@ impl MetricsMiddleware {
 
     /// 记录 API 调用。
     pub fn record_api_call(&self, latency_ms: u64, success: bool) {
-        self.metrics.lock().unwrap().record_api_call(latency_ms, success);
+        self.metrics
+            .lock()
+            .unwrap()
+            .record_api_call(latency_ms, success);
     }
 
     /// 记录订单提交。
@@ -155,8 +158,7 @@ mod tests {
     #[tokio::test]
     async fn metrics_hooks_update_counts() {
         let mw = MetricsMiddleware::new(GatewayMetrics::new());
-        let ctx = MiddlewareContext::new("req-1", "GET", "/time", "test")
-            .with_response(200, 42);
+        let ctx = MiddlewareContext::new("req-1", "GET", "/time", "test").with_response(200, 42);
 
         mw.on_response(&ctx).await;
 

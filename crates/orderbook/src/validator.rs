@@ -86,10 +86,7 @@ impl OrderBookValidator {
                 issues.push(ValidationIssue {
                     market_id: orderbook.market_id.clone(),
                     check: "买价 ≤ 卖价".into(),
-                    detail: format!(
-                        "BestBid={} 高于 BestAsk={}，价差异常（交叉盘口）",
-                        bid, ask
-                    ),
+                    detail: format!("BestBid={} 高于 BestAsk={}，价差异常（交叉盘口）", bid, ask),
                 });
             }
         }
@@ -222,12 +219,28 @@ mod tests {
             bid_depth: Some(350.0),
             ask_depth: Some(200.0),
             bid_levels: vec![
-                PriceLevel { price: 0.45, size: 100.0, level: 1 },
-                PriceLevel { price: 0.44, size: 200.0, level: 2 },
+                PriceLevel {
+                    price: 0.45,
+                    size: 100.0,
+                    level: 1,
+                },
+                PriceLevel {
+                    price: 0.44,
+                    size: 200.0,
+                    level: 2,
+                },
             ],
             ask_levels: vec![
-                PriceLevel { price: 0.47, size: 80.0, level: 1 },
-                PriceLevel { price: 0.48, size: 120.0, level: 2 },
+                PriceLevel {
+                    price: 0.47,
+                    size: 80.0,
+                    level: 1,
+                },
+                PriceLevel {
+                    price: 0.48,
+                    size: 120.0,
+                    level: 2,
+                },
             ],
             bid_volume: 300.0,
             ask_volume: 200.0,
@@ -287,8 +300,16 @@ mod tests {
         let mut ob = valid_ob();
         // 乱序：0.44 在 0.45 之后（应为降序）
         ob.bid_levels = vec![
-            PriceLevel { price: 0.44, size: 100.0, level: 1 },
-            PriceLevel { price: 0.45, size: 200.0, level: 2 },
+            PriceLevel {
+                price: 0.44,
+                size: 100.0,
+                level: 1,
+            },
+            PriceLevel {
+                price: 0.45,
+                size: 200.0,
+                level: 2,
+            },
         ];
         // 更新 best_bid 为第一档
         ob.best_bid = Some(0.44);
@@ -305,8 +326,16 @@ mod tests {
         let mut ob = valid_ob();
         // 乱序：0.48 在 0.47 之后（应为升序）
         ob.ask_levels = vec![
-            PriceLevel { price: 0.48, size: 100.0, level: 1 },
-            PriceLevel { price: 0.47, size: 200.0, level: 2 },
+            PriceLevel {
+                price: 0.48,
+                size: 100.0,
+                level: 1,
+            },
+            PriceLevel {
+                price: 0.47,
+                size: 200.0,
+                level: 2,
+            },
         ];
         ob.best_ask = Some(0.48);
         ob.spread = OrderBook::compute_spread(ob.best_bid, ob.best_ask);

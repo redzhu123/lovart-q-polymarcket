@@ -3,12 +3,12 @@
 //! 模拟完整的企业级交易链路：
 //! Execution → OMS → Gateway → Exchange
 
-use std::sync::Arc;
 use chrono::Local;
 use pm_core::Side;
 use pm_execution::order::Direction;
 use pm_gateway::{Balance, create_mock_gateway};
 use pm_oms::prelude::*;
+use std::sync::Arc;
 
 fn build_oms() -> Oms {
     create_default_oms().expect("创建 OMS 失败")
@@ -35,7 +35,9 @@ async fn end_to_end_execution_via_oms_to_mock_gateway() {
     let now = Local::now();
 
     // 1. Execution 调用 OMS 创建订单
-    let mut order = oms.create_order(&make_input("CLI-E2E-001", 0.45), now).unwrap();
+    let mut order = oms
+        .create_order(&make_input("CLI-E2E-001", 0.45), now)
+        .unwrap();
     assert_eq!(order.status, OrderStatus::Created);
 
     // 2. 校验
@@ -63,7 +65,9 @@ async fn oms_only_entry_execution_does_not_call_gateway_directly() {
     // 业务层必须经 Oms API → Lifecycle → Gateway
     let oms = build_oms();
     let now = Local::now();
-    let mut order = oms.create_order(&make_input("CLI-DIRECT-001", 0.45), now).unwrap();
+    let mut order = oms
+        .create_order(&make_input("CLI-DIRECT-001", 0.45), now)
+        .unwrap();
     // 这里业务层不应该能直接调用 gateway 提交（避免绕过 OMS）
     // 正确的路径是 oms.submit_order()
     oms.submit_order(&mut order, now).await.unwrap();
@@ -96,12 +100,16 @@ async fn oms_blocks_invalid_orders_before_gateway() {
 #[tokio::test]
 async fn matcher_evaluates_deviation() {
     let oms = build_oms();
-    let order = oms.create_order(&make_input("CLI-MATCH-001", 0.45), Local::now()).unwrap();
+    let order = oms
+        .create_order(&make_input("CLI-MATCH-001", 0.45), Local::now())
+        .unwrap();
     let r = oms.evaluate_match(&order, Some(0.43), Some(0.46));
     assert_eq!(r.decision, MatchDecision::Allow);
 
     // 价格严重偏离
-    let bad = oms.create_order(&make_input("CLI-MATCH-002", 0.60), Local::now()).unwrap();
+    let bad = oms
+        .create_order(&make_input("CLI-MATCH-002", 0.60), Local::now())
+        .unwrap();
     let r = oms.evaluate_match(&bad, Some(0.43), Some(0.46));
     assert_eq!(r.decision, MatchDecision::Reject);
 }
@@ -119,7 +127,9 @@ async fn health_check_returns_chinese_summary() {
 async fn cancel_after_fill_is_noop() {
     let oms = build_oms();
     let now = Local::now();
-    let mut order = oms.create_order(&make_input("CLI-NOOP-001", 0.45), now).unwrap();
+    let mut order = oms
+        .create_order(&make_input("CLI-NOOP-001", 0.45), now)
+        .unwrap();
     let mut vctx = ValidationContext::minimal();
     vctx.balance = Some(Balance::mock(10_000.0));
     oms.validate_order(&mut order, &vctx, now).unwrap();
@@ -139,8 +149,10 @@ async fn repository_csv_roundtrip() {
     let events_csv = dir.path().join("events.csv");
 
     let oms1 = create_csv_oms(orders_csv.clone(), events_csv.clone()).unwrap();
-    oms1.create_order(&make_input("CLI-CSV-001", 0.45), Local::now()).unwrap();
-    oms1.create_order(&make_input("CLI-CSV-002", 0.50), Local::now()).unwrap();
+    oms1.create_order(&make_input("CLI-CSV-001", 0.45), Local::now())
+        .unwrap();
+    oms1.create_order(&make_input("CLI-CSV-002", 0.50), Local::now())
+        .unwrap();
 
     // 重新加载
     let oms2 = create_csv_oms(orders_csv, events_csv).unwrap();

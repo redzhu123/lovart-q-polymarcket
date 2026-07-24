@@ -530,9 +530,16 @@ mod tests {
     #[test]
     fn to_unified_closed_and_inactive_status() {
         let closed = Market {
-            id: None, condition_id: None, question: Some("C".into()), description: None,
-            category: None, active: true, closed: true,
-            outcome_prices: Some(r#"["0.3","0.7"]"#.into()), volume_num: 0.0, liquidity_num: 0.0,
+            id: None,
+            condition_id: None,
+            question: Some("C".into()),
+            description: None,
+            category: None,
+            active: true,
+            closed: true,
+            outcome_prices: Some(r#"["0.3","0.7"]"#.into()),
+            volume_num: 0.0,
+            liquidity_num: 0.0,
         };
         let u = to_unified(&closed, Utc::now(), "gamma");
         assert_eq!(u.status, MarketStatus::Closed);
@@ -540,9 +547,16 @@ mod tests {
         assert!(u.active()); // Gamma 语义：closed 市场 active=true
 
         let inactive = Market {
-            id: None, condition_id: None, question: Some("I".into()), description: None,
-            category: None, active: false, closed: false,
-            outcome_prices: Some(r#"["0.3","0.7"]"#.into()), volume_num: 0.0, liquidity_num: 0.0,
+            id: None,
+            condition_id: None,
+            question: Some("I".into()),
+            description: None,
+            category: None,
+            active: false,
+            closed: false,
+            outcome_prices: Some(r#"["0.3","0.7"]"#.into()),
+            volume_num: 0.0,
+            liquidity_num: 0.0,
         };
         let u = to_unified(&inactive, Utc::now(), "gamma");
         assert_eq!(u.status, MarketStatus::Inactive);
@@ -553,16 +567,30 @@ mod tests {
     fn to_unified_market_id_fallbacks() {
         // condition_id 缺失 -> 用 id
         let m = Market {
-            id: Some("99".into()), condition_id: None, question: Some("Q".into()),
-            description: None, category: None, active: true, closed: false,
-            outcome_prices: None, volume_num: 0.0, liquidity_num: 0.0,
+            id: Some("99".into()),
+            condition_id: None,
+            question: Some("Q".into()),
+            description: None,
+            category: None,
+            active: true,
+            closed: false,
+            outcome_prices: None,
+            volume_num: 0.0,
+            liquidity_num: 0.0,
         };
         assert_eq!(to_unified(&m, Utc::now(), "gamma").market_id, "99");
         // 都缺失 -> 用 question
         let m = Market {
-            id: None, condition_id: None, question: Some("fallbackQ".into()),
-            description: None, category: None, active: true, closed: false,
-            outcome_prices: None, volume_num: 0.0, liquidity_num: 0.0,
+            id: None,
+            condition_id: None,
+            question: Some("fallbackQ".into()),
+            description: None,
+            category: None,
+            active: true,
+            closed: false,
+            outcome_prices: None,
+            volume_num: 0.0,
+            liquidity_num: 0.0,
         };
         assert_eq!(to_unified(&m, Utc::now(), "gamma").market_id, "fallbackQ");
     }
@@ -570,9 +598,16 @@ mod tests {
     #[test]
     fn to_unified_multi_outcome_is_non_binary() {
         let m = Market {
-            id: None, condition_id: None, question: Some("Multi".into()), description: None,
-            category: None, active: true, closed: false,
-            outcome_prices: Some(r#"["0.1","0.2","0.7"]"#.into()), volume_num: 0.0, liquidity_num: 0.0,
+            id: None,
+            condition_id: None,
+            question: Some("Multi".into()),
+            description: None,
+            category: None,
+            active: true,
+            closed: false,
+            outcome_prices: Some(r#"["0.1","0.2","0.7"]"#.into()),
+            volume_num: 0.0,
+            liquidity_num: 0.0,
         };
         let u = to_unified(&m, Utc::now(), "gamma");
         assert_eq!(u.outcome_count, 3);

@@ -28,20 +28,20 @@
 //! - [`stress`]：execution-test 压测（V0.9，保留兼容）。
 
 // ---- V1.06 新模块 ----
-pub mod order;
-pub mod request;
 pub mod builder;
-pub mod validator;
-pub mod queue;
-pub mod pipeline;
-pub mod gateway;
-pub mod scheduler;
-pub mod events;
-pub mod report;
-pub mod metrics;
 pub mod config;
+pub mod events;
+pub mod gateway;
+pub mod metrics;
+pub mod order;
+pub mod pipeline;
 pub mod portfolio_sync;
+pub mod queue;
 pub mod replay;
+pub mod report;
+pub mod request;
+pub mod scheduler;
+pub mod validator;
 
 // ---- V0.9 旧模块（保留兼容）----
 pub mod engine;
@@ -58,13 +58,13 @@ pub use queue::{ExecutionQueue, QueueConfig, QueueError, QueueStatus};
 pub use request::ExecutionRequest;
 pub use validator::{
     CashRule, DuplicateRule, ExecutionValidator, MarketStateRule, PendingLimitRule,
-    PositionLimitRule, PriceRule, ProviderRule, QuantityRule, ValidationContext,
-    ValidationOutcome, ValidationResult, ValidationRule,
+    PositionLimitRule, PriceRule, ProviderRule, QuantityRule, ValidationContext, ValidationOutcome,
+    ValidationResult, ValidationRule,
 };
 
 // ---- V1.06 Phase 2 导出 ----
 pub use config::ExecutionConfigV106;
-pub use events::{EventBus, EventRecord, ExecutionEvent, EVENTS_HEADER};
+pub use events::{EVENTS_HEADER, EventBus, EventRecord, ExecutionEvent};
 pub use gateway::{ExecutionGateway, GatewayResult, MockGateway};
 pub use metrics::ExecutionMetrics;
 pub use portfolio_sync::{FillNotification, PortfolioSync};
@@ -77,7 +77,7 @@ pub use engine::{
     ExecEvent, ExecParams, ExecPosition, ExecutionEngine, ExecutionOrder, ExecutionStats,
     PortfolioSummary, SubmitOutcome,
 };
-pub use records::{append_orders, ensure_csv, load_order_base, ExecutionOrderRecord};
+pub use records::{ExecutionOrderRecord, append_orders, ensure_csv, load_order_base};
 pub use state::{OrderStatus as LegacyOrderStatus, TerminalReason};
 pub use stress::{run_execution_test, run_execution_test_with_count};
 
@@ -96,10 +96,16 @@ mod tests {
         let now = Local::now();
         let mut pipeline = ExecutionPipeline::with_defaults();
         let req = ExecutionRequest::new(
-            "mkt-1", "测试市场?", "mock",
-            Direction::Yes, pm_core::Side::Buy,
-            0.45, 100.0,
-            "S1", "R1", "O1",
+            "mkt-1",
+            "测试市场?",
+            "mock",
+            Direction::Yes,
+            pm_core::Side::Buy,
+            0.45,
+            100.0,
+            "S1",
+            "R1",
+            "O1",
         );
         let ctx = ValidationContext::default();
         let result = pipeline.submit(req, now, &ctx);
@@ -117,10 +123,16 @@ mod tests {
         let now = Local::now();
         let mut pipeline = ExecutionPipeline::with_defaults();
         let req = ExecutionRequest::new(
-            "mkt-1", "Q", "mock",
-            Direction::Yes, pm_core::Side::Buy,
-            -1.0, 100.0,
-            "S", "R", "O",
+            "mkt-1",
+            "Q",
+            "mock",
+            Direction::Yes,
+            pm_core::Side::Buy,
+            -1.0,
+            100.0,
+            "S",
+            "R",
+            "O",
         );
         let ctx = ValidationContext::default();
         let result = pipeline.submit(req, now, &ctx);
@@ -133,23 +145,47 @@ mod tests {
         let mut q = ExecutionQueue::with_defaults();
 
         let o1 = Order::new(
-            "EX-001".into(), "C1".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, pm_core::Side::Buy,
-            0.45, 100.0,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            "EX-001".into(),
+            "C1".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            pm_core::Side::Buy,
+            0.45,
+            100.0,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         );
         let mut o2 = Order::new(
-            "EX-002".into(), "C2".into(), "mkt-1".into(), "mock".into(),
-            Direction::No, pm_core::Side::Sell,
-            0.50, 200.0,
-            "S2".into(), "R2".into(), "O2".into(), now,
+            "EX-002".into(),
+            "C2".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::No,
+            pm_core::Side::Sell,
+            0.50,
+            200.0,
+            "S2".into(),
+            "R2".into(),
+            "O2".into(),
+            now,
         );
         o2.priority = 10;
         let o3 = Order::new(
-            "EX-003".into(), "C3".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, pm_core::Side::Buy,
-            0.55, 150.0,
-            "S3".into(), "R3".into(), "O3".into(), now,
+            "EX-003".into(),
+            "C3".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            pm_core::Side::Buy,
+            0.55,
+            150.0,
+            "S3".into(),
+            "R3".into(),
+            "O3".into(),
+            now,
         );
 
         q.enqueue(o1, now).unwrap();
@@ -170,10 +206,18 @@ mod tests {
     fn report_from_orders() {
         let now = Local::now();
         let mut o = Order::new(
-            "EX-001".into(), "C1".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, pm_core::Side::Buy,
-            0.45, 100.0,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            "EX-001".into(),
+            "C1".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            pm_core::Side::Buy,
+            0.45,
+            100.0,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         );
         o.status = OrderStatus::Filled;
         o.filled = 100.0;
@@ -188,7 +232,10 @@ mod tests {
     fn event_bus_integration() {
         let now = Local::now();
         let mut bus = EventBus::new();
-        bus.publish(ExecutionEvent::OrderCreated { order_id: "EX-001".into(), timestamp: now });
+        bus.publish(ExecutionEvent::OrderCreated {
+            order_id: "EX-001".into(),
+            timestamp: now,
+        });
         bus.publish(ExecutionEvent::OrderFilled {
             order_id: "EX-001".into(),
             avg_price: 0.45,
@@ -292,7 +339,10 @@ mod tests {
             let price = 0.2 + (i as f64 % 50.0) / 100.0;
             let _ = eng.submit_buy(&q, price, now);
         }
-        assert_eq!(eng.pending_count(), ExecParams::default_for_scan().max_pending_orders);
+        assert_eq!(
+            eng.pending_count(),
+            ExecParams::default_for_scan().max_pending_orders
+        );
         assert_eq!(eng.stats().rejected, 10);
 
         for _ in 0..(ExecParams::default_for_scan().max_wait_scans + 2) {

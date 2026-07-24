@@ -101,10 +101,18 @@ mod tests {
     fn fill_notification_from_order() {
         let now = Local::now();
         let mut o = Order::new(
-            "EX-001".into(), "C1".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, pm_core::Side::Buy,
-            0.45, 100.0,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            "EX-001".into(),
+            "C1".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            pm_core::Side::Buy,
+            0.45,
+            100.0,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         );
         o.filled = 50.0;
         o.remaining = 50.0;
@@ -123,10 +131,18 @@ mod tests {
     fn sell_cash_impact_positive() {
         let now = Local::now();
         let mut o = Order::new(
-            "EX-002".into(), "C2".into(), "mkt-1".into(), "mock".into(),
-            Direction::No, pm_core::Side::Sell,
-            0.50, 100.0,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            "EX-002".into(),
+            "C2".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::No,
+            pm_core::Side::Sell,
+            0.50,
+            100.0,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         );
         o.filled = 100.0;
         o.avg_fill_price = 0.51;

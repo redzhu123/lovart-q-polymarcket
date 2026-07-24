@@ -69,10 +69,7 @@ impl HealthReport {
 }
 
 /// 运行健康检查。
-pub async fn run_health_check(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> HealthReport {
+pub async fn run_health_check(client: &ApiClient, validator: &ResponseValidator) -> HealthReport {
     tracing::info!("");
     tracing::info!("═══════════════════════════════════════════════════════════");
     tracing::info!("  开始执行 API 健康检查...");
@@ -81,7 +78,8 @@ pub async fn run_health_check(
     let mut entries = Vec::new();
 
     // 1. 服务器时间
-    let time_result = check_endpoint(client, validator, "服务器时间", "/time", "server-time", 200).await;
+    let time_result =
+        check_endpoint(client, validator, "服务器时间", "/time", "server-time", 200).await;
     entries.push(time_result);
 
     // 2. 健康检查
@@ -89,7 +87,8 @@ pub async fn run_health_check(
     entries.push(health_result);
 
     // 3. 市场列表
-    let markets_result = check_endpoint(client, validator, "市场列表", "/markets", "markets", 200).await;
+    let markets_result =
+        check_endpoint(client, validator, "市场列表", "/markets", "markets", 200).await;
     entries.push(markets_result);
 
     // 4. 订单簿
@@ -100,11 +99,13 @@ pub async fn run_health_check(
         "/book?token_id=1111111111111111111111111111111111111111111111111111111111111111",
         "orderbook",
         200,
-    ).await;
+    )
+    .await;
     entries.push(book_result);
 
     // 5. 余额（需认证）
-    let balance_result = check_endpoint(client, validator, "余额", "/balances", "balance", 200).await;
+    let balance_result =
+        check_endpoint(client, validator, "余额", "/balances", "balance", 200).await;
     if !balance_result.healthy {
         entries.push(HealthEntry {
             name: "余额".into(),
@@ -117,7 +118,8 @@ pub async fn run_health_check(
     }
 
     // 6. 订单列表（需认证）
-    let orders_result = check_endpoint(client, validator, "订单列表", "/orders", "orders", 200).await;
+    let orders_result =
+        check_endpoint(client, validator, "订单列表", "/orders", "orders", 200).await;
     if !orders_result.healthy {
         entries.push(HealthEntry {
             name: "订单列表".into(),
@@ -198,11 +200,7 @@ async fn check_endpoint(
 }
 
 /// 检查简单端点（不校验 Schema）。
-async fn check_simple_endpoint(
-    client: &ApiClient,
-    name: &str,
-    path: &str,
-) -> HealthEntry {
+async fn check_simple_endpoint(client: &ApiClient, name: &str, path: &str) -> HealthEntry {
     match client.get(path).await {
         Ok(resp) => HealthEntry {
             name: name.to_string(),
@@ -243,8 +241,18 @@ mod tests {
     #[test]
     fn health_report_prints() {
         let entries = vec![
-            HealthEntry { name: "Markets".into(), healthy: true, latency_ms: 132, note: String::new() },
-            HealthEntry { name: "Balance".into(), healthy: false, latency_ms: 0, note: "未配置认证".into() },
+            HealthEntry {
+                name: "Markets".into(),
+                healthy: true,
+                latency_ms: 132,
+                note: String::new(),
+            },
+            HealthEntry {
+                name: "Balance".into(),
+                healthy: false,
+                latency_ms: 0,
+                note: "未配置认证".into(),
+            },
         ];
         let report = HealthReport {
             entries,

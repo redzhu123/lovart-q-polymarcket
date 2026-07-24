@@ -9,10 +9,7 @@ use crate::validator::response::{ResponseValidator, ValidationResult};
 use serde_json::Value;
 
 /// 持仓列表合约测试。
-pub async fn test_positions(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> ValidationResult {
+pub async fn test_positions(client: &ApiClient, validator: &ResponseValidator) -> ValidationResult {
     let contract = ContractTest::new(
         "持仓列表",
         HttpMethod::Get,
@@ -25,15 +22,13 @@ pub async fn test_positions(
     let response = client.get(&contract.path).await;
 
     match response {
-        Ok(resp) => {
-            validator.validate(
-                &contract.name,
-                &resp,
-                &contract.schema_name,
-                contract.expected_status,
-                Some(|body: &Value| validate_positions_fields(body)),
-            )
-        }
+        Ok(resp) => validator.validate(
+            &contract.name,
+            &resp,
+            &contract.schema_name,
+            contract.expected_status,
+            Some(|body: &Value| validate_positions_fields(body)),
+        ),
         Err(e) => {
             let mut result = ValidationResult::new(&contract.name);
             result.add_error(&format!("请求失败: {}", e));
@@ -88,6 +83,10 @@ mod tests {
         let validator = ResponseValidator::new();
 
         let result = test_positions(&client, &validator).await;
-        assert!(result.passed, "Positions contract test failed: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Positions contract test failed: {:?}",
+            result.errors
+        );
     }
 }

@@ -321,7 +321,8 @@ impl RiskRule for LiquidityRule {
             // 流动性偏低但尚未低于下限，发出警告
             RuleResult::Warn(format!(
                 "市场流动性偏低：当前 {:.0} USDC，建议 ≥ {:.0} USDC",
-                ctx.market_liquidity, config.min_liquidity * 2.0
+                ctx.market_liquidity,
+                config.min_liquidity * 2.0
             ))
         } else {
             RuleResult::Pass
@@ -518,7 +519,11 @@ mod tests {
         ];
         for r in &rules {
             assert!(!r.name().is_empty(), "rule {} has empty name", r.name());
-            assert!(!r.description().is_empty(), "rule {} has empty description", r.name());
+            assert!(
+                !r.description().is_empty(),
+                "rule {} has empty description",
+                r.name()
+            );
         }
     }
 }

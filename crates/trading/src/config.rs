@@ -63,7 +63,10 @@ impl TradingEnvironment {
 
     /// 是否允许真实交易。
     pub fn allows_real_trading(&self) -> bool {
-        matches!(self, TradingEnvironment::Sandbox | TradingEnvironment::Production)
+        matches!(
+            self,
+            TradingEnvironment::Sandbox | TradingEnvironment::Production
+        )
     }
 }
 
@@ -115,10 +118,18 @@ pub struct ProviderTomlConfig {
     pub credential: CredentialTomlConfig,
 }
 
-fn default_enabled() -> bool { true }
-fn default_connect_timeout() -> u64 { 5000 }
-fn default_request_timeout() -> u64 { 30000 }
-fn default_max_retries() -> u32 { 5 }
+fn default_enabled() -> bool {
+    true
+}
+fn default_connect_timeout() -> u64 {
+    5000
+}
+fn default_request_timeout() -> u64 {
+    30000
+}
+fn default_max_retries() -> u32 {
+    5
+}
 
 // ============================================================================
 // Trading Config
@@ -162,12 +173,24 @@ pub struct TradingConfig {
     pub providers: Vec<ProviderTomlConfig>,
 }
 
-fn default_default_provider() -> String { "mock".into() }
-fn default_session_ttl() -> i64 { 3600 }
-fn default_heartbeat_interval() -> u64 { 30 }
-fn default_health_interval() -> u64 { 60 }
-fn default_auto_reconnect() -> bool { true }
-fn default_reconnect_max() -> u32 { 10 }
+fn default_default_provider() -> String {
+    "mock".into()
+}
+fn default_session_ttl() -> i64 {
+    3600
+}
+fn default_heartbeat_interval() -> u64 {
+    30
+}
+fn default_health_interval() -> u64 {
+    60
+}
+fn default_auto_reconnect() -> bool {
+    true
+}
+fn default_reconnect_max() -> u32 {
+    10
+}
 
 impl Default for TradingConfig {
     fn default() -> Self {

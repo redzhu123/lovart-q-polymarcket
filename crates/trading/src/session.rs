@@ -74,7 +74,10 @@ impl Session {
         self.token = new_token.or_else(|| self.token.clone());
         self.expires_at = now + Duration::seconds(ttl_secs);
         self.last_active = now;
-        info!("Session {} 已续期，新过期时间: {}", self.session_id, self.expires_at);
+        info!(
+            "Session {} 已续期，新过期时间: {}",
+            self.session_id, self.expires_at
+        );
     }
 
     /// 安全摘要（脱敏）。

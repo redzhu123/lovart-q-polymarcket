@@ -273,7 +273,13 @@ mod tests {
     use pm_models::MarketStatus;
 
     /// 构造二元 `UnifiedMarket`（yes/no 给定则 outcome_count=2，否则 0）。
-    fn market(question: &str, yes: Option<f64>, no: Option<f64>, active: bool, closed: bool) -> UnifiedMarket {
+    fn market(
+        question: &str,
+        yes: Option<f64>,
+        no: Option<f64>,
+        active: bool,
+        closed: bool,
+    ) -> UnifiedMarket {
         let status = if closed {
             MarketStatus::Closed
         } else if active {

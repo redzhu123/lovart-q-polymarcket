@@ -194,14 +194,30 @@ mod tests {
 
     fn make_opp(market_id: &str, score: f64, roi: f64) -> Opportunity {
         Opportunity::new(
-            market_id.into(), format!("Q_{market_id}"), "test".into(), Utc::now(),
+            market_id.into(),
+            format!("Q_{market_id}"),
+            "test".into(),
+            Utc::now(),
             OpportunityType::Unknown,
-            score, 0.8, (score * 0.8) as u8,
-            score * 0.25, score * 0.20, 0.0, 0.0, 0.0, score * 0.1,
-            roi, 1.0,
-            0.5, 0.5, 1.0,
-            None, 1000.0, 2000.0,
-            None, None,
+            score,
+            0.8,
+            (score * 0.8) as u8,
+            score * 0.25,
+            score * 0.20,
+            0.0,
+            0.0,
+            0.0,
+            score * 0.1,
+            roi,
+            1.0,
+            0.5,
+            0.5,
+            1.0,
+            None,
+            1000.0,
+            2000.0,
+            None,
+            None,
         )
     }
 

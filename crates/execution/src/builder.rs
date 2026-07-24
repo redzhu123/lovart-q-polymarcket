@@ -113,10 +113,16 @@ mod tests {
         let now = Local::now();
         let mut builder = OrderBuilder::new();
         let req = ExecutionRequest::new(
-            "mkt-1", "测试?", "mock",
-            Direction::Yes, Side::Buy,
-            0.45, 222.22,
-            "S1", "R1", "O1",
+            "mkt-1",
+            "测试?",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            222.22,
+            "S1",
+            "R1",
+            "O1",
         );
         let order = builder.build(req, now);
         assert_eq!(order.order_id, "EX-000001");
@@ -132,10 +138,16 @@ mod tests {
         let now = Local::now();
         let mut builder = OrderBuilder::new();
         let req = ExecutionRequest::new(
-            "mkt-1", "Q", "mock",
-            Direction::Yes, Side::Buy,
-            0.5, 100.0,
-            "S", "R", "O",
+            "mkt-1",
+            "Q",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.5,
+            100.0,
+            "S",
+            "R",
+            "O",
         )
         .with_client_order_id("MY-CLIENT-ID");
         let order = builder.build(req, now);

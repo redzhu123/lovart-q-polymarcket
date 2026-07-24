@@ -8,7 +8,7 @@ use chrono::Local;
 use pm_utils::{fmt_money, fmt_pct, fmt_scans};
 
 use crate::engine::{ExecParams, ExecutionEngine, SubmitOutcome};
-use crate::records::{append_orders, ensure_csv, load_order_base, ExecutionOrderRecord};
+use crate::records::{ExecutionOrderRecord, append_orders, ensure_csv, load_order_base};
 
 /// 压测订单数。对应需求："自动：生成：1000 模拟订单。"
 const EXECUTION_TEST_ORDERS: u64 = 1000;

@@ -245,8 +245,14 @@ mod tests {
 
     #[test]
     fn yes_no_prices_requires_both() {
-        assert_eq!(um(Some(0.4), Some(0.5), MarketStatus::Active).yes_no_prices(), Some((0.4, 0.5)));
-        assert_eq!(um(Some(0.4), None, MarketStatus::Active).yes_no_prices(), None);
+        assert_eq!(
+            um(Some(0.4), Some(0.5), MarketStatus::Active).yes_no_prices(),
+            Some((0.4, 0.5))
+        );
+        assert_eq!(
+            um(Some(0.4), None, MarketStatus::Active).yes_no_prices(),
+            None
+        );
         assert_eq!(um(None, None, MarketStatus::Active).yes_no_prices(), None);
         assert!(um(Some(0.4), Some(0.5), MarketStatus::Active).has_prices());
         assert!(!um(Some(0.4), None, MarketStatus::Active).has_prices());

@@ -343,11 +343,7 @@ mod tests {
     fn load_lowercase_mode_from_toml() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("workflow.toml");
-        std::fs::write(
-            &path,
-            "[workflow]\nmode = \"replay\"\norder_price = 0.55\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "[workflow]\nmode = \"replay\"\norder_price = 0.55\n").unwrap();
         let cfg = WorkflowConfig::load_or_default(path.to_str().unwrap());
         assert_eq!(cfg.mode, WorkflowMode::Replay);
         assert!((cfg.order_price - 0.55).abs() < 1e-9);

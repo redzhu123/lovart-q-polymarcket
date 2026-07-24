@@ -44,9 +44,7 @@ pub async fn live_server_time(
 
     let response = client.get("/time").await;
     match response {
-        Ok(resp) => {
-            validator.validate_simple("服务器时间(Live)", &resp, "server-time", 200)
-        }
+        Ok(resp) => validator.validate_simple("服务器时间(Live)", &resp, "server-time", 200),
         Err(e) => {
             let mut result = ValidationResult::new("服务器时间(Live)");
             result.add_error(&format!("请求失败: {}", e));
@@ -56,17 +54,12 @@ pub async fn live_server_time(
 }
 
 /// Live: 市场列表。
-pub async fn live_markets(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> ValidationResult {
+pub async fn live_markets(client: &ApiClient, validator: &ResponseValidator) -> ValidationResult {
     tracing::info!("【Live 测试】市场列表");
 
     let response = client.get("/markets").await;
     match response {
-        Ok(resp) => {
-            validator.validate_simple("市场列表(Live)", &resp, "markets", 200)
-        }
+        Ok(resp) => validator.validate_simple("市场列表(Live)", &resp, "markets", 200),
         Err(e) => {
             let mut result = ValidationResult::new("市场列表(Live)");
             result.add_error(&format!("请求失败: {}", e));
@@ -76,10 +69,7 @@ pub async fn live_markets(
 }
 
 /// Live: 订单簿。
-pub async fn live_orderbook(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> ValidationResult {
+pub async fn live_orderbook(client: &ApiClient, validator: &ResponseValidator) -> ValidationResult {
     tracing::info!("【Live 测试】订单簿");
 
     // 使用 mock 数据中的 token_id 作为测试
@@ -88,9 +78,7 @@ pub async fn live_orderbook(
 
     let response = client.get(&path).await;
     match response {
-        Ok(resp) => {
-            validator.validate_simple("订单簿(Live)", &resp, "orderbook", 200)
-        }
+        Ok(resp) => validator.validate_simple("订单簿(Live)", &resp, "orderbook", 200),
         Err(e) => {
             let mut result = ValidationResult::new("订单簿(Live)");
             result.add_error(&format!("请求失败: {}", e));

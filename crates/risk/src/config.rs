@@ -140,27 +140,69 @@ pub struct RiskConfig {
 }
 
 // ---- 默认值 ----
-fn default_fixed_size() -> f64 { 100.0 }
-fn default_risk_ratio() -> f64 { 0.01 }
-fn default_max_positions() -> usize { 10 }
-fn default_max_position_size() -> f64 { 100.0 }
-fn default_max_open_orders() -> usize { 20 }
-fn default_max_single_capital() -> f64 { 500.0 }
-fn default_max_capital_usage() -> f64 { 0.5 }
-fn default_max_daily_loss() -> f64 { 1000.0 }
-fn default_max_consecutive_losses() -> usize { 5 }
-fn default_max_drawdown() -> f64 { 0.2 }
-fn default_max_market_exposure() -> f64 { 0.3 }
-fn default_max_category_exposure() -> f64 { 0.5 }
-fn default_max_side_exposure() -> f64 { 0.6 }
-fn default_min_liquidity() -> f64 { 100.0 }
-fn default_min_depth() -> f64 { 50.0 }
-fn default_max_slippage() -> f64 { 0.02 }
-fn default_max_volatility() -> f64 { 0.5 }
-fn default_accept_threshold() -> f64 { 70.0 }
-fn default_review_threshold() -> f64 { 40.0 }
-fn default_risk_events_csv() -> String { "data/risk_events.csv".into() }
-fn default_risk_dashboard_csv() -> String { "data/risk_dashboard.csv".into() }
+fn default_fixed_size() -> f64 {
+    100.0
+}
+fn default_risk_ratio() -> f64 {
+    0.01
+}
+fn default_max_positions() -> usize {
+    10
+}
+fn default_max_position_size() -> f64 {
+    100.0
+}
+fn default_max_open_orders() -> usize {
+    20
+}
+fn default_max_single_capital() -> f64 {
+    500.0
+}
+fn default_max_capital_usage() -> f64 {
+    0.5
+}
+fn default_max_daily_loss() -> f64 {
+    1000.0
+}
+fn default_max_consecutive_losses() -> usize {
+    5
+}
+fn default_max_drawdown() -> f64 {
+    0.2
+}
+fn default_max_market_exposure() -> f64 {
+    0.3
+}
+fn default_max_category_exposure() -> f64 {
+    0.5
+}
+fn default_max_side_exposure() -> f64 {
+    0.6
+}
+fn default_min_liquidity() -> f64 {
+    100.0
+}
+fn default_min_depth() -> f64 {
+    50.0
+}
+fn default_max_slippage() -> f64 {
+    0.02
+}
+fn default_max_volatility() -> f64 {
+    0.5
+}
+fn default_accept_threshold() -> f64 {
+    70.0
+}
+fn default_review_threshold() -> f64 {
+    40.0
+}
+fn default_risk_events_csv() -> String {
+    "data/risk_events.csv".into()
+}
+fn default_risk_dashboard_csv() -> String {
+    "data/risk_dashboard.csv".into()
+}
 
 impl Default for RiskConfig {
     fn default() -> Self {

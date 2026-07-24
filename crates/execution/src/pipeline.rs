@@ -35,10 +35,7 @@ use crate::validator::{ExecutionValidator, ValidationContext, ValidationOutcome}
 #[derive(Debug, Clone)]
 pub enum ExecutionResult {
     /// 订单已成功进入 Pipeline（已入队）。
-    Accepted {
-        order_id: String,
-        message: String,
-    },
+    Accepted { order_id: String, message: String },
     /// 订单被拒绝（Validator 失败 或 队列满）。
     Rejected {
         order_id: String,
@@ -157,7 +154,8 @@ impl ExecutionPipeline {
         let order_id = order.order_id.clone();
 
         // 将 client_order_id 加入去重集合
-        self.existing_client_ids.insert(order.client_order_id.clone());
+        self.existing_client_ids
+            .insert(order.client_order_id.clone());
 
         tracing::info!(
             order_id = %order_id,
@@ -183,10 +181,7 @@ impl ExecutionPipeline {
                 );
                 self.all_orders.push(order);
                 self.total_rejected += 1;
-                return ExecutionResult::Rejected {
-                    order_id,
-                    reasons,
-                };
+                return ExecutionResult::Rejected { order_id, reasons };
             }
         }
 
@@ -394,10 +389,16 @@ mod tests {
         let mut pipeline = ExecutionPipeline::with_defaults();
 
         let req = ExecutionRequest::new(
-            "mkt-1", "测试市场?", "mock",
-            Direction::Yes, Side::Buy,
-            0.45, 100.0,
-            "S1", "R1", "O1",
+            "mkt-1",
+            "测试市场?",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S1",
+            "R1",
+            "O1",
         );
 
         let ctx = ValidationContext::default();
@@ -414,10 +415,16 @@ mod tests {
         let mut pipeline = ExecutionPipeline::with_defaults();
 
         let req = ExecutionRequest::new(
-            "mkt-1", "Q", "mock",
-            Direction::Yes, Side::Buy,
-            0.0, 100.0, // 非法价格
-            "S1", "R1", "O1",
+            "mkt-1",
+            "Q",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.0,
+            100.0, // 非法价格
+            "S1",
+            "R1",
+            "O1",
         );
 
         let ctx = ValidationContext::default();
@@ -434,10 +441,16 @@ mod tests {
         let mut pipeline = ExecutionPipeline::with_defaults();
 
         let req = ExecutionRequest::new(
-            "mkt-1", "Q", "mock",
-            Direction::Yes, Side::Buy,
-            0.5, 50000.0, // 需要 25000 USDC
-            "S1", "R1", "O1",
+            "mkt-1",
+            "Q",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.5,
+            50000.0, // 需要 25000 USDC
+            "S1",
+            "R1",
+            "O1",
         );
 
         let ctx = ValidationContext {
@@ -460,10 +473,16 @@ mod tests {
         let mut pipeline = ExecutionPipeline::with_defaults();
 
         let req = ExecutionRequest::new(
-            "mkt-1", "Q", "mock",
-            Direction::Yes, Side::Buy,
-            0.45, 100.0,
-            "S1", "R1", "O1",
+            "mkt-1",
+            "Q",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S1",
+            "R1",
+            "O1",
         )
         .with_priority(5);
         let ctx = ValidationContext::default();
@@ -482,10 +501,16 @@ mod tests {
         let mut pipeline = ExecutionPipeline::with_defaults();
 
         let req = ExecutionRequest::new(
-            "mkt-1", "Q", "mock",
-            Direction::Yes, Side::Buy,
-            0.45, 100.0,
-            "S1", "R1", "O1",
+            "mkt-1",
+            "Q",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S1",
+            "R1",
+            "O1",
         );
         let ctx = ValidationContext::default();
         pipeline.submit(req, now, &ctx);
@@ -493,12 +518,20 @@ mod tests {
         let order = pipeline.next_order().unwrap();
         let order_id = order.order_id.clone();
         pipeline.handle_gateway_result(
-            order, true, OrderStatus::Accepted,
-            0.0, 0.0, "Gateway 确认接收", now,
+            order,
+            true,
+            OrderStatus::Accepted,
+            0.0,
+            0.0,
+            "Gateway 确认接收",
+            now,
         );
 
         // 订单应已记录
-        let found = pipeline.all_orders().iter().find(|o| o.order_id == order_id);
+        let found = pipeline
+            .all_orders()
+            .iter()
+            .find(|o| o.order_id == order_id);
         assert!(found.is_some());
         assert_eq!(found.unwrap().status, OrderStatus::Accepted);
     }
@@ -512,10 +545,16 @@ mod tests {
         // 提交 3 个
         for i in 0..3 {
             let req = ExecutionRequest::new(
-                &format!("mkt-{}", i), "Q", "mock",
-                Direction::Yes, Side::Buy,
-                0.45, 100.0,
-                "S", "R", "O",
+                &format!("mkt-{}", i),
+                "Q",
+                "mock",
+                Direction::Yes,
+                Side::Buy,
+                0.45,
+                100.0,
+                "S",
+                "R",
+                "O",
             );
             pipeline.submit(req, now, &ctx);
         }

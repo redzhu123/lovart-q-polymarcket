@@ -163,11 +163,7 @@ mod tests {
 
     #[test]
     fn ws_message_summary_zh() {
-        let msg = WsMessage::new(
-            "book",
-            "price_change",
-            serde_json::json!({"price": "0.45"}),
-        );
+        let msg = WsMessage::new("book", "price_change", serde_json::json!({"price": "0.45"}));
         let summary = msg.summary_zh();
         assert!(summary.contains("book"));
         assert!(summary.contains("price_change"));

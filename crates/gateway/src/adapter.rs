@@ -4,8 +4,8 @@
 //! Execution 禁止直接使用 serde — 全部经 Adapter 转换。
 
 use chrono::{DateTime, Local};
-use pm_execution::order::{Direction, Order, OrderStatus};
 use pm_core::Side;
+use pm_execution::order::{Direction, Order, OrderStatus};
 
 use crate::types::{Balance, GatewayResult, OrderRequest, Position};
 
@@ -14,11 +14,7 @@ use crate::types::{Balance, GatewayResult, OrderRequest, Position};
 // ============================================================================
 
 /// 将 OrderRequest 转换为 Execution Order。
-pub fn request_to_order(
-    request: &OrderRequest,
-    order_id: &str,
-    now: DateTime<Local>,
-) -> Order {
+pub fn request_to_order(request: &OrderRequest, order_id: &str, now: DateTime<Local>) -> Order {
     Order::new(
         order_id.to_string(),
         request.client_order_id.clone(),
@@ -63,20 +59,12 @@ pub fn apply_result_to_order(order: &mut Order, result: &GatewayResult, now: Dat
             OrderStatus::Filled => {
                 order.transition(OrderStatus::Accepted, "Gateway 已接受", now);
                 order.transition(OrderStatus::Filled, "完全成交", now);
-                order.update_fill(
-                    result.filled,
-                    result.avg_price.unwrap_or(order.price),
-                    0.0,
-                );
+                order.update_fill(result.filled, result.avg_price.unwrap_or(order.price), 0.0);
             }
             OrderStatus::PartiallyFilled => {
                 order.transition(OrderStatus::Accepted, "Gateway 已接受", now);
                 order.transition(OrderStatus::PartiallyFilled, "部分成交", now);
-                order.update_fill(
-                    result.filled,
-                    result.avg_price.unwrap_or(order.price),
-                    0.0,
-                );
+                order.update_fill(result.filled, result.avg_price.unwrap_or(order.price), 0.0);
             }
             OrderStatus::Cancelled => {
                 order.transition(OrderStatus::Cancelled, &result.message, now);
@@ -84,11 +72,7 @@ pub fn apply_result_to_order(order: &mut Order, result: &GatewayResult, now: Dat
             _ => {
                 order.transition(result.status, &result.message, now);
                 if result.filled > 0.0 {
-                    order.update_fill(
-                        result.filled,
-                        result.avg_price.unwrap_or(order.price),
-                        0.0,
-                    );
+                    order.update_fill(result.filled, result.avg_price.unwrap_or(order.price), 0.0);
                 }
             }
         }
@@ -185,7 +169,11 @@ impl PolymarketBalanceJson {
             locked: self.locked.parse().unwrap_or(0.0),
             unrealized_pnl: 0.0,
             realized_pnl: 0.0,
-            currency: if self.currency.is_empty() { "USDC".into() } else { self.currency.clone() },
+            currency: if self.currency.is_empty() {
+                "USDC".into()
+            } else {
+                self.currency.clone()
+            },
             updated_at: Some(Local::now()),
         }
     }
@@ -318,7 +306,14 @@ mod tests {
     #[test]
     fn apply_fill_result_to_order() {
         let req = OrderRequest::new(
-            "mkt-1", Direction::Yes, Side::Buy, 0.45, 100.0, "S", "R", "O",
+            "mkt-1",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            100.0,
+            "S",
+            "R",
+            "O",
         );
         let now = Local::now();
         let mut order = request_to_order(&req, "EX-001", now);

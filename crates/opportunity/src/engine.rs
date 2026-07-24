@@ -163,11 +163,8 @@ impl OpportunityEngine {
             let ob = orderbooks.get(&market.market_id);
 
             // 4. 分类
-            let opp_type = OpportunityType::classify(
-                sum,
-                ob.and_then(|o| o.spread),
-                market.liquidity,
-            );
+            let opp_type =
+                OpportunityType::classify(sum, ob.and_then(|o| o.spread), market.liquidity);
 
             // 5. 获取历史追踪状态
             let tracked = self.state.get(&market.market_id);
@@ -176,7 +173,9 @@ impl OpportunityEngine {
 
             // 6. 计算置信度
             let has_orderbook = ob.is_some();
-            let has_bid_ask = ob.map(|o| o.best_bid.is_some() && o.best_ask.is_some()).unwrap_or(false);
+            let has_bid_ask = ob
+                .map(|o| o.best_bid.is_some() && o.best_ask.is_some())
+                .unwrap_or(false);
             let confidence = self.confidence_engine.evaluate(
                 market,
                 has_orderbook,
@@ -299,11 +298,7 @@ impl OpportunityEngine {
     }
 
     /// 清理超过 TTL 未再出现的机会。
-    fn reap_expired(
-        &mut self,
-        current_ids: &[String],
-        now: DateTime<Utc>,
-    ) -> Vec<Opportunity> {
+    fn reap_expired(&mut self, current_ids: &[String], now: DateTime<Utc>) -> Vec<Opportunity> {
         let ttl = chrono::Duration::seconds(self.config.ttl_secs as i64);
         let mut expired_ids: Vec<String> = Vec::new();
 
@@ -322,18 +317,29 @@ impl OpportunityEngine {
                 // 构建一个标记为 Expired 的 Opportunity 用于通知 Strategy
                 let mut opp = Opportunity::new(
                     id.clone(),
-                    id.clone(), // question 已丢失，折中用 ID
+                    id.clone(),    // question 已丢失，折中用 ID
                     String::new(), // provider
                     state.first_seen,
                     state.opportunity_type,
                     state.last_score,
                     state.last_confidence,
                     Self::compute_priority(state.last_score, state.last_confidence),
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0,
-                    0.0, 0.0, 1.0,
-                    None, 0.0, 0.0,
-                    None, None,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    None,
+                    0.0,
+                    0.0,
+                    None,
+                    None,
                 );
                 opp.status = OpportunityStatus::Expired;
                 expired_opps.push(opp);
@@ -400,15 +406,10 @@ mod tests {
     fn engine_finds_arbitrage_opportunity() {
         let markets = vec![
             test_market("m1", "测试套利", 0.40, 0.50, 10000.0, 50000.0), // SUM=0.90 → Arbitrage
-            test_market("m2", "正常市场", 0.48, 0.52, 5000.0, 20000.0), // SUM=1.00 → skip
+            test_market("m2", "正常市场", 0.48, 0.52, 5000.0, 20000.0),  // SUM=1.00 → skip
         ];
         let mut engine = OpportunityEngine::new();
-        let output = engine.analyze(
-            &markets,
-            &HashMap::new(),
-            &test_capability(),
-            Utc::now(),
-        );
+        let output = engine.analyze(&markets, &HashMap::new(), &test_capability(), Utc::now());
         assert_eq!(output.opportunities.len(), 1);
         assert_eq!(output.new_count, 1);
         let opp = &output.opportunities[0];
@@ -420,9 +421,7 @@ mod tests {
     #[test]
     fn engine_filters_below_min_score() {
         // SUM=0.90 可通过阈值 (<0.99)，但流动性极低导致评分不达标
-        let markets = vec![test_market(
-            "m1", "低质量", 0.40, 0.50, 1.0, 1.0,
-        )];
+        let markets = vec![test_market("m1", "低质量", 0.40, 0.50, 1.0, 1.0)];
         let mut config = EngineConfig::default();
         config.min_score = 90.0; // 苛刻过滤
         let mut engine = OpportunityEngine::with_config(config);

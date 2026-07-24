@@ -155,14 +155,21 @@ impl ExposureReport {
         if !self.by_category.is_empty() {
             lines.push("  按类别：".to_string());
             let mut cats: Vec<_> = self.by_category.iter().collect();
-            cats.sort_by(|a, b| b.1.total_exposure.partial_cmp(&a.1.total_exposure).unwrap_or(std::cmp::Ordering::Equal));
+            cats.sort_by(|a, b| {
+                b.1.total_exposure
+                    .partial_cmp(&a.1.total_exposure)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             for (cat, exp) in cats {
                 let pct = if self.initial_capital > 0.0 {
                     exp.total_exposure / self.initial_capital * 100.0
                 } else {
                     0.0
                 };
-                lines.push(format!("    {}: {:.0} USDC（{:.1}%）", cat, exp.total_exposure, pct));
+                lines.push(format!(
+                    "    {}: {:.0} USDC（{:.1}%）",
+                    cat, exp.total_exposure, pct
+                ));
             }
             lines.push(String::new());
         }
@@ -171,7 +178,11 @@ impl ExposureReport {
         if !self.by_market.is_empty() {
             lines.push("  按市场（Top 5）：".to_string());
             let mut mkts: Vec<_> = self.by_market.iter().collect();
-            mkts.sort_by(|a, b| b.1.total_exposure.partial_cmp(&a.1.total_exposure).unwrap_or(std::cmp::Ordering::Equal));
+            mkts.sort_by(|a, b| {
+                b.1.total_exposure
+                    .partial_cmp(&a.1.total_exposure)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             for (mkt, exp) in mkts.iter().take(5) {
                 let short: String = mkt.chars().take(30).collect();
                 lines.push(format!("    {}: {:.0} USDC", short, exp.total_exposure));

@@ -93,11 +93,7 @@ impl Matcher {
     /// - Buy 订单：price > best_ask → 偏离为 (price - best_ask) / best_ask
     /// - Sell 订单：price < best_bid → 偏离为 (best_bid - price) / best_bid
     /// - 无 best_bid/ask → Allow（无市场参照）
-    pub fn evaluate(
-        order: &Order,
-        best_bid: Option<f64>,
-        best_ask: Option<f64>,
-    ) -> MatchResult {
+    pub fn evaluate(order: &Order, best_bid: Option<f64>, best_ask: Option<f64>) -> MatchResult {
         use pm_core::Side;
 
         match order.side {
@@ -115,18 +111,12 @@ impl Matcher {
                 };
                 if dev >= REJECT_DEVIATION {
                     MatchResult::reject(
-                        &format!(
-                            "买价 {:.4} 严重高于最优卖价 {:.4}",
-                            order.price, best_ask
-                        ),
+                        &format!("买价 {:.4} 严重高于最优卖价 {:.4}", order.price, best_ask),
                         dev,
                     )
                 } else if dev >= WARN_DEVIATION {
                     MatchResult::warn(
-                        &format!(
-                            "买价 {:.4} 偏离最优卖价 {:.4}",
-                            order.price, best_ask
-                        ),
+                        &format!("买价 {:.4} 偏离最优卖价 {:.4}", order.price, best_ask),
                         dev,
                     )
                 } else {
@@ -147,18 +137,12 @@ impl Matcher {
                 };
                 if dev >= REJECT_DEVIATION {
                     MatchResult::reject(
-                        &format!(
-                            "卖价 {:.4} 严重低于最优买价 {:.4}",
-                            order.price, best_bid
-                        ),
+                        &format!("卖价 {:.4} 严重低于最优买价 {:.4}", order.price, best_bid),
                         dev,
                     )
                 } else if dev >= WARN_DEVIATION {
                     MatchResult::warn(
-                        &format!(
-                            "卖价 {:.4} 偏离最优买价 {:.4}",
-                            order.price, best_bid
-                        ),
+                        &format!("卖价 {:.4} 偏离最优买价 {:.4}", order.price, best_bid),
                         dev,
                     )
                 } else {

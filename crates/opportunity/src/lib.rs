@@ -44,5 +44,7 @@ pub use model::{Opportunity, OpportunityId, OpportunityStatus, OpportunityType};
 pub use queue::OpportunityQueue;
 pub use score::{OpportunityScore, ScoreResult, ScoreWeights};
 pub use statistics::OpportunityStatistics;
-pub use storage::{append_opportunities, ensure_opportunity_csv, load_opportunities, OpportunityRecord};
+pub use storage::{
+    OpportunityRecord, append_opportunities, ensure_opportunity_csv, load_opportunities,
+};
 pub use tracker::{HistoryTracker, OpportunityHistory};

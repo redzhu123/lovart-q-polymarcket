@@ -174,7 +174,11 @@ mod tests {
         let ctx = RiskContext::minimal(10000.0, 10000.0, Local::now());
         let config = RiskConfig::default();
         let score = RiskScore::compute(&ctx, &config);
-        assert!(score.total > 80.0, "idle portfolio should score > 80, got {}", score.total);
+        assert!(
+            score.total > 80.0,
+            "idle portfolio should score > 80, got {}",
+            score.total
+        );
     }
 
     #[test]
@@ -187,7 +191,11 @@ mod tests {
         ctx.current_drawdown = 0.15;
         let config = RiskConfig::default();
         let score = RiskScore::compute(&ctx, &config);
-        assert!(score.total < 70.0, "stressed portfolio should score < 70, got {}", score.total);
+        assert!(
+            score.total < 70.0,
+            "stressed portfolio should score < 70, got {}",
+            score.total
+        );
     }
 
     #[test]

@@ -260,8 +260,7 @@ mod tests {
 
     #[tokio::test]
     async fn error_hook_executes() {
-        let stack = MiddlewareStack::new()
-            .with(Box::new(TestMiddleware::new("mw1")));
+        let stack = MiddlewareStack::new().with(Box::new(TestMiddleware::new("mw1")));
 
         let ctx = MiddlewareContext::new("req-1", "GET", "/time", "test");
         let err = crate::error::GatewayError::network("连接失败");

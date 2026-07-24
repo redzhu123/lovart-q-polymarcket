@@ -14,8 +14,8 @@ use anyhow::Result;
 use pm_models::{Config, LogLevel, ProviderCapability, UnifiedMarket};
 
 use crate::datasource::cache::MarketDataCache;
-use crate::datasource::{HealthProbe, MarketDataProvider};
 use crate::datasource::{ClobProvider, GammaProvider, MockProvider};
+use crate::datasource::{HealthProbe, MarketDataProvider};
 use crate::display::{DASH, SEP};
 use crate::stats::{FetchResult, FetchStats};
 
@@ -70,10 +70,7 @@ impl DataSourceManager {
                 Box::new(ClobProvider::new(client, debug))
             }
             other => {
-                anyhow::bail!(
-                    "未知数据源 provider: {}（支持 gamma / clob / mock）",
-                    other
-                )
+                anyhow::bail!("未知数据源 provider: {}（支持 gamma / clob / mock）", other)
             }
         };
         let cache = MarketDataCache::new(Duration::from_secs(cfg.datasource.cache_ttl.max(1)));
@@ -164,11 +161,7 @@ impl DataSourceManager {
 
 /// ✅ / ❌ 文本。
 fn yn(ok: bool) -> &'static str {
-    if ok {
-        "✅"
-    } else {
-        "❌"
-    }
+    if ok { "✅" } else { "❌" }
 }
 
 /// 首字母大写（用于标题）。
@@ -218,7 +211,9 @@ mod tests {
     fn from_config_unknown_errors_clearly() {
         let mut cfg = Config::default();
         cfg.datasource.provider = "polygon".into();
-        let err = DataSourceManager::from_config(&cfg).err().expect("应返回错误");
+        let err = DataSourceManager::from_config(&cfg)
+            .err()
+            .expect("应返回错误");
         assert!(format!("{:#}", err).contains("未知数据源"));
     }
 }

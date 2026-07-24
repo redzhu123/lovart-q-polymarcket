@@ -76,7 +76,14 @@ pub async fn run_datasource_diagnose(cfg: &Config) -> Result<()> {
     println!("Market Count");
     println!();
     println!("市场数      : {}", outcome.markets.len());
-    println!("来源        : {}", if outcome.cached { "缓存命中" } else { "Provider 新拉取" });
+    println!(
+        "来源        : {}",
+        if outcome.cached {
+            "缓存命中"
+        } else {
+            "Provider 新拉取"
+        }
+    );
     println!("拉取耗时    : {} 毫秒", fetch_ms);
     println!();
 
@@ -88,7 +95,10 @@ pub async fn run_datasource_diagnose(cfg: &Config) -> Result<()> {
     println!();
     println!("缓存市场数  : {}", cache.size);
     println!("TTL         : {} 秒", cache.ttl_secs);
-    println!("是否新鲜    : {}", if cache.fresh { "✅ 是" } else { "❌ 否" });
+    println!(
+        "是否新鲜    : {}",
+        if cache.fresh { "✅ 是" } else { "❌ 否" }
+    );
     println!();
 
     // ---- Validator ----
@@ -112,8 +122,17 @@ pub async fn run_datasource_diagnose(cfg: &Config) -> Result<()> {
     // ---- OrderBook（若 Provider 支持，取前 5 个市场演示）----
     let cap = manager.capability();
     if cap.supports_orderbook {
-        let ids: Vec<String> = outcome.markets.iter().take(5).map(|m| m.market_id.clone()).collect();
-        let obs = manager.provider().fetch_orderbooks(&ids).await.unwrap_or_default();
+        let ids: Vec<String> = outcome
+            .markets
+            .iter()
+            .take(5)
+            .map(|m| m.market_id.clone())
+            .collect();
+        let obs = manager
+            .provider()
+            .fetch_orderbooks(&ids)
+            .await
+            .unwrap_or_default();
         let with_bid = obs.iter().filter(|o| o.best_bid.is_some()).count();
         println!("{}", DASH);
         println!();

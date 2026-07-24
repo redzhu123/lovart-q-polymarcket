@@ -28,7 +28,9 @@ fn make_input(client_id: &str) -> CreateOrderInput {
 async fn full_lifecycle_create_validate_submit_fill() {
     let oms = build_oms();
     let now = Local::now();
-    let mut order = oms.create_order(&make_input("CLI-LIFECYCLE-001"), now).unwrap();
+    let mut order = oms
+        .create_order(&make_input("CLI-LIFECYCLE-001"), now)
+        .unwrap();
     assert_eq!(order.status, OrderStatus::Created);
 
     // 校验通过
@@ -80,7 +82,9 @@ async fn lifecycle_cancel_before_submit() {
 async fn lifecycle_replace_via_cancel_create_submit() {
     let oms = build_oms();
     let now = Local::now();
-    let mut old = oms.create_order(&make_input("CLI-REPLACE-001"), now).unwrap();
+    let mut old = oms
+        .create_order(&make_input("CLI-REPLACE-001"), now)
+        .unwrap();
 
     let mut new_input = make_input("CLI-REPLACE-002");
     new_input.price = 0.50;
@@ -93,8 +97,8 @@ async fn lifecycle_replace_via_cancel_create_submit() {
 
 #[test]
 fn lifecycle_status_history_recorded() {
-    use std::sync::Arc;
     use pm_gateway::create_mock_gateway;
+    use std::sync::Arc;
     let cfg = OmsConfig::default();
     let gw = Arc::from(create_mock_gateway());
     let oms = Oms::new(cfg, gw).unwrap();
@@ -107,8 +111,8 @@ fn lifecycle_status_history_recorded() {
 
 #[tokio::test]
 async fn lifecycle_state_changes_persisted_in_repo() {
-    use std::sync::Arc;
     use pm_gateway::create_mock_gateway;
+    use std::sync::Arc;
     let cfg = OmsConfig::default();
     let gw = Arc::from(create_mock_gateway());
     let oms = Oms::new(cfg, gw).unwrap();

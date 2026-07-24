@@ -62,7 +62,11 @@ impl ReportGenerator {
     fn generate_markdown(&self, report: &WorkflowReport, path: &str) -> Result<()> {
         let mut md = String::new();
 
-        let icon = if report.success { "✅ 通过" } else { "❌ 失败" };
+        let icon = if report.success {
+            "✅ 通过"
+        } else {
+            "❌ 失败"
+        };
 
         md.push_str("# Polymarket API Workflow 报告\n\n");
         md.push_str(&format!(
@@ -86,8 +90,14 @@ impl ReportGenerator {
         md.push_str(&format!("| 步骤总数 | {} |\n", report.total_steps));
         md.push_str(&format!("| 成功步骤 | {} |\n", report.passed_steps));
         md.push_str(&format!("| 失败步骤 | {} |\n", report.failed_steps));
-        md.push_str(&format!("| 成功率 | {:.0}% |\n", report.success_rate * 100.0));
-        md.push_str(&format!("| 平均步骤耗时 | {:.0}ms |\n", report.avg_duration_ms));
+        md.push_str(&format!(
+            "| 成功率 | {:.0}% |\n",
+            report.success_rate * 100.0
+        ));
+        md.push_str(&format!(
+            "| 平均步骤耗时 | {:.0}ms |\n",
+            report.avg_duration_ms
+        ));
         md.push_str(&format!("| 总耗时 | {}ms |\n", report.total_duration_ms));
         md.push_str(&format!("| 健康评分 | {}/100 |\n\n", report.health_score));
 
@@ -149,7 +159,11 @@ impl ReportGenerator {
         md.push_str("## Workflow 校验\n\n");
         md.push_str(&format!(
             "整体: {}\n\n",
-            if report.validation.passed { "✅ 通过" } else { "❌ 失败" }
+            if report.validation.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            }
         ));
         md.push_str("| 规则 | 结果 | 详情 |\n|------|------|------|\n");
         for r in &report.validation.rules {
@@ -209,10 +223,10 @@ impl ReportGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::WorkflowMode;
     use crate::recorder::{ApiCallRecord, StepRecord, WorkflowRecorder};
     use crate::state_machine::WorkflowState;
     use crate::validator::WorkflowValidator;
-    use crate::config::WorkflowMode;
 
     fn sample_report() -> WorkflowReport {
         let mut rec = WorkflowRecorder::new("unit-test");

@@ -111,17 +111,13 @@ impl From<&Opportunity> for OpportunityRecord {
 /// 确保 CSV 文件就绪（目录 + 表头）。
 /// 委托给 pm-storage 的通用函数。
 pub fn ensure_opportunity_csv(path: impl AsRef<Path>) -> Result<()> {
-    pm_storage::ensure_csv(path.as_ref(), OPPORTUNITY_CSV_HEADER)
-        .context("创建机会 CSV 失败")?;
+    pm_storage::ensure_csv(path.as_ref(), OPPORTUNITY_CSV_HEADER).context("创建机会 CSV 失败")?;
     tracing::info!("机会 CSV 就绪: {}", path.as_ref().display());
     Ok(())
 }
 
 /// 追加机会记录到 CSV。
-pub fn append_opportunities(
-    path: impl AsRef<Path>,
-    opps: &[Opportunity],
-) -> usize {
+pub fn append_opportunities(path: impl AsRef<Path>, opps: &[Opportunity]) -> usize {
     let records: Vec<OpportunityRecord> = opps.iter().map(OpportunityRecord::from).collect();
     let written = pm_storage::append_records(path.as_ref(), &records);
     if written > 0 {
@@ -236,14 +232,30 @@ mod tests {
     #[test]
     fn record_from_opportunity_roundtrips_fields() {
         let opp = Opportunity::new(
-            "m1".into(), "测试".into(), "test".into(), Utc::now(),
+            "m1".into(),
+            "测试".into(),
+            "test".into(),
+            Utc::now(),
             OpportunityType::Arbitrage,
-            85.0, 0.9, 85,
-            25.0, 20.0, 18.0, 12.0, 5.0, 5.0,
-            0.02, 2.0,
-            0.42, 0.50, 0.92,
-            Some(0.08), 5000.0, 8000.0,
-            Some(2000.0), Some(2500.0),
+            85.0,
+            0.9,
+            85,
+            25.0,
+            20.0,
+            18.0,
+            12.0,
+            5.0,
+            5.0,
+            0.02,
+            2.0,
+            0.42,
+            0.50,
+            0.92,
+            Some(0.08),
+            5000.0,
+            8000.0,
+            Some(2000.0),
+            Some(2500.0),
         );
         let record = OpportunityRecord::from(&opp);
         assert_eq!(record.score, 85.0);
@@ -258,14 +270,30 @@ mod tests {
         let _ = std::fs::remove_file(&tmp);
 
         let opp = Opportunity::new(
-            "m_test".into(), "测试问题".into(), "gamma".into(), Utc::now(),
+            "m_test".into(),
+            "测试问题".into(),
+            "gamma".into(),
+            Utc::now(),
             OpportunityType::Spread,
-            75.0, 0.85, 75,
-            20.0, 18.0, 15.0, 12.0, 5.0, 5.0,
-            0.015, 1.5,
-            0.45, 0.50, 0.95,
-            Some(0.05), 3000.0, 5000.0,
-            Some(1500.0), Some(1800.0),
+            75.0,
+            0.85,
+            75,
+            20.0,
+            18.0,
+            15.0,
+            12.0,
+            5.0,
+            5.0,
+            0.015,
+            1.5,
+            0.45,
+            0.50,
+            0.95,
+            Some(0.05),
+            3000.0,
+            5000.0,
+            Some(1500.0),
+            Some(1800.0),
         );
 
         // 确保 CSV 就绪

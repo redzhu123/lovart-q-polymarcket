@@ -93,7 +93,11 @@ impl ValidationReport {
         ));
         out.push_str(&format!(
             "结果: {}\n",
-            if self.passed { "✅ 通过" } else { "❌ 失败" }
+            if self.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            }
         ));
         out
     }
@@ -121,10 +125,7 @@ impl WorkflowValidator {
         let mut failures = Vec::new();
 
         let visited = |s: WorkflowState| -> Option<usize> {
-            trace
-                .steps
-                .iter()
-                .position(|r| r.step == s && r.success)
+            trace.steps.iter().position(|r| r.step == s && r.success)
         };
 
         // R1: 到达 Completed
@@ -132,10 +133,7 @@ impl WorkflowValidator {
             .steps
             .iter()
             .any(|r| r.step == WorkflowState::Completed && r.success);
-        let has_failed = trace
-            .steps
-            .iter()
-            .any(|r| r.step == WorkflowState::Failed);
+        let has_failed = trace.steps.iter().any(|r| r.step == WorkflowState::Failed);
         if reached_completed && !has_failed {
             rules.push(RuleResult::pass("到达终态", "Workflow 正确到达 已完成"));
         } else {
@@ -163,10 +161,9 @@ impl WorkflowValidator {
             visited(WorkflowState::SubmittingOrder),
             visited(WorkflowState::SyncOrder),
         ) {
-            (Some(i), Some(j)) if j > i => RuleResult::pass(
-                "提交后查询订单状态",
-                "提交订单后已查询订单状态（同步订单）",
-            ),
+            (Some(i), Some(j)) if j > i => {
+                RuleResult::pass("提交后查询订单状态", "提交订单后已查询订单状态（同步订单）")
+            }
             _ => {
                 let d = "订单提交后未查询订单状态（缺少同步订单）".to_string();
                 failures.push(d.clone());
@@ -180,10 +177,9 @@ impl WorkflowValidator {
             visited(WorkflowState::SyncOrder),
             visited(WorkflowState::SyncPosition),
         ) {
-            (Some(i), Some(j)) if j > i => RuleResult::pass(
-                "成交后同步持仓",
-                "订单成交后已同步持仓（同步持仓）",
-            ),
+            (Some(i), Some(j)) if j > i => {
+                RuleResult::pass("成交后同步持仓", "订单成交后已同步持仓（同步持仓）")
+            }
             _ => {
                 let d = "订单成交后未同步持仓（缺少同步持仓）".to_string();
                 failures.push(d.clone());
@@ -197,10 +193,9 @@ impl WorkflowValidator {
             visited(WorkflowState::SyncPosition),
             visited(WorkflowState::SyncBalance),
         ) {
-            (Some(i), Some(j)) if j > i => RuleResult::pass(
-                "持仓后同步余额",
-                "持仓更新后已同步余额（同步余额）",
-            ),
+            (Some(i), Some(j)) if j > i => {
+                RuleResult::pass("持仓后同步余额", "持仓更新后已同步余额（同步余额）")
+            }
             _ => {
                 let d = "持仓更新后未同步余额（缺少同步余额）".to_string();
                 failures.push(d.clone());
@@ -218,7 +213,10 @@ impl WorkflowValidator {
             .map(|(s, c)| format!("{}: {} {}", s.as_zh(), c.method, c.path))
             .collect();
         if real_writes.is_empty() {
-            rules.push(RuleResult::pass("无真实写操作", "所有写操作均为 DryRun，未真实发送"));
+            rules.push(RuleResult::pass(
+                "无真实写操作",
+                "所有写操作均为 DryRun，未真实发送",
+            ));
         } else {
             let d = format!("检测到真实写操作: {}", real_writes.join("; "));
             failures.push(d.clone());
@@ -238,9 +236,8 @@ impl WorkflowValidator {
         let mut rules = Vec::new();
         let mut failures = Vec::new();
 
-        let visited = |s: WorkflowState| -> bool {
-            trace.steps.iter().any(|r| r.step == s && r.success)
-        };
+        let visited =
+            |s: WorkflowState| -> bool { trace.steps.iter().any(|r| r.step == s && r.success) };
 
         // R1: 到达 Completed
         let reached_completed = trace
@@ -248,7 +245,10 @@ impl WorkflowValidator {
             .iter()
             .any(|r| r.step == WorkflowState::Completed && r.success);
         if reached_completed {
-            rules.push(RuleResult::pass("到达终态", "只读 Workflow 正确到达 已完成"));
+            rules.push(RuleResult::pass(
+                "到达终态",
+                "只读 Workflow 正确到达 已完成",
+            ));
         } else {
             let d = "只读 Workflow 未到达 已完成 终态".to_string();
             failures.push(d.clone());
@@ -264,7 +264,10 @@ impl WorkflowValidator {
             .map(|(s, c)| format!("{}: {} {}", s.as_zh(), c.method, c.path))
             .collect();
         if writes.is_empty() {
-            rules.push(RuleResult::pass("无写操作", "未执行任何 Place/Cancel Order 写操作"));
+            rules.push(RuleResult::pass(
+                "无写操作",
+                "未执行任何 Place/Cancel Order 写操作",
+            ));
         } else {
             let d = format!("检测到禁止的写操作: {}", writes.join("; "));
             failures.push(d.clone());
@@ -297,7 +300,10 @@ impl WorkflowValidator {
             .map(|r| r.step.as_zh())
             .collect();
         if write_states.is_empty() {
-            rules.push(RuleResult::pass("无下单步骤", "未出现构建/提交/等待/同步订单等下单步骤"));
+            rules.push(RuleResult::pass(
+                "无下单步骤",
+                "未出现构建/提交/等待/同步订单等下单步骤",
+            ));
         } else {
             let d = format!("出现禁止的下单步骤: {}", write_states.join("; "));
             failures.push(d.clone());
@@ -351,7 +357,11 @@ mod tests {
             WorkflowState::Completed,
         ]);
         let report = WorkflowValidator::validate(&trace, WorkflowMode::DryRun);
-        assert!(report.passed, "完整生命周期应通过: {}", report.detailed_zh());
+        assert!(
+            report.passed,
+            "完整生命周期应通过: {}",
+            report.detailed_zh()
+        );
     }
 
     #[test]

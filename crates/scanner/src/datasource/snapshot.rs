@@ -49,16 +49,17 @@ impl MarketSnapshot {
 
     /// 追加写入 CSV（无表头则先写表头）。字段无逗号，简单行写即可。
     pub fn save_to_csv(&self, path: &str) -> Result<()> {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let mut file = OpenOptions::new().create(true).append(true).open(path)?;
         // 文件为空时写表头
         let meta = std::fs::metadata(path)?;
         if meta.len() == 0 {
             writeln!(file, "timestamp,market_count,provider,hash")?;
         }
-        writeln!(file, "{},{},{},{}", self.timestamp, self.market_count, self.provider, self.hash)?;
+        writeln!(
+            file,
+            "{},{},{},{}",
+            self.timestamp, self.market_count, self.provider, self.hash
+        )?;
         Ok(())
     }
 
@@ -124,11 +125,20 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let path = path.to_str().unwrap();
         let now = Local::now();
-        MarketSnapshot::from_markets(&[um("a")], "gamma", now).save_to_csv(path).unwrap();
-        MarketSnapshot::from_markets(&[um("b")], "gamma", now).save_to_csv(path).unwrap();
+        MarketSnapshot::from_markets(&[um("a")], "gamma", now)
+            .save_to_csv(path)
+            .unwrap();
+        MarketSnapshot::from_markets(&[um("b")], "gamma", now)
+            .save_to_csv(path)
+            .unwrap();
         let content = std::fs::read_to_string(path).unwrap();
         // 表头只出现一次
-        assert_eq!(content.matches("timestamp,market_count,provider,hash").count(), 1);
+        assert_eq!(
+            content
+                .matches("timestamp,market_count,provider,hash")
+                .count(),
+            1
+        );
         // 两行数据
         assert_eq!(content.trim_end().lines().count(), 3);
         let _ = std::fs::remove_file(path);

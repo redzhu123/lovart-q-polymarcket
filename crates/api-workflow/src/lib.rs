@@ -39,14 +39,13 @@ pub mod workflows;
 pub mod prelude {
     pub use crate::config::{WorkflowConfig, WorkflowMode};
     pub use crate::engine::WorkflowEngine;
-    pub use crate::recorder::{
-        ApiCallRecord, StepRecord, WorkflowRecorder, WorkflowTrace,
-    };
+    pub use crate::recorder::{ApiCallRecord, StepRecord, WorkflowRecorder, WorkflowTrace};
     pub use crate::report::{generator::ReportGenerator, types::WorkflowReport};
     pub use crate::state_machine::{StateMachine, WorkflowState};
     pub use crate::validator::{ValidationReport, WorkflowValidator};
-    pub use crate::workflows::{dryrun::DryRunWorkflow, live::LiveReadOnlyWorkflow,
-        replay::ReplayWorkflow, Workflow};
+    pub use crate::workflows::{
+        Workflow, dryrun::DryRunWorkflow, live::LiveReadOnlyWorkflow, replay::ReplayWorkflow,
+    };
 }
 
 // 便利函数所用的内部类型导入。
@@ -54,7 +53,9 @@ use crate::config::WorkflowConfig;
 use crate::engine::WorkflowEngine;
 use crate::report::generator::ReportGenerator;
 use crate::workflows::Workflow;
-use crate::workflows::{dryrun::DryRunWorkflow, live::LiveReadOnlyWorkflow, replay::ReplayWorkflow};
+use crate::workflows::{
+    dryrun::DryRunWorkflow, live::LiveReadOnlyWorkflow, replay::ReplayWorkflow,
+};
 
 // ============================================================================
 // 便利函数（CLI / 测试使用）
@@ -73,7 +74,9 @@ pub fn init_logging(level: &str) {
 }
 
 /// 运行 DryRun Workflow（默认模式，无网络、无真实下单）并生成报告。
-pub async fn run_dryrun(cfg: &WorkflowConfig) -> anyhow::Result<crate::report::types::WorkflowReport> {
+pub async fn run_dryrun(
+    cfg: &WorkflowConfig,
+) -> anyhow::Result<crate::report::types::WorkflowReport> {
     let mut engine = WorkflowEngine::new(cfg.clone());
     let workflow = DryRunWorkflow::new(cfg.clone());
     let report = workflow.run(&mut engine).await?;
@@ -83,7 +86,9 @@ pub async fn run_dryrun(cfg: &WorkflowConfig) -> anyhow::Result<crate::report::t
 }
 
 /// 运行 Replay Workflow（从 fixtures/ 回放，不访问网络）并生成报告。
-pub async fn run_replay(cfg: &WorkflowConfig) -> anyhow::Result<crate::report::types::WorkflowReport> {
+pub async fn run_replay(
+    cfg: &WorkflowConfig,
+) -> anyhow::Result<crate::report::types::WorkflowReport> {
     let mut engine = WorkflowEngine::new(cfg.clone());
     let workflow = ReplayWorkflow::new(cfg.clone());
     let report = workflow.run(&mut engine).await?;

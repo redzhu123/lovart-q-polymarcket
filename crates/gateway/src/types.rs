@@ -4,8 +4,8 @@
 //! Execution 禁止直接使用 serde — 全部经 Adapter 转换。
 
 use chrono::{DateTime, Local};
-use pm_execution::order::{Direction, OrderStatus};
 use pm_core::Side;
+use pm_execution::order::{Direction, OrderStatus};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -319,8 +319,10 @@ impl Balance {
         format!(
             "账户: {} | 可用: {:.2} {} | 总额: {:.2} {} | 占用: {:.2} | 未实现盈亏: {:.2} | 已实现盈亏: {:.2}",
             self.account_id,
-            self.available, self.currency,
-            self.total, self.currency,
+            self.available,
+            self.currency,
+            self.total,
+            self.currency,
             self.locked,
             self.unrealized_pnl,
             self.realized_pnl,
@@ -411,9 +413,21 @@ pub struct GatewayInfo {
 impl GatewayInfo {
     /// 中文摘要。
     pub fn summary_zh(&self) -> String {
-        let live = if self.live_enabled { "⚠️ 真实交易" } else { "🔒 模拟交易" };
-        let health = if self.healthy { "✅ 正常" } else { "❌ 异常" };
-        let ws = if self.ws_connected { "✅ 已连接" } else { "❌ 未连接" };
+        let live = if self.live_enabled {
+            "⚠️ 真实交易"
+        } else {
+            "🔒 模拟交易"
+        };
+        let health = if self.healthy {
+            "✅ 正常"
+        } else {
+            "❌ 异常"
+        };
+        let ws = if self.ws_connected {
+            "✅ 已连接"
+        } else {
+            "❌ 未连接"
+        };
         format!(
             "【{}】{} | {}\n\
              连接状态: {} | {}\n\
@@ -463,15 +477,17 @@ pub struct Market {
 impl Market {
     /// 中文摘要。
     pub fn summary_zh(&self) -> String {
-        let yes = self.yes_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
-        let no = self.no_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
+        let yes = self
+            .yes_price
+            .map(|p| format!("{:.4}", p))
+            .unwrap_or_else(|| "-".into());
+        let no = self
+            .no_price
+            .map(|p| format!("{:.4}", p))
+            .unwrap_or_else(|| "-".into());
         format!(
             "{} | YES: {} | NO: {} | 成交量: {:.0} | 状态: {}",
-            self.question,
-            yes,
-            no,
-            self.volume,
-            self.status,
+            self.question, yes, no, self.volume, self.status,
         )
     }
 }
@@ -525,9 +541,18 @@ impl OrderBook {
 
     /// 中文摘要。
     pub fn summary_zh(&self) -> String {
-        let bid = self.best_bid().map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
-        let ask = self.best_ask().map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
-        let spread = self.spread().map(|s| format!("{:.4}", s)).unwrap_or_else(|| "-".into());
+        let bid = self
+            .best_bid()
+            .map(|p| format!("{:.4}", p))
+            .unwrap_or_else(|| "-".into());
+        let ask = self
+            .best_ask()
+            .map(|p| format!("{:.4}", p))
+            .unwrap_or_else(|| "-".into());
+        let spread = self
+            .spread()
+            .map(|s| format!("{:.4}", s))
+            .unwrap_or_else(|| "-".into());
         format!(
             "市场: {} | Best Bid: {} | Best Ask: {} | 价差: {} | 买盘: {}档 | 卖盘: {}档",
             self.market_id,
@@ -589,7 +614,9 @@ mod tests {
         assert_eq!(req.order_type, OrderType::Limit);
         assert_eq!(req.time_in_force, TimeInForce::Gtc);
 
-        let req = req.with_order_type(OrderType::Market).with_time_in_force(TimeInForce::Ioc);
+        let req = req
+            .with_order_type(OrderType::Market)
+            .with_time_in_force(TimeInForce::Ioc);
         assert_eq!(req.order_type, OrderType::Market);
         assert_eq!(req.time_in_force, TimeInForce::Ioc);
     }

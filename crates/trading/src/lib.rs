@@ -32,7 +32,7 @@ pub mod state;
 
 // ---- 核心导出 ----
 pub use capability::Capability;
-pub use config::{TradingConfig, TradingEnvironment, DEFAULT_PROVIDER_TOML};
+pub use config::{DEFAULT_PROVIDER_TOML, TradingConfig, TradingEnvironment};
 pub use connection::{ConnectionManager, ConnectionState, ConnectionStats, RetryPolicy};
 pub use credential::{Credential, CredentialManager, CredentialTomlConfig};
 pub use diagnostics::{

@@ -26,7 +26,7 @@ use crate::datasource::DataSourceManager;
 use crate::display::{DASH, SEP};
 use crate::health;
 use crate::market;
-use crate::pipeline::{print_module_stats_table, print_pipeline_timeline, ModuleStats};
+use crate::pipeline::{ModuleStats, print_module_stats_table, print_pipeline_timeline};
 use crate::stats::{MarketSample, RejectionReason, RoundAnalysis};
 
 /// 诊断模式入口：单次扫描 + 完整诊断报告（V1.01 第十二节）。
@@ -309,8 +309,11 @@ fn run_engine_pass(cfg: &Config, snaps: &[pm_models::OppSnapshot]) -> EnginePass
     module_stats.push(ModuleStats {
         name: "指标".into(),
         duration_ms: 0,
-        input_count: (shadow_opened + shadow_closed + paper_opens + paper_closes + exec_events_total)
-            as u64,
+        input_count: (shadow_opened
+            + shadow_closed
+            + paper_opens
+            + paper_closes
+            + exec_events_total) as u64,
         output_count: 1,
         success: true,
         error_count: 0,
@@ -362,7 +365,10 @@ fn print_http_diagnostics(fetch: &crate::stats::FetchStats) {
     kv("HTTP 末次状态", &fetch.last_status.to_string());
     kv("HTTP 总字节数", &fetch.total_bytes.to_string());
     kv("HTTP 总耗时", &format!("{} 毫秒", fetch.total_ms));
-    kv("JSON 反序列化耗时", &format!("{} 毫秒", fetch.deserialize_ms));
+    kv(
+        "JSON 反序列化耗时",
+        &format!("{} 毫秒", fetch.deserialize_ms),
+    );
     kv("Rate-Limit", fetch.rate_limit.as_deref().unwrap_or("无"));
     if let Some(e) = &fetch.last_error {
         kv("HTTP 末次错误", e);
@@ -494,10 +500,7 @@ fn print_filter_funnel(a: &RoundAnalysis) {
     println!("  ↓ 不活跃: {}", a.filtered_inactive);
     println!("  ↓ 缺价: {}", a.filtered_missing_price);
     println!("  ↓ 数据无效: {}", a.filtered_invalid_data);
-    println!(
-        "  ↓ 策略过滤（YES+NO >= 阈值）: {}",
-        a.filtered_strategy
-    );
+    println!("  ↓ 策略过滤（YES+NO >= 阈值）: {}", a.filtered_strategy);
     println!("  ↓ 套利机会: {}", a.opportunity_count());
     println!();
 }
@@ -657,8 +660,7 @@ fn print_diagnostic_answers(
     println!("3. JSON 是否正确？ {}", mark(json_ok));
     println!(
         "   依据: 反序列化耗时 {} 毫秒，解析得到 {} 个市场",
-        fetch.deserialize_ms,
-        a.received
+        fetch.deserialize_ms, a.received
     );
     println!();
 
@@ -753,7 +755,10 @@ fn print_diagnostic_answers(
         println!("   - 检查 HTTPS_PROXY 代理（127.0.0.1:7890）与 Gamma API 可达性");
     } else if a.opportunity_count() == 0 {
         println!("   - 接入 CLOB API 取真实买卖价以发现真实套利（超出 V1.01 范围）");
-        println!("   - 或调高 opportunity_threshold 观察机会（当前 {}）", threshold);
+        println!(
+            "   - 或调高 opportunity_threshold 观察机会（当前 {}）",
+            threshold
+        );
     } else {
         println!("   - 观察 scan 模式持续跟踪机会生命周期与模拟盈亏");
     }
@@ -786,11 +791,24 @@ fn opp_from_snap_for_diag(snap: &pm_models::OppSnapshot) -> pm_opportunity::Oppo
         "diagnostics".into(),
         chrono::Utc::now(),
         OpportunityType::Unknown,
-        50.0, 0.5, 50,
-        25.0, 20.0, 0.0, 10.0, 5.0, 10.0,
-        0.01, 1.0,
-        snap.yes_price, snap.no_price, snap.sum,
-        None, snap.volume, snap.liquidity,
-        None, None,
+        50.0,
+        0.5,
+        50,
+        25.0,
+        20.0,
+        0.0,
+        10.0,
+        5.0,
+        10.0,
+        0.01,
+        1.0,
+        snap.yes_price,
+        snap.no_price,
+        snap.sum,
+        None,
+        snap.volume,
+        snap.liquidity,
+        None,
+        None,
     )
 }

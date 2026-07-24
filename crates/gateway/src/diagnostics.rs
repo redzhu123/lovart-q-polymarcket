@@ -93,11 +93,26 @@ pub async fn diagnose_account(gateway: &dyn ExchangeGateway) -> String {
         format!("  货币           : {}", balance.currency),
         String::new(),
         "── 余额 ──".to_string(),
-        format!("  可用余额       : {:.2} {}", balance.available, balance.currency),
-        format!("  总余额         : {:.2} {}", balance.total, balance.currency),
-        format!("  已占用         : {:.2} {}", balance.locked, balance.currency),
-        format!("  未实现盈亏     : {:.2} {}", balance.unrealized_pnl, balance.currency),
-        format!("  已实现盈亏     : {:.2} {}", balance.realized_pnl, balance.currency),
+        format!(
+            "  可用余额       : {:.2} {}",
+            balance.available, balance.currency
+        ),
+        format!(
+            "  总余额         : {:.2} {}",
+            balance.total, balance.currency
+        ),
+        format!(
+            "  已占用         : {:.2} {}",
+            balance.locked, balance.currency
+        ),
+        format!(
+            "  未实现盈亏     : {:.2} {}",
+            balance.unrealized_pnl, balance.currency
+        ),
+        format!(
+            "  已实现盈亏     : {:.2} {}",
+            balance.realized_pnl, balance.currency
+        ),
         String::new(),
         format!("── 持仓（{} 个）──", positions.len()),
     ];
@@ -142,12 +157,18 @@ pub async fn diagnose_balance(gateway: &dyn ExchangeGateway) -> String {
          ══════════════════════════════════════",
         balance.account_id,
         balance.currency,
-        balance.available, balance.currency,
-        balance.total, balance.currency,
-        balance.locked, balance.currency,
-        balance.unrealized_pnl, balance.currency,
-        balance.realized_pnl, balance.currency,
-        balance.updated_at
+        balance.available,
+        balance.currency,
+        balance.total,
+        balance.currency,
+        balance.locked,
+        balance.currency,
+        balance.unrealized_pnl,
+        balance.currency,
+        balance.realized_pnl,
+        balance.currency,
+        balance
+            .updated_at
             .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_else(|| "未知".to_string()),
     )
@@ -200,7 +221,9 @@ pub fn diagnose_metrics(metrics: &GatewayMetrics) -> String {
 /// Prometheus 指标诊断（P2-03）。
 ///
 /// 显示 Prometheus 风格的指标输出（文本格式）。
-pub fn diagnose_prometheus(metrics: &crate::metrics::prometheus::GatewayPrometheusMetrics) -> String {
+pub fn diagnose_prometheus(
+    metrics: &crate::metrics::prometheus::GatewayPrometheusMetrics,
+) -> String {
     metrics.to_prometheus_text()
 }
 
@@ -221,7 +244,11 @@ pub async fn diagnose_health_extended(gateway: &dyn crate::traits::ExchangeGatew
         "🔒 DryRun 模式（禁止真实下单）"
     };
 
-    let health_status = if info.healthy { "✅ 健康" } else { "❌ 异常" };
+    let health_status = if info.healthy {
+        "✅ 健康"
+    } else {
+        "❌ 异常"
+    };
 
     let ws_status = if info.ws_connected {
         "✅ 已连接"

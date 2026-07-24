@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Local};
 
 use crate::error::GatewayError;
-use crate::types::{Balance, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, Position};
+use crate::types::{
+    Balance, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, Position,
+};
 
 // ============================================================================
 // ExchangeGateway Trait

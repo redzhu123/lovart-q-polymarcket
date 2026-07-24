@@ -7,9 +7,7 @@
 use reqwest::Client;
 use tracing;
 
-use crate::adapter::{
-    PolymarketBalanceJson, PolymarketOrderJson, PolymarketPositionJson,
-};
+use crate::adapter::{PolymarketBalanceJson, PolymarketOrderJson, PolymarketPositionJson};
 use crate::config::GatewayConfig;
 
 /// Polymarket REST API 客户端。
@@ -96,13 +94,20 @@ impl PolymarketRestClient {
             "Polymarket 下单请求"
         );
 
-        let resp = req.send().await.map_err(|e| format!("HTTP 请求失败: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("HTTP 请求失败: {}", e))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             tracing::warn!(status = %status, body = %body, "Polymarket 下单失败");
-            return Err(format!("Polymarket 下单失败: HTTP {} — {}", status.as_u16(), body));
+            return Err(format!(
+                "Polymarket 下单失败: HTTP {} — {}",
+                status.as_u16(),
+                body
+            ));
         }
 
         let order: PolymarketOrderJson = resp
@@ -128,13 +133,19 @@ impl PolymarketRestClient {
             req = req.header(k, v);
         }
 
-        let resp = req.send().await.map_err(|e| format!("HTTP 请求失败: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("HTTP 请求失败: {}", e))?;
 
         if !resp.status().is_success() {
             return Err(format!("取消订单失败: HTTP {}", resp.status().as_u16()));
         }
 
-        let order: PolymarketOrderJson = resp.json().await.map_err(|e| format!("JSON 解析失败: {}", e))?;
+        let order: PolymarketOrderJson = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
 
         tracing::info!(order_id = %order_id, "Polymarket 订单已取消");
         Ok(order)
@@ -149,13 +160,19 @@ impl PolymarketRestClient {
             req = req.header(k, v);
         }
 
-        let resp = req.send().await.map_err(|e| format!("HTTP 请求失败: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("HTTP 请求失败: {}", e))?;
 
         if !resp.status().is_success() {
             return Err(format!("查询订单失败: HTTP {}", resp.status().as_u16()));
         }
 
-        let order: PolymarketOrderJson = resp.json().await.map_err(|e| format!("JSON 解析失败: {}", e))?;
+        let order: PolymarketOrderJson = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
         Ok(order)
     }
 
@@ -168,14 +185,19 @@ impl PolymarketRestClient {
             req = req.header(k, v);
         }
 
-        let resp = req.send().await.map_err(|e| format!("HTTP 请求失败: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("HTTP 请求失败: {}", e))?;
 
         if !resp.status().is_success() {
             return Err(format!("查询订单列表失败: HTTP {}", resp.status().as_u16()));
         }
 
-        let orders: Vec<PolymarketOrderJson> =
-            resp.json().await.map_err(|e| format!("JSON 解析失败: {}", e))?;
+        let orders: Vec<PolymarketOrderJson> = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
 
         tracing::debug!(count = %orders.len(), "Polymarket 订单列表查询成功");
         Ok(orders)
@@ -192,14 +214,19 @@ impl PolymarketRestClient {
             req = req.header(k, v);
         }
 
-        let resp = req.send().await.map_err(|e| format!("HTTP 请求失败: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("HTTP 请求失败: {}", e))?;
 
         if !resp.status().is_success() {
             return Err(format!("查询余额失败: HTTP {}", resp.status().as_u16()));
         }
 
-        let balance: PolymarketBalanceJson =
-            resp.json().await.map_err(|e| format!("JSON 解析失败: {}", e))?;
+        let balance: PolymarketBalanceJson = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
 
         tracing::debug!(
             available = %balance.available,
@@ -221,14 +248,19 @@ impl PolymarketRestClient {
             req = req.header(k, v);
         }
 
-        let resp = req.send().await.map_err(|e| format!("HTTP 请求失败: {}", e))?;
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("HTTP 请求失败: {}", e))?;
 
         if !resp.status().is_success() {
             return Err(format!("查询持仓失败: HTTP {}", resp.status().as_u16()));
         }
 
-        let positions: Vec<PolymarketPositionJson> =
-            resp.json().await.map_err(|e| format!("JSON 解析失败: {}", e))?;
+        let positions: Vec<PolymarketPositionJson> = resp
+            .json()
+            .await
+            .map_err(|e| format!("JSON 解析失败: {}", e))?;
 
         tracing::debug!(count = %positions.len(), "Polymarket 持仓查询成功");
         Ok(positions)

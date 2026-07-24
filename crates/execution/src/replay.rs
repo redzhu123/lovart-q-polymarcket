@@ -162,7 +162,11 @@ impl OrderReplay {
 
     /// 按顺序回放所有事件（以 speed 倍速，speed=1 为实时）。
     pub fn replay_all(&self, speed: u32) {
-        println!("【回放开始】共 {} 个事件，{} 倍速", self.events.len(), speed);
+        println!(
+            "【回放开始】共 {} 个事件，{} 倍速",
+            self.events.len(),
+            speed
+        );
         println!();
 
         for (i, event) in self.events.iter().enumerate() {
@@ -176,7 +180,7 @@ impl OrderReplay {
             );
             if speed > 1 {
                 std::thread::sleep(std::time::Duration::from_millis(
-                    (1000 / speed).max(50) as u64,
+                    (1000 / speed).max(50) as u64
                 ));
             }
         }
@@ -193,10 +197,22 @@ fn event_detail(event: &ExecutionEvent) -> String {
         ExecutionEvent::OrderQueued { position, .. } => format!("队列位置: {}", position),
         ExecutionEvent::OrderSubmitted { gateway, .. } => format!("已提交到: {}", gateway),
         ExecutionEvent::OrderAccepted { gateway, .. } => format!("{} 已接受", gateway),
-        ExecutionEvent::OrderPartiallyFilled { filled, remaining, price, .. } => {
-            format!("成交: {:.2}  剩余: {:.2}  @ {:.4}", filled, remaining, price)
+        ExecutionEvent::OrderPartiallyFilled {
+            filled,
+            remaining,
+            price,
+            ..
+        } => {
+            format!(
+                "成交: {:.2}  剩余: {:.2}  @ {:.4}",
+                filled, remaining, price
+            )
         }
-        ExecutionEvent::OrderFilled { avg_price, slippage, .. } => {
+        ExecutionEvent::OrderFilled {
+            avg_price,
+            slippage,
+            ..
+        } => {
             format!("均价: {:.4}  滑点: {:.2}%", avg_price, slippage * 100.0)
         }
         ExecutionEvent::OrderRejected { reason, .. } => reason.clone(),
@@ -221,15 +237,48 @@ mod tests {
     fn sample_events() -> Vec<ExecutionEvent> {
         let now = Local::now();
         vec![
-            ExecutionEvent::OrderCreated { order_id: "EX-001".into(), timestamp: now },
-            ExecutionEvent::OrderValidated { order_id: "EX-001".into(), timestamp: now },
-            ExecutionEvent::OrderQueued { order_id: "EX-001".into(), position: 1, timestamp: now },
-            ExecutionEvent::OrderSubmitted { order_id: "EX-001".into(), gateway: "Mock".into(), timestamp: now },
-            ExecutionEvent::OrderAccepted { order_id: "EX-001".into(), gateway: "Mock".into(), timestamp: now },
-            ExecutionEvent::OrderFilled { order_id: "EX-001".into(), avg_price: 0.45, slippage: 0.005, timestamp: now },
-            ExecutionEvent::OrderCreated { order_id: "EX-002".into(), timestamp: now },
-            ExecutionEvent::OrderValidated { order_id: "EX-002".into(), timestamp: now },
-            ExecutionEvent::OrderRejected { order_id: "EX-002".into(), reason: "资金不足".into(), timestamp: now },
+            ExecutionEvent::OrderCreated {
+                order_id: "EX-001".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderValidated {
+                order_id: "EX-001".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderQueued {
+                order_id: "EX-001".into(),
+                position: 1,
+                timestamp: now,
+            },
+            ExecutionEvent::OrderSubmitted {
+                order_id: "EX-001".into(),
+                gateway: "Mock".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderAccepted {
+                order_id: "EX-001".into(),
+                gateway: "Mock".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderFilled {
+                order_id: "EX-001".into(),
+                avg_price: 0.45,
+                slippage: 0.005,
+                timestamp: now,
+            },
+            ExecutionEvent::OrderCreated {
+                order_id: "EX-002".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderValidated {
+                order_id: "EX-002".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderRejected {
+                order_id: "EX-002".into(),
+                reason: "资金不足".into(),
+                timestamp: now,
+            },
         ]
     }
 

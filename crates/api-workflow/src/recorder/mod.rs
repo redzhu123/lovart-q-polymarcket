@@ -130,7 +130,11 @@ impl StepRecord {
     /// 开始一个步骤。
     pub fn start(step: WorkflowState) -> Self {
         let started_at = Utc::now();
-        tracing::info!("【步骤开始】{}（{}）", step.as_zh(), started_at.format("%H:%M:%S%.3f"));
+        tracing::info!(
+            "【步骤开始】{}（{}）",
+            step.as_zh(),
+            started_at.format("%H:%M:%S%.3f")
+        );
         Self {
             step_zh: step.as_zh().to_string(),
             step,

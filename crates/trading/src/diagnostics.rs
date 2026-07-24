@@ -29,22 +29,30 @@ pub async fn diagnose_provider(provider: &dyn TradingProvider) -> String {
     lines.push(String::new());
     lines.push(format!("  Provider 名称 : {}", provider.name()));
     lines.push(format!("  状态          : {}", provider.state().as_zh()));
-    lines.push(format!(
-        "  Gateway       : {}",
-        provider.gateway_name()
-    ));
+    lines.push(format!("  Gateway       : {}", provider.gateway_name()));
     lines.push(String::new());
     lines.push(cap.render_table());
     lines.push(String::new());
     lines.push("── 健康状态 ──".to_string());
-    lines.push(format!("  整体健康      : {}", if health.healthy { "✅ 是" } else { "❌ 否" }));
+    lines.push(format!(
+        "  整体健康      : {}",
+        if health.healthy { "✅ 是" } else { "❌ 否" }
+    ));
     lines.push(format!(
         "  HTTP          : {}",
-        if health.http_ok { "✅ 正常" } else { "❌ 异常" }
+        if health.http_ok {
+            "✅ 正常"
+        } else {
+            "❌ 异常"
+        }
     ));
     lines.push(format!(
         "  WebSocket     : {}",
-        if health.ws_ok { "✅ 正常" } else { "❌ 异常" }
+        if health.ws_ok {
+            "✅ 正常"
+        } else {
+            "❌ 异常"
+        }
     ));
     lines.push(format!(
         "  Session       : {}",
@@ -152,11 +160,19 @@ pub fn diagnose_session(session_mgr: &SessionManager) -> String {
             lines.push(format!("  Session ID    : {}", session.session_id));
             lines.push(format!(
                 "  已认证        : {}",
-                if session.authenticated { "✅ 是" } else { "❌ 否" }
+                if session.authenticated {
+                    "✅ 是"
+                } else {
+                    "❌ 否"
+                }
             ));
             lines.push(format!(
                 "  已过期        : {}",
-                if session.is_expired() { "⚠️ 是" } else { "✅ 否" }
+                if session.is_expired() {
+                    "⚠️ 是"
+                } else {
+                    "✅ 否"
+                }
             ));
             lines.push(format!("  剩余时间      : {}秒", session.remaining_secs()));
             lines.push(format!("  创建时间      : {}", session.created_at));
@@ -217,10 +233,7 @@ pub fn diagnose_connection(conn_mgr: &ConnectionManager) -> String {
 
     // HTTP
     lines.push("── HTTP ──".to_string());
-    lines.push(format!(
-        "  状态          : {}",
-        conn_mgr.http_state.as_zh()
-    ));
+    lines.push(format!("  状态          : {}", conn_mgr.http_state.as_zh()));
     if let Some(ref url) = conn_mgr.http_base_url {
         lines.push(format!("  URL           : {}", url));
     } else {
@@ -228,7 +241,11 @@ pub fn diagnose_connection(conn_mgr: &ConnectionManager) -> String {
     }
     lines.push(format!(
         "  健康          : {}",
-        if conn_mgr.http_ok() { "✅ 正常" } else { "❌ 异常" }
+        if conn_mgr.http_ok() {
+            "✅ 正常"
+        } else {
+            "❌ 异常"
+        }
     ));
     lines.push(String::new());
 
@@ -236,13 +253,14 @@ pub fn diagnose_connection(conn_mgr: &ConnectionManager) -> String {
     lines.push("── WebSocket ──".to_string());
     if let Some(ref url) = conn_mgr.ws_url {
         lines.push(format!("  URL           : {}", url));
-        lines.push(format!(
-            "  状态          : {}",
-            conn_mgr.ws_state.as_zh()
-        ));
+        lines.push(format!("  状态          : {}", conn_mgr.ws_state.as_zh()));
         lines.push(format!(
             "  健康          : {}",
-            if conn_mgr.ws_ok() { "✅ 正常" } else { "❌ 异常" }
+            if conn_mgr.ws_ok() {
+                "✅ 正常"
+            } else {
+                "❌ 异常"
+            }
         ));
     } else {
         lines.push("  未配置".to_string());

@@ -3,7 +3,7 @@
 //! 构建订单 → 验证参数 → 生成请求 → 打印 → 停止。
 //! **绝不发送到交易所。**
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tracing;
 
 use crate::validator::field::{FieldCheckResult, FieldValidator};
@@ -96,16 +96,16 @@ fn validate_order_params(order: &Value) -> ValidationResult {
 
         // 校验 side
         if let Some(side) = order_obj.get("side") {
-            let check = FieldValidator::validate_outcome(
-                side,
-                "order.side",
-            );
+            let check = FieldValidator::validate_outcome(side, "order.side");
             // BUY/SELL 不是 Yes/No 所以要用自定义校验
             let side_str = side.as_str().unwrap_or("");
             if side_str == "BUY" || side_str == "SELL" {
                 result.add_check(CheckResult::pass("方向", &format!("side={}", side_str)));
             } else {
-                result.add_check(CheckResult::fail("方向", &format!("无效 side: {}", side_str)));
+                result.add_check(CheckResult::fail(
+                    "方向",
+                    &format!("无效 side: {}", side_str),
+                ));
             }
         } else {
             result.add_check(CheckResult::fail("方向", "side 字段缺失"));
@@ -152,7 +152,10 @@ fn validate_order_params(order: &Value) -> ValidationResult {
 
     // 校验 orderType
     if let Some(order_type) = order.get("orderType") {
-        let valid = matches!(order_type.as_str().unwrap_or(""), "GTC" | "GTD" | "FOK" | "FAK");
+        let valid = matches!(
+            order_type.as_str().unwrap_or(""),
+            "GTC" | "GTD" | "FOK" | "FAK"
+        );
         if valid {
             result.add_check(CheckResult::pass(
                 "订单类型",
@@ -196,7 +199,11 @@ mod tests {
     #[tokio::test]
     async fn dryrun_order_builds_and_validates() {
         let result = test_dryrun_order().await;
-        assert!(result.validation.passed, "DryRun validation failed: {:?}", result.validation.errors);
+        assert!(
+            result.validation.passed,
+            "DryRun validation failed: {:?}",
+            result.validation.errors
+        );
         assert!(result.order_json.get("order").is_some());
         assert!(result.order_json.get("signature").is_some());
     }

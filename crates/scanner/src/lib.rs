@@ -24,9 +24,9 @@ pub mod market;
 pub mod pipeline;
 pub mod stats;
 
+pub use datasource::run_datasource_diagnose;
 pub use datasource::{
     ClobProvider, DataSourceManager, GammaProvider, MarketDataProvider, MockProvider,
 };
 pub use diagnostics::run_diagnose;
 pub use driver::run_scan;
-pub use datasource::run_datasource_diagnose;

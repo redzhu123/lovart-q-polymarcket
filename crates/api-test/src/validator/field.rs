@@ -45,7 +45,10 @@ impl FieldValidator {
             Value::Number(n) => {
                 if let Some(f) = n.as_f64() {
                     if f >= 0.0 && f <= 1.0 {
-                        FieldCheckResult::pass(field_path, &format!("价格 {:.4} 在 [0, 1] 范围内", f))
+                        FieldCheckResult::pass(
+                            field_path,
+                            &format!("价格 {:.4} 在 [0, 1] 范围内", f),
+                        )
                     } else {
                         FieldCheckResult::fail(
                             field_path,
@@ -96,27 +99,25 @@ impl FieldValidator {
                     FieldCheckResult::fail(field_path, "数量不是有效的 f64 数字")
                 }
             }
-            Value::String(s) => {
-                match s.parse::<f64>() {
-                    Ok(f) => {
-                        if f > 0.0 {
-                            FieldCheckResult::pass(
-                                field_path,
-                                &format!("数量字符串 \"{}\" → {:.2} > 0", s, f),
-                            )
-                        } else {
-                            FieldCheckResult::fail(
-                                field_path,
-                                &format!("数量字符串 \"{}\" → {:.2} 不大于 0", s, f),
-                            )
-                        }
+            Value::String(s) => match s.parse::<f64>() {
+                Ok(f) => {
+                    if f > 0.0 {
+                        FieldCheckResult::pass(
+                            field_path,
+                            &format!("数量字符串 \"{}\" → {:.2} > 0", s, f),
+                        )
+                    } else {
+                        FieldCheckResult::fail(
+                            field_path,
+                            &format!("数量字符串 \"{}\" → {:.2} 不大于 0", s, f),
+                        )
                     }
-                    Err(_) => FieldCheckResult::fail(
-                        field_path,
-                        &format!("数量字符串 \"{}\" 无法解析为数字", s),
-                    ),
                 }
-            }
+                Err(_) => FieldCheckResult::fail(
+                    field_path,
+                    &format!("数量字符串 \"{}\" 无法解析为数字", s),
+                ),
+            },
             _ => FieldCheckResult::fail(field_path, "数量字段类型不是数字或字符串"),
         }
     }
@@ -145,14 +146,14 @@ impl FieldValidator {
                 if s.starts_with("0x") && s.len() == 66 {
                     let hex_part = &s[2..];
                     if hex_part.chars().all(|c| c.is_ascii_hexdigit()) {
-                        return FieldCheckResult::pass(field_path, &format!("Market ID 格式正确: {}", s));
+                        return FieldCheckResult::pass(
+                            field_path,
+                            &format!("Market ID 格式正确: {}", s),
+                        );
                     }
                 }
                 // 宽容模式：只检查非空
-                FieldCheckResult::pass(
-                    field_path,
-                    &format!("Market ID: {}（格式宽松通过）", s),
-                )
+                FieldCheckResult::pass(field_path, &format!("Market ID: {}（格式宽松通过）", s))
             }
             _ => FieldCheckResult::fail(field_path, "Market ID 不是字符串类型"),
         }
@@ -183,10 +184,7 @@ impl FieldValidator {
                 if upper == "YES" || upper == "NO" {
                     FieldCheckResult::pass(field_path, &format!("Outcome: {}", s))
                 } else {
-                    FieldCheckResult::fail(
-                        field_path,
-                        &format!("Outcome \"{}\" 不是 Yes 或 No", s),
-                    )
+                    FieldCheckResult::fail(field_path, &format!("Outcome \"{}\" 不是 Yes 或 No", s))
                 }
             }
             _ => FieldCheckResult::fail(field_path, "Outcome 不是字符串类型"),
@@ -231,9 +229,7 @@ impl FieldValidator {
     /// 校验布尔值存在且为 true/false。
     pub fn validate_boolean(value: &Value, field_path: &str) -> FieldCheckResult {
         match value {
-            Value::Bool(b) => {
-                FieldCheckResult::pass(field_path, &format!("布尔值: {}", b))
-            }
+            Value::Bool(b) => FieldCheckResult::pass(field_path, &format!("布尔值: {}", b)),
             _ => FieldCheckResult::fail(field_path, "字段不是布尔类型"),
         }
     }
@@ -295,13 +291,19 @@ mod tests {
 
     #[test]
     fn validate_price_in_range() {
-        let result = FieldValidator::validate_price_range(&Value::Number(serde_json::Number::from_f64(0.45).unwrap()), "price");
+        let result = FieldValidator::validate_price_range(
+            &Value::Number(serde_json::Number::from_f64(0.45).unwrap()),
+            "price",
+        );
         assert!(result.passed);
     }
 
     #[test]
     fn validate_price_out_of_range() {
-        let result = FieldValidator::validate_price_range(&Value::Number(serde_json::Number::from_f64(1.5).unwrap()), "price");
+        let result = FieldValidator::validate_price_range(
+            &Value::Number(serde_json::Number::from_f64(1.5).unwrap()),
+            "price",
+        );
         assert!(!result.passed);
     }
 
@@ -319,19 +321,28 @@ mod tests {
 
     #[test]
     fn validate_quantity_positive() {
-        let result = FieldValidator::validate_quantity(&Value::Number(serde_json::Number::from_f64(100.0).unwrap()), "size");
+        let result = FieldValidator::validate_quantity(
+            &Value::Number(serde_json::Number::from_f64(100.0).unwrap()),
+            "size",
+        );
         assert!(result.passed);
     }
 
     #[test]
     fn validate_quantity_zero_fails() {
-        let result = FieldValidator::validate_quantity(&Value::Number(serde_json::Number::from_f64(0.0).unwrap()), "size");
+        let result = FieldValidator::validate_quantity(
+            &Value::Number(serde_json::Number::from_f64(0.0).unwrap()),
+            "size",
+        );
         assert!(!result.passed);
     }
 
     #[test]
     fn validate_quantity_negative_fails() {
-        let result = FieldValidator::validate_quantity(&Value::Number(serde_json::Number::from_f64(-1.0).unwrap()), "size");
+        let result = FieldValidator::validate_quantity(
+            &Value::Number(serde_json::Number::from_f64(-1.0).unwrap()),
+            "size",
+        );
         assert!(!result.passed);
     }
 
@@ -355,7 +366,8 @@ mod tests {
 
     #[test]
     fn validate_non_empty_string_pass() {
-        let result = FieldValidator::validate_non_empty_string(&Value::String("hello".into()), "name");
+        let result =
+            FieldValidator::validate_non_empty_string(&Value::String("hello".into()), "name");
         assert!(result.passed);
     }
 
@@ -368,7 +380,9 @@ mod tests {
     #[test]
     fn validate_market_id_hex() {
         let result = FieldValidator::validate_market_id(
-            &Value::String("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".into()),
+            &Value::String(
+                "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".into(),
+            ),
             "condition_id",
         );
         assert!(result.passed);
@@ -423,12 +437,9 @@ mod tests {
             {"price": "0.55"},
             {"price": "1.50"}  // 超出范围
         ]);
-        let results = FieldValidator::validate_array_field(
-            &array,
-            "price",
-            "items",
-            |v, p| FieldValidator::validate_price_range(v, p),
-        );
+        let results = FieldValidator::validate_array_field(&array, "price", "items", |v, p| {
+            FieldValidator::validate_price_range(v, p)
+        });
         assert_eq!(results.len(), 3);
         assert!(results[0].passed);
         assert!(results[1].passed);

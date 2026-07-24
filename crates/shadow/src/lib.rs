@@ -433,9 +433,7 @@ mod tests {
     fn open_then_close_computes_pnl() {
         let now = Local::now();
         let mut eng = ShadowEngine::new();
-        let t = eng
-            .open_trade("Q", 0.40, 0.50, now)
-            .expect("open");
+        let t = eng.open_trade("Q", 0.40, 0.50, now).expect("open");
         assert_eq!(t.status, TradeStatus::Open);
         assert!((t.entry_sum() - 0.90).abs() < 1e-9);
 
@@ -489,7 +487,9 @@ mod tests {
         let now = Local::now();
         let mut eng = ShadowEngine::new();
         eng.open_trade("Q", 0.40, 0.50, now);
-        let closed = eng.close_trade(&finished("Q", 0.45, 0.55), now).expect("close");
+        let closed = eng
+            .close_trade(&finished("Q", 0.45, 0.55), now)
+            .expect("close");
         let rec = ShadowTradeRecord::from(&closed);
         assert_eq!(append_records(&[rec], &path), 1);
 

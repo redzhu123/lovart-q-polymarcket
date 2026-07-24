@@ -125,11 +125,7 @@ impl OpportunityScore {
     /// - 价差过大（SUM < 0.90 → 高风险）
     /// - 流动性不足
     /// - 缺乏深度
-    pub fn compute_risk_score(
-        sum: f64,
-        liquidity_score: f64,
-        depth_score: f64,
-    ) -> f64 {
+    pub fn compute_risk_score(sum: f64, liquidity_score: f64, depth_score: f64) -> f64 {
         let mut risk = 0.0f64;
 
         // SUM 异常（偏离 1.0 超过 0.1）
@@ -303,7 +299,15 @@ mod tests {
     #[test]
     fn compute_total_score_in_range() {
         let scorer = OpportunityScore::new();
-        let result = scorer.compute(0.90, 0.45, 5000.0, 10000.0, Some(2000.0), Some(3000.0), 0.85);
+        let result = scorer.compute(
+            0.90,
+            0.45,
+            5000.0,
+            10000.0,
+            Some(2000.0),
+            Some(3000.0),
+            0.85,
+        );
         assert!(result.total >= 0.0 && result.total <= 100.0);
         assert!(result.spread >= 0.0 && result.spread <= 100.0);
         assert!(result.liquidity >= 0.0 && result.liquidity <= 100.0);
@@ -325,8 +329,24 @@ mod tests {
             confidence: 0.5,
             risk_penalty: 0.0,
         });
-        let r1 = default_scorer.compute(0.90, 0.45, 5000.0, 10000.0, Some(2000.0), Some(3000.0), 0.85);
-        let r2 = custom.compute(0.90, 0.45, 5000.0, 10000.0, Some(2000.0), Some(3000.0), 0.85);
+        let r1 = default_scorer.compute(
+            0.90,
+            0.45,
+            5000.0,
+            10000.0,
+            Some(2000.0),
+            Some(3000.0),
+            0.85,
+        );
+        let r2 = custom.compute(
+            0.90,
+            0.45,
+            5000.0,
+            10000.0,
+            Some(2000.0),
+            Some(3000.0),
+            0.85,
+        );
         assert_ne!(r1.total, r2.total, "Different weights → different totals");
     }
 }

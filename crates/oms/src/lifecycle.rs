@@ -35,11 +35,9 @@
 //! ```
 
 use chrono::{DateTime, Local};
-use pm_gateway::{
-    Balance, ExchangeGateway, GatewayResult, OrderRequest, OrderType, TimeInForce,
-};
-use pm_execution::order::Direction;
 use pm_core::Side;
+use pm_execution::order::Direction;
+use pm_gateway::{Balance, ExchangeGateway, GatewayResult, OrderRequest, OrderType, TimeInForce};
 
 use crate::events::{EventBus, OrderEvent};
 use crate::order::{Order, OrderStatus};
@@ -362,14 +360,7 @@ impl Lifecycle {
             GatewayResult::cancelled("", "订单未提交到 Gateway，本地取消", 0)
         };
 
-        Self::apply_transition(
-            order,
-            OrderStatus::Cancelled,
-            reason,
-            "oms",
-            ctx,
-            now,
-        )?;
+        Self::apply_transition(order, OrderStatus::Cancelled, reason, "oms", ctx, now)?;
         ctx.event_bus.publish(OrderEvent::OrderCancelled {
             order_id: order.order_id.clone(),
             reason: reason.to_string(),
@@ -415,10 +406,7 @@ impl Lifecycle {
         ctx: &LifecycleContext,
         now: DateTime<Local>,
     ) -> anyhow::Result<()> {
-        if let Err(e) = ctx
-            .state_machine
-            .validate_transition(order.status, target)
-        {
+        if let Err(e) = ctx.state_machine.validate_transition(order.status, target) {
             // 非法转移：发状态机拒绝事件，但不修改状态
             ctx.event_bus.publish(OrderEvent::StateTransitionRejected {
                 order_id: order.order_id.clone(),
@@ -715,7 +703,8 @@ mod tests {
         let lctx = LifecycleContext::new(&repo, &bus, &sm, &v);
         let mut order = Lifecycle::create_order(&base_input(), &lctx, Local::now()).unwrap();
         let gateway = create_mock_gateway();
-        let result = Lifecycle::submit_order(&mut order, gateway.as_ref(), &lctx, Local::now()).await
+        let result = Lifecycle::submit_order(&mut order, gateway.as_ref(), &lctx, Local::now())
+            .await
             .unwrap();
         assert!(result.success);
         assert!(matches!(
@@ -730,7 +719,8 @@ mod tests {
         let lctx = LifecycleContext::new(&repo, &bus, &sm, &v);
         let mut order = Lifecycle::create_order(&base_input(), &lctx, Local::now()).unwrap();
         let gateway = create_mock_gateway();
-        let result = Lifecycle::submit_order(&mut order, gateway.as_ref(), &lctx, Local::now()).await
+        let result = Lifecycle::submit_order(&mut order, gateway.as_ref(), &lctx, Local::now())
+            .await
             .unwrap();
         assert!(result.success || !result.success);
     }
@@ -741,8 +731,15 @@ mod tests {
         let lctx = LifecycleContext::new(&repo, &bus, &sm, &v);
         let mut order = Lifecycle::create_order(&base_input(), &lctx, Local::now()).unwrap();
         let gateway = create_mock_gateway();
-        let result = Lifecycle::cancel_order(&mut order, "用户取消", gateway.as_ref(), &lctx, Local::now()).await
-            .unwrap();
+        let result = Lifecycle::cancel_order(
+            &mut order,
+            "用户取消",
+            gateway.as_ref(),
+            &lctx,
+            Local::now(),
+        )
+        .await
+        .unwrap();
         assert_eq!(order.status, OrderStatus::Cancelled);
     }
 
@@ -752,9 +749,19 @@ mod tests {
         let lctx = LifecycleContext::new(&repo, &bus, &sm, &v);
         let mut order = Lifecycle::create_order(&base_input(), &lctx, Local::now()).unwrap();
         let gateway = create_mock_gateway();
-        Lifecycle::submit_order(&mut order, gateway.as_ref(), &lctx, Local::now()).await.unwrap();
+        Lifecycle::submit_order(&mut order, gateway.as_ref(), &lctx, Local::now())
+            .await
+            .unwrap();
         order.transition(OrderStatus::Filled, "测试", "oms", Local::now());
-        let result = Lifecycle::cancel_order(&mut order, "再试一次", gateway.as_ref(), &lctx, Local::now()).await.unwrap();
+        let result = Lifecycle::cancel_order(
+            &mut order,
+            "再试一次",
+            gateway.as_ref(),
+            &lctx,
+            Local::now(),
+        )
+        .await
+        .unwrap();
         assert_eq!(order.status, OrderStatus::Filled);
     }
 
@@ -767,8 +774,10 @@ mod tests {
         new_input.client_order_id = "CLI-NEW".into();
         new_input.price = 0.50;
         let gateway = create_mock_gateway();
-        let new_order = Lifecycle::replace_order(&mut old, &new_input, gateway.as_ref(), &lctx, Local::now()).await
-            .unwrap();
+        let new_order =
+            Lifecycle::replace_order(&mut old, &new_input, gateway.as_ref(), &lctx, Local::now())
+                .await
+                .unwrap();
         assert_eq!(old.status, OrderStatus::Cancelled);
         assert_ne!(new_order.order_id, old.order_id);
         assert_eq!(repo.count().unwrap(), 2);

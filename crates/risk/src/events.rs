@@ -138,7 +138,10 @@ impl From<&RiskEvent> for RiskEventRecord {
             description: ev.description.clone(),
             market_id: ev.market_id.clone().unwrap_or_default(),
             value: ev.value.map(|v| format!("{:.4}", v)).unwrap_or_default(),
-            threshold: ev.threshold.map(|v| format!("{:.4}", v)).unwrap_or_default(),
+            threshold: ev
+                .threshold
+                .map(|v| format!("{:.4}", v))
+                .unwrap_or_default(),
         }
     }
 }
@@ -232,7 +235,10 @@ impl RiskEventCollector {
             lines.push(format!("  流动性警告：{} 次", self.liquidity_warnings));
         }
         if self.consecutive_loss_warnings > 0 {
-            lines.push(format!("  连续亏损警告：{} 次", self.consecutive_loss_warnings));
+            lines.push(format!(
+                "  连续亏损警告：{} 次",
+                self.consecutive_loss_warnings
+            ));
         }
         lines.join("\n")
     }
@@ -265,14 +271,8 @@ mod tests {
     #[test]
     fn collector_counts_by_kind() {
         let mut collector = RiskEventCollector::new();
-        collector.record(RiskEvent::new(
-            RiskEventKind::RiskReject,
-            "测试拒绝".into(),
-        ));
-        collector.record(RiskEvent::new(
-            RiskEventKind::RiskReject,
-            "再次拒绝".into(),
-        ));
+        collector.record(RiskEvent::new(RiskEventKind::RiskReject, "测试拒绝".into()));
+        collector.record(RiskEvent::new(RiskEventKind::RiskReject, "再次拒绝".into()));
         collector.record(RiskEvent::new(
             RiskEventKind::LiquidityWarning,
             "流动性不足".into(),
@@ -284,13 +284,10 @@ mod tests {
 
     #[test]
     fn record_conversion() {
-        let ev = RiskEvent::new(
-            RiskEventKind::DailyLossLimit,
-            "当日亏损已达上限".into(),
-        )
-        .with_market("test-market")
-        .with_value(-1100.0)
-        .with_threshold(1000.0);
+        let ev = RiskEvent::new(RiskEventKind::DailyLossLimit, "当日亏损已达上限".into())
+            .with_market("test-market")
+            .with_value(-1100.0)
+            .with_threshold(1000.0);
         let rec = RiskEventRecord::from(&ev);
         assert_eq!(rec.event_type, "日亏损上限");
         assert_eq!(rec.severity, 3);
@@ -301,7 +298,10 @@ mod tests {
     fn summary_zh_contains_counts() {
         let mut collector = RiskEventCollector::new();
         collector.record(RiskEvent::new(RiskEventKind::RiskReject, "test".into()));
-        collector.record(RiskEvent::new(RiskEventKind::DrawdownWarning, "test".into()));
+        collector.record(RiskEvent::new(
+            RiskEventKind::DrawdownWarning,
+            "test".into(),
+        ));
         let summary = collector.summary_zh();
         assert!(summary.contains("2"));
         assert!(summary.contains("风险拒绝"));

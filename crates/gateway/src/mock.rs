@@ -198,14 +198,32 @@ impl ExchangeGateway for MockGateway {
         Ok(OrderBook {
             market_id: market_id.to_string(),
             bids: vec![
-                BookLevel { price: 0.44, size: 1000.0 },
-                BookLevel { price: 0.43, size: 2000.0 },
-                BookLevel { price: 0.42, size: 3000.0 },
+                BookLevel {
+                    price: 0.44,
+                    size: 1000.0,
+                },
+                BookLevel {
+                    price: 0.43,
+                    size: 2000.0,
+                },
+                BookLevel {
+                    price: 0.42,
+                    size: 3000.0,
+                },
             ],
             asks: vec![
-                BookLevel { price: 0.46, size: 1000.0 },
-                BookLevel { price: 0.47, size: 2000.0 },
-                BookLevel { price: 0.48, size: 3000.0 },
+                BookLevel {
+                    price: 0.46,
+                    size: 1000.0,
+                },
+                BookLevel {
+                    price: 0.47,
+                    size: 2000.0,
+                },
+                BookLevel {
+                    price: 0.48,
+                    size: 3000.0,
+                },
             ],
             tick_size: 0.01,
             updated_at: Some(Local::now()),
@@ -325,12 +343,8 @@ impl ExchangeGateway for MockGateway {
         let found = active.iter().find(|(id, _, _)| id == order_id);
 
         match found {
-            Some((id, _, _)) => {
-                GatewayResult::accepted(id, "订单活跃（模拟）", latency)
-            }
-            None => {
-                GatewayResult::expired(order_id, latency)
-            }
+            Some((id, _, _)) => GatewayResult::accepted(id, "订单活跃（模拟）", latency),
+            None => GatewayResult::expired(order_id, latency),
         }
     }
 
@@ -409,8 +423,8 @@ impl Default for MockGateway {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pm_execution::order::Direction;
     use pm_core::Side;
+    use pm_execution::order::Direction;
 
     fn test_request() -> OrderRequest {
         OrderRequest::new(

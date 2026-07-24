@@ -9,8 +9,8 @@
 //! - 认证头注入
 //! - Mock / Live 双模式
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use reqwest::{Client, Method, RequestBuilder, Response, StatusCode};
@@ -70,10 +70,7 @@ pub enum ApiClientError {
     RequestFailed(String),
 
     #[error("重试耗尽（{attempts} 次），最后错误: {last_error}")]
-    MaxRetriesExceeded {
-        attempts: u32,
-        last_error: String,
-    },
+    MaxRetriesExceeded { attempts: u32, last_error: String },
 
     #[error("Mock 数据未找到: {endpoint}")]
     MockDataNotFound { endpoint: String },
@@ -147,8 +144,7 @@ impl RateLimiter {
                 }
             } else {
                 // 计算需要等待的时间
-                let wait_ms =
-                    (1000.0 / self.rate as f64).ceil() as u64;
+                let wait_ms = (1000.0 / self.rate as f64).ceil() as u64;
                 return wait_ms;
             }
         }
@@ -197,8 +193,8 @@ impl ApiClient {
             }
         } else {
             // 尝试从环境变量读取
-            if let Ok(proxy_url) = std::env::var("HTTPS_PROXY")
-                .or_else(|_| std::env::var("https_proxy"))
+            if let Ok(proxy_url) =
+                std::env::var("HTTPS_PROXY").or_else(|_| std::env::var("https_proxy"))
             {
                 if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
                     builder = builder.proxy(proxy);
@@ -365,11 +361,12 @@ impl ApiClient {
         url: &str,
         _body: Option<&Value>,
     ) -> Result<ApiResponse, ApiClientError> {
-        let mock_data = self.mock_data.as_ref().ok_or_else(|| {
-            ApiClientError::MockDataNotFound {
-                endpoint: url.to_string(),
-            }
-        })?;
+        let mock_data =
+            self.mock_data
+                .as_ref()
+                .ok_or_else(|| ApiClientError::MockDataNotFound {
+                    endpoint: url.to_string(),
+                })?;
 
         // 根据 URL 匹配 mock 数据
         let endpoint_key = self.mock_key_from_url(url);
@@ -398,7 +395,11 @@ impl ApiClient {
     /// 从 URL 提取 mock key。
     fn mock_key_from_url(&self, url: &str) -> String {
         // 精确路径匹配优先（先匹配更具体的模式）
-        if url.contains("/time") || url.contains("/ping") || url == "/" || url.ends_with('/') && url.len() <= 2 {
+        if url.contains("/time")
+            || url.contains("/ping")
+            || url == "/"
+            || url.ends_with('/') && url.len() <= 2
+        {
             "server-time".into()
         } else if url.contains("/market?") || url.contains("/market/") {
             "market-detail".into()
@@ -473,7 +474,8 @@ impl ApiClient {
                         }
 
                         return Err(ApiClientError::RateLimited(format!(
-                            "{} 触发速率限制，重试耗尽", url
+                            "{} 触发速率限制，重试耗尽",
+                            url
                         )));
                     }
 
@@ -482,18 +484,14 @@ impl ApiClient {
                         .headers()
                         .iter()
                         .map(|(k, v)| {
-                            (
-                                k.as_str().to_string(),
-                                v.to_str().unwrap_or("").to_string(),
-                            )
+                            (k.as_str().to_string(), v.to_str().unwrap_or("").to_string())
                         })
                         .collect();
 
                     // 解析响应体
                     let body_text = resp.text().await.unwrap_or_default();
-                    let body: Value = serde_json::from_str(&body_text).unwrap_or_else(|_| {
-                        Value::String(body_text.clone())
-                    });
+                    let body: Value = serde_json::from_str(&body_text)
+                        .unwrap_or_else(|_| Value::String(body_text.clone()));
 
                     let total_latency = start.elapsed().as_millis() as u64;
 
@@ -554,8 +552,7 @@ impl ApiClient {
     /// 计算退避延迟。
     fn calculate_backoff(&self, attempt: u32) -> u64 {
         let delay = (self.config.retry_base_ms as f64
-            * self.config.backoff_multiplier.powi(attempt as i32))
-            as u64;
+            * self.config.backoff_multiplier.powi(attempt as i32)) as u64;
         delay.min(self.config.retry_max_ms)
     }
 

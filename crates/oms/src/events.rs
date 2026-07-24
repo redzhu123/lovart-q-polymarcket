@@ -316,7 +316,10 @@ impl EventBus {
 
 /// 把 OrderEvent 序列化为 CSV 行（5 列：timestamp, event_type, event_name_zh, order_id, extra_json）。
 pub fn event_to_csv_row(event: &OrderEvent) -> [String; 5] {
-    let timestamp = event.timestamp().format("%Y-%m-%d %H:%M:%S%.3f").to_string();
+    let timestamp = event
+        .timestamp()
+        .format("%Y-%m-%d %H:%M:%S%.3f")
+        .to_string();
     let event_type = event.event_name().to_string();
     let event_name_zh = event.event_name_zh().to_string();
     let order_id = event.order_id().to_string();
@@ -351,7 +354,10 @@ mod tests {
             &self.name
         }
         fn on_event(&self, event: &OrderEvent) -> anyhow::Result<()> {
-            self.sink.lock().unwrap().push(event.event_name_zh().to_string());
+            self.sink
+                .lock()
+                .unwrap()
+                .push(event.event_name_zh().to_string());
             Ok(())
         }
     }
@@ -473,7 +479,9 @@ mod tests {
     fn subscriber_failure_isolated() {
         struct FailSubscriber;
         impl Subscriber for FailSubscriber {
-            fn name(&self) -> &str { "failing" }
+            fn name(&self) -> &str {
+                "failing"
+            }
             fn on_event(&self, _: &OrderEvent) -> anyhow::Result<()> {
                 Err(anyhow::anyhow!("模拟失败"))
             }

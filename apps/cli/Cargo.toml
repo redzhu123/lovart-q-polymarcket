@@ -31,6 +31,11 @@ pm-trading = { workspace = true }
 pm-gateway = { workspace = true }
 pm-api-workflow = { workspace = true }
 pm-oms = { workspace = true }
+pm-pms = { workspace = true }
+pm-auth = { workspace = true }
+pm-wallet = { workspace = true }
+pm-settlement = { workspace = true }
+pm-market-framework = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

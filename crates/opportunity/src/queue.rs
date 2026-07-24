@@ -136,11 +136,22 @@ mod tests {
             score,
             0.8,
             priority,
-            score * 0.25, score * 0.20, score * 0.20, score * 0.15, score * 0.10, score * 0.10,
-            0.01, 1.0,
-            0.5, 0.5, 1.0,
-            None, 1000.0, 2000.0,
-            None, None,
+            score * 0.25,
+            score * 0.20,
+            score * 0.20,
+            score * 0.15,
+            score * 0.10,
+            score * 0.10,
+            0.01,
+            1.0,
+            0.5,
+            0.5,
+            1.0,
+            None,
+            1000.0,
+            2000.0,
+            None,
+            None,
         )
     }
 
@@ -218,7 +229,11 @@ mod tests {
     fn unlimited_capacity() {
         let mut q = OpportunityQueue::new(0); // 0 = 无限制
         for i in 0..200 {
-            q.push(make_opp(&format!("X{i}"), (i as f64) % 100.0, (i as u8) % 100));
+            q.push(make_opp(
+                &format!("X{i}"),
+                (i as f64) % 100.0,
+                (i as u8) % 100,
+            ));
         }
         assert_eq!(q.len(), 200);
     }

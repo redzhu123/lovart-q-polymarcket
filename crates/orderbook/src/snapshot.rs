@@ -72,10 +72,7 @@ bid_liquidity,ask_liquidity,total_liquidity,imbalance";
 
 impl OrderBookSnapshot {
     /// 从订单簿构造快照（含价差、深度、流动性分析）。
-    pub fn from_orderbook(
-        orderbook: &pm_models::OrderBook,
-        now: DateTime<Local>,
-    ) -> Self {
+    pub fn from_orderbook(orderbook: &pm_models::OrderBook, now: DateTime<Local>) -> Self {
         let spread_report = SpreadAnalyzer::analyze(orderbook);
         let depth_report = DepthAnalyzer::analyze(orderbook);
         let liquidity_report = LiquidityAnalyzer::analyze(orderbook);
@@ -103,10 +100,7 @@ impl OrderBookSnapshot {
     }
 
     /// 批量从订单簿列表生成快照。
-    pub fn from_orderbooks(
-        orderbooks: &[pm_models::OrderBook],
-        now: DateTime<Local>,
-    ) -> Vec<Self> {
+    pub fn from_orderbooks(orderbooks: &[pm_models::OrderBook], now: DateTime<Local>) -> Vec<Self> {
         orderbooks
             .iter()
             .map(|ob| Self::from_orderbook(ob, now))
@@ -119,10 +113,7 @@ impl OrderBookSnapshot {
             return Ok(());
         }
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
+        let mut file = OpenOptions::new().create(true).append(true).open(path)?;
 
         // 文件为空时写表头
         let meta = std::fs::metadata(path)?;
@@ -217,16 +208,29 @@ mod tests {
     use chrono::Utc;
     use pm_models::PriceLevel;
 
-    fn ob_with_depth(bid: f64, ask: f64, bid_sizes: &[f64], ask_sizes: &[f64]) -> pm_models::OrderBook {
+    fn ob_with_depth(
+        bid: f64,
+        ask: f64,
+        bid_sizes: &[f64],
+        ask_sizes: &[f64],
+    ) -> pm_models::OrderBook {
         let bid_levels: Vec<PriceLevel> = bid_sizes
             .iter()
             .enumerate()
-            .map(|(i, &s)| PriceLevel { price: bid - 0.01 * (i as f64), size: s, level: i + 1 })
+            .map(|(i, &s)| PriceLevel {
+                price: bid - 0.01 * (i as f64),
+                size: s,
+                level: i + 1,
+            })
             .collect();
         let ask_levels: Vec<PriceLevel> = ask_sizes
             .iter()
             .enumerate()
-            .map(|(i, &s)| PriceLevel { price: ask + 0.01 * (i as f64), size: s, level: i + 1 })
+            .map(|(i, &s)| PriceLevel {
+                price: ask + 0.01 * (i as f64),
+                size: s,
+                level: i + 1,
+            })
             .collect();
 
         pm_models::OrderBook {

@@ -38,6 +38,12 @@ members = [
     "crates/api-test",
     "crates/api-workflow",
     "crates/oms",
+    "crates/pms",
+    "crates/auth",
+    "crates/wallet",
+    "crates/settlement",
+    "crates/infrastructure",
+    "crates/market-framework",
 ]
 
 [workspace.package]
@@ -88,6 +94,12 @@ pm-gateway = { path = "crates/gateway" }
 pm-api-test = { path = "crates/api-test" }
 pm-api-workflow = { path = "crates/api-workflow" }
 pm-oms = { path = "crates/oms" }
+pm-pms = { path = "crates/pms" }
+pm-auth = { path = "crates/auth" }
+pm-wallet = { path = "crates/wallet" }
+pm-settlement = { path = "crates/settlement" }
+pm-infrastructure = { path = "crates/infrastructure" }
+pm-market-framework = { path = "crates/market-framework" }
 
 # 测试/构建优化 profile（保持默认即可，显式声明便于后续调优）
 [profile.dev]

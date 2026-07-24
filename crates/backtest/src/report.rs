@@ -81,9 +81,7 @@ impl BacktestReport {
         let longest_duration_sec = durs.iter().copied().max().unwrap_or(0);
 
         Self {
-            run_time: chrono::Local::now()
-                .format("%Y-%m-%d %H:%M:%S")
-                .to_string(),
+            run_time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             strategy: strategy.to_string(),
             total_opportunities,
             total_trades,
@@ -166,7 +164,9 @@ impl BacktestReport {
             .open(path)
             .context("打开 backtest_report.csv 失败")?;
         // has_headers(false)：追加模式，由 need_header 手动写一次表头
-        let mut wtr = csv::WriterBuilder::new().has_headers(false).from_writer(file);
+        let mut wtr = csv::WriterBuilder::new()
+            .has_headers(false)
+            .from_writer(file);
         if need_header {
             wtr.write_record(HEADER).context("写表头失败")?;
         }

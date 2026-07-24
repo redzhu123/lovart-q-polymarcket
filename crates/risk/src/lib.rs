@@ -50,7 +50,7 @@ pub use position_sizer::{PositionSizer, SizeRecommendation};
 pub use replay::RiskReplay;
 pub use rules::{
     ConsecutiveLossRule, DailyLossRule, DrawdownRule, ExposureLimitRule, LiquidityRule,
-    MaxOrderCountRule, MaxPositionCountRule, MaxSingleCapitalRule, PositionSizeLimitRule,
-    RiskRule, SlippageRule, VolatilityRule,
+    MaxOrderCountRule, MaxPositionCountRule, MaxSingleCapitalRule, PositionSizeLimitRule, RiskRule,
+    SlippageRule, VolatilityRule,
 };
 pub use score::RiskScore;

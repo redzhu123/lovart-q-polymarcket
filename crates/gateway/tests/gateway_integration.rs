@@ -3,13 +3,13 @@
 //! 验证 Mock 和 Polymarket Gateway 的完整生命周期。
 //! 所有测试在 Mock 模式下运行（无网络访问）。
 
-use pm_gateway::{
-    create_gateway, create_mock_gateway, create_polymarket_gateway,
-    GatewayConfig, Market, OrderBook, OrderRequest, OrderType, TimeInForce,
-};
+use chrono::Local;
 use pm_core::Side;
 use pm_execution::order::Direction;
-use chrono::Local;
+use pm_gateway::{
+    GatewayConfig, Market, OrderBook, OrderRequest, OrderType, TimeInForce, create_gateway,
+    create_mock_gateway, create_polymarket_gateway,
+};
 
 // ============================================================================
 // 测试辅助
@@ -102,7 +102,9 @@ async fn mock_gateway_get_markets() {
     assert!(m.yes_price.is_some());
 
     // 验证市场是 Mock 数据
-    assert!(m.question.contains("BTC") || m.question.contains("ETH") || m.question.contains("美联储"));
+    assert!(
+        m.question.contains("BTC") || m.question.contains("ETH") || m.question.contains("美联储")
+    );
 }
 
 #[tokio::test]
@@ -221,8 +223,14 @@ async fn default_trait_implementations() {
     // 测试 OrderBook summary
     let ob = OrderBook {
         market_id: "test-1".into(),
-        bids: vec![pm_gateway::types::BookLevel { price: 0.44, size: 100.0 }],
-        asks: vec![pm_gateway::types::BookLevel { price: 0.46, size: 100.0 }],
+        bids: vec![pm_gateway::types::BookLevel {
+            price: 0.44,
+            size: 100.0,
+        }],
+        asks: vec![pm_gateway::types::BookLevel {
+            price: 0.46,
+            size: 100.0,
+        }],
         tick_size: 0.01,
         updated_at: Some(Local::now()),
     };
@@ -237,7 +245,14 @@ async fn order_request_builders() {
     init_logging();
 
     let req = OrderRequest::new(
-        "mkt-1", Direction::Yes, Side::Buy, 0.45, 100.0, "S", "R", "O",
+        "mkt-1",
+        Direction::Yes,
+        Side::Buy,
+        0.45,
+        100.0,
+        "S",
+        "R",
+        "O",
     )
     .with_order_type(OrderType::Market)
     .with_time_in_force(TimeInForce::Ioc)

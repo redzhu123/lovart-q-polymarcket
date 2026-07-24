@@ -395,20 +395,9 @@ impl Order {
     }
 
     /// 记录一次状态变化（不进 tracing.info，仅写历史）。
-    fn record_change(
-        &mut self,
-        to: OrderStatus,
-        reason: &str,
-        actor: &str,
-        at: DateTime<Local>,
-    ) {
-        self.status_history.push(StatusChange::new(
-            self.status,
-            to,
-            reason,
-            actor,
-            at,
-        ));
+    fn record_change(&mut self, to: OrderStatus, reason: &str, actor: &str, at: DateTime<Local>) {
+        self.status_history
+            .push(StatusChange::new(self.status, to, reason, actor, at));
     }
 
     /// 更新成交信息。
@@ -515,10 +504,7 @@ impl Order {
             self.created_at.format("%Y-%m-%d %H:%M:%S"),
             self.updated_at.format("%Y-%m-%d %H:%M:%S")
         );
-        println!(
-            "  版本 / 重试   : {} / {}",
-            self.version, self.retry_count
-        );
+        println!("  版本 / 重试   : {} / {}", self.version, self.retry_count);
         if !self.notes.is_empty() {
             println!("  备注          : {}", self.notes);
         }

@@ -12,11 +12,7 @@ pub struct RiskDashboard;
 
 impl RiskDashboard {
     /// 渲染完整风险仪表盘。
-    pub fn render(
-        engine: &RiskEngine,
-        ctx: &RiskContext,
-        exposure: &ExposureReport,
-    ) -> String {
+    pub fn render(engine: &RiskEngine, ctx: &RiskContext, exposure: &ExposureReport) -> String {
         let mut lines = Vec::new();
 
         // 标题
@@ -53,26 +49,14 @@ impl RiskDashboard {
             report.risk.max_drawdown * 100.0,
             report.risk.current_drawdown * 100.0
         ));
-        lines.push(format!(
-            "  总 ROI：      {:.2}%",
-            report.risk.roi * 100.0
-        ));
-        lines.push(format!(
-            "  当日盈亏：    {:.0} USDC",
-            report.risk.daily_pnl
-        ));
+        lines.push(format!("  总 ROI：      {:.2}%", report.risk.roi * 100.0));
+        lines.push(format!("  当日盈亏：    {:.0} USDC", report.risk.daily_pnl));
         lines.push(String::new());
 
         // 交易统计
         lines.push("  ── 交易统计 ──".to_string());
-        lines.push(format!(
-            "  持仓数量：    {}",
-            ctx.open_position_count
-        ));
-        lines.push(format!(
-            "  待处理订单：  {}",
-            ctx.pending_order_count
-        ));
+        lines.push(format!("  持仓数量：    {}", ctx.open_position_count));
+        lines.push(format!("  待处理订单：  {}", ctx.pending_order_count));
         lines.push(format!(
             "  连续亏损：    {} 次",
             report.risk.consecutive_losses
@@ -82,26 +66,11 @@ impl RiskDashboard {
         // 风险审核统计
         let stats = engine.stats();
         lines.push("  ── 风险审核 ──".to_string());
-        lines.push(format!(
-            "  总评估：      {} 次",
-            stats.total_evaluations
-        ));
-        lines.push(format!(
-            "  接受：        {} 次",
-            stats.accepted
-        ));
-        lines.push(format!(
-            "  需审核：      {} 次",
-            stats.reviewed
-        ));
-        lines.push(format!(
-            "  拒绝：        {} 次",
-            stats.rejected
-        ));
-        lines.push(format!(
-            "  风险事件：    {} 个",
-            engine.events().total()
-        ));
+        lines.push(format!("  总评估：      {} 次", stats.total_evaluations));
+        lines.push(format!("  接受：        {} 次", stats.accepted));
+        lines.push(format!("  需审核：      {} 次", stats.reviewed));
+        lines.push(format!("  拒绝：        {} 次", stats.rejected));
+        lines.push(format!("  风险事件：    {} 个", engine.events().total()));
         lines.push(String::new());
 
         // 暴露

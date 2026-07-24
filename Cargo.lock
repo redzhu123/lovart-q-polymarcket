@@ -984,6 +984,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pm-auth"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "pm-core",
+ "pm-trading",
+ "rand",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "pm-backtest"
 version = "1.0.0"
 dependencies = [
@@ -1006,23 +1025,28 @@ dependencies = [
  "anyhow",
  "chrono",
  "pm-api-workflow",
+ "pm-auth",
  "pm-backtest",
  "pm-core",
  "pm-execution",
  "pm-gateway",
+ "pm-market-framework",
  "pm-metrics",
  "pm-models",
  "pm-oms",
  "pm-opportunity",
  "pm-orderbook",
  "pm-paper",
+ "pm-pms",
  "pm-portfolio",
  "pm-risk",
  "pm-scanner",
+ "pm-settlement",
  "pm-shadow",
  "pm-storage",
  "pm-trading",
  "pm-utils",
+ "pm-wallet",
  "serde_json",
  "tokio",
  "tracing",
@@ -1077,6 +1101,42 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "pm-infrastructure"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "csv",
+ "pm-core",
+ "rand",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "pm-market-framework"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "pm-core",
+ "pm-infrastructure",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1164,6 +1224,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "pm-pms"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "csv",
+ "pm-core",
+ "pm-execution",
+ "pm-gateway",
+ "pm-oms",
+ "pm-storage",
+ "rand",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "pm-portfolio"
 version = "1.0.0"
 dependencies = [
@@ -1248,6 +1331,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "pm-settlement"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "csv",
+ "pm-core",
+ "pm-execution",
+ "pm-models",
+ "rand",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "pm-shadow"
 version = "1.0.0"
 dependencies = [
@@ -1318,6 +1422,26 @@ dependencies = [
 [[package]]
 name = "pm-utils"
 version = "1.0.0"
+
+[[package]]
+name = "pm-wallet"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "csv",
+ "pm-core",
+ "pm-trading",
+ "rand",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "potential_utf"

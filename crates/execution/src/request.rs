@@ -82,7 +82,6 @@ impl ExecutionRequest {
         self.client_order_id = id.to_string();
         self
     }
-
 }
 
 #[cfg(test)]
@@ -92,10 +91,16 @@ mod tests {
     #[test]
     fn create_request() {
         let req = ExecutionRequest::new(
-            "mkt-1", "测试市场?", "mock",
-            Direction::Yes, Side::Buy,
-            0.45, 222.22,
-            "TestStrategy", "RISK-OK", "OPP-01",
+            "mkt-1",
+            "测试市场?",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            222.22,
+            "TestStrategy",
+            "RISK-OK",
+            "OPP-01",
         );
         assert_eq!(req.market_id, "mkt-1");
         assert_eq!(req.question, "测试市场?");
@@ -106,10 +111,16 @@ mod tests {
     #[test]
     fn builder_pattern() {
         let req = ExecutionRequest::new(
-            "mkt-1", "Q?", "mock",
-            Direction::Yes, Side::Buy,
-            0.5, 100.0,
-            "S", "R", "O",
+            "mkt-1",
+            "Q?",
+            "mock",
+            Direction::Yes,
+            Side::Buy,
+            0.5,
+            100.0,
+            "S",
+            "R",
+            "O",
         )
         .with_priority(10)
         .with_client_order_id("my-id");

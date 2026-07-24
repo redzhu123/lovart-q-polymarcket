@@ -19,8 +19,8 @@
 //! gateway_api_requests_total 1234
 //! ```
 
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 // ============================================================================
 // Counter
@@ -237,10 +237,7 @@ impl GatewayPrometheusMetrics {
                 "gateway_api_requests_failure",
                 "API 失败次数（非 2xx）",
             ),
-            api_latency_ms: Histogram::new(
-                "gateway_api_latency_ms",
-                "API 请求延迟（毫秒）",
-            ),
+            api_latency_ms: Histogram::new("gateway_api_latency_ms", "API 请求延迟（毫秒）"),
             ws_reconnects_total: Counter::new(
                 "gateway_ws_reconnects_total",
                 "WebSocket 重连总次数",
@@ -253,14 +250,8 @@ impl GatewayPrometheusMetrics {
                 "gateway_rate_limit_hits_total",
                 "触发速率限制总次数",
             ),
-            circuit_trips_total: Counter::new(
-                "gateway_circuit_trips_total",
-                "断路器跳闸总次数",
-            ),
-            active_orders: Gauge::new(
-                "gateway_active_orders",
-                "当前活跃订单数",
-            ),
+            circuit_trips_total: Counter::new("gateway_circuit_trips_total", "断路器跳闸总次数"),
+            active_orders: Gauge::new("gateway_active_orders", "当前活跃订单数"),
             ws_connected: Gauge::new(
                 "gateway_ws_connected",
                 "WebSocket 连接状态（0=未连接, 1=已连接）",
@@ -342,9 +333,7 @@ impl GatewayPrometheusMetrics {
         // Histogram
         output.push_str(&format!(
             "# HELP {} {}\n# TYPE {} histogram\n",
-            self.api_latency_ms.name,
-            self.api_latency_ms.help,
-            self.api_latency_ms.name
+            self.api_latency_ms.name, self.api_latency_ms.help, self.api_latency_ms.name
         ));
         let buckets = self.api_latency_ms.bucket_counts();
         // buckets 数组长度 = buckets.len() + 1（含 +Inf）

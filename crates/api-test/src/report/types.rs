@@ -157,13 +157,15 @@ impl TestReport {
             latencies.iter().sum::<u64>() as f64 / latencies.len() as f64
         };
 
-        let fastest = self.endpoint_results
+        let fastest = self
+            .endpoint_results
             .iter()
             .min_by_key(|r| r.latency_ms)
             .map(|r| (r.name.clone(), r.latency_ms))
             .unwrap_or_default();
 
-        let slowest = self.endpoint_results
+        let slowest = self
+            .endpoint_results
             .iter()
             .max_by_key(|r| r.latency_ms)
             .map(|r| (r.name.clone(), r.latency_ms))
@@ -172,8 +174,12 @@ impl TestReport {
         // 计算健康评分
         let mut score = 100i32;
         score -= failed as i32 * 10;
-        if avg_latency > 3000.0 { score -= 10; }
-        if !self.summary.errors.is_empty() { score -= 20; }
+        if avg_latency > 3000.0 {
+            score -= 10;
+        }
+        if !self.summary.errors.is_empty() {
+            score -= 20;
+        }
         self.health_score = score.max(0) as u32;
 
         self.summary = ReportSummary {

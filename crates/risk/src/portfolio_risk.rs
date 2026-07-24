@@ -135,15 +135,13 @@ impl PortfolioRiskReport {
                 risk_score += 3;
                 warnings.push(format!(
                     "当日亏损 {:.0} USDC 超过上限 {:.0} USDC",
-                    -ctx.daily_realized_pnl,
-                    config.max_daily_loss
+                    -ctx.daily_realized_pnl, config.max_daily_loss
                 ));
             } else if loss_ratio > 0.7 {
                 risk_score += 2;
                 warnings.push(format!(
                     "当日亏损 {:.0} USDC 接近上限 {:.0} USDC",
-                    -ctx.daily_realized_pnl,
-                    config.max_daily_loss
+                    -ctx.daily_realized_pnl, config.max_daily_loss
                 ));
             }
         }
@@ -190,8 +188,8 @@ impl PortfolioRiskReport {
             daily_pnl: ctx.daily_realized_pnl,
             roi: ctx.roi(),
             warning_count: warnings.len(),
-            rejection_count: 0,    // 由 engine 更新
-            risk_event_count: 0,   // 由 engine 更新
+            rejection_count: 0,  // 由 engine 更新
+            risk_event_count: 0, // 由 engine 更新
         };
 
         Self {
@@ -212,43 +210,19 @@ impl PortfolioRiskReport {
             r.risk_level.as_color(),
             r.risk_level.as_zh()
         ));
-        lines.push(format!(
-            "  资金利用率：  {:.0}%",
-            r.capital_usage * 100.0
-        ));
+        lines.push(format!("  资金利用率：  {:.0}%", r.capital_usage * 100.0));
         lines.push(format!(
             "  最大回撤：    {:.1}%（当前 {:.1}%）",
             r.max_drawdown * 100.0,
             r.current_drawdown * 100.0
         ));
-        lines.push(format!(
-            "  风险暴露：    {:.0}%",
-            r.exposure_ratio * 100.0
-        ));
-        lines.push(format!(
-            "  现金比例：    {:.0}%",
-            r.cash_ratio * 100.0
-        ));
-        lines.push(format!(
-            "  连续亏损：    {} 次",
-            r.consecutive_losses
-        ));
-        lines.push(format!(
-            "  当日盈亏：    {:.0} USDC",
-            r.daily_pnl
-        ));
-        lines.push(format!(
-            "  总 ROI：      {:.2}%",
-            r.roi * 100.0
-        ));
-        lines.push(format!(
-            "  拒绝交易：    {} 笔",
-            r.rejection_count
-        ));
-        lines.push(format!(
-            "  风险事件：    {} 个",
-            r.risk_event_count
-        ));
+        lines.push(format!("  风险暴露：    {:.0}%", r.exposure_ratio * 100.0));
+        lines.push(format!("  现金比例：    {:.0}%", r.cash_ratio * 100.0));
+        lines.push(format!("  连续亏损：    {} 次", r.consecutive_losses));
+        lines.push(format!("  当日盈亏：    {:.0} USDC", r.daily_pnl));
+        lines.push(format!("  总 ROI：      {:.2}%", r.roi * 100.0));
+        lines.push(format!("  拒绝交易：    {} 笔", r.rejection_count));
+        lines.push(format!("  风险事件：    {} 个", r.risk_event_count));
 
         if !self.details.is_empty() {
             lines.push(String::new());

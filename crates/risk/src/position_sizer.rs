@@ -75,12 +75,10 @@ impl PositionSizer for FixedRiskSizer {
         // 风险金额 = 初始资金 * risk_ratio
         let risk_amount = ctx.initial_capital * config.risk_ratio;
         // 假设止损距离为价差的 2 倍或 5%
-        let stop_distance = ctx
-            .spread
-            .unwrap_or(0.01)
-            .max(0.01)
-            .min(0.10);
-        let notional = (risk_amount / stop_distance).min(ctx.available_cash).min(config.max_single_capital);
+        let stop_distance = ctx.spread.unwrap_or(0.01).max(0.01).min(0.10);
+        let notional = (risk_amount / stop_distance)
+            .min(ctx.available_cash)
+            .min(config.max_single_capital);
         let price = ctx.suggested_price.max(f64::EPSILON);
         let quantity = notional / price;
 
@@ -172,7 +170,10 @@ impl PositionSizer for VolatilitySizer {
         // 基础仓位 = fixed_size，波动率调整
         let base = config.fixed_size;
         let adjusted = base * (1.0 - vol * 0.7); // 高波动时最多缩到 30%
-        let notional = adjusted.max(10.0).min(ctx.available_cash).min(config.max_single_capital);
+        let notional = adjusted
+            .max(10.0)
+            .min(ctx.available_cash)
+            .min(config.max_single_capital);
         let price = ctx.suggested_price.max(f64::EPSILON);
         let quantity = notional / price;
 
@@ -219,9 +220,7 @@ impl PositionSizer for LiquiditySizer {
             sizer_kind: PositionSizerKind::Liquidity,
             explanation: format!(
                 "流动性调整：市场流动性 {:.0} USDC × 2% = {:.0} USDC，仓位 {:.0} USDC",
-                ctx.market_liquidity,
-                max_from_liquidity,
-                notional
+                ctx.market_liquidity, max_from_liquidity, notional
             ),
         }
     }
@@ -331,21 +330,39 @@ mod tests {
         // Kelly: f* = (p*b - (1-p)) / b = (0.8*0.5 - 0.2)/0.5 = 0.4, half=0.2 → 2000 USDC
         use pm_opportunity::Opportunity;
         let opp = Opportunity::new(
-            "test".into(), "test".into(), "test".into(),
+            "test".into(),
+            "test".into(),
+            "test".into(),
             chrono::Utc::now(),
             pm_opportunity::OpportunityType::Arbitrage,
-            80.0, 0.8, 80,
-            25.0, 20.0, 15.0, 10.0, 5.0, 10.0,
-            0.50, 50.0,
-            0.40, 0.50, 0.90,
-            None, 1000.0, 2000.0,
-            Some(500.0), Some(600.0),
+            80.0,
+            0.8,
+            80,
+            25.0,
+            20.0,
+            15.0,
+            10.0,
+            5.0,
+            10.0,
+            0.50,
+            50.0,
+            0.40,
+            0.50,
+            0.90,
+            None,
+            1000.0,
+            2000.0,
+            Some(500.0),
+            Some(600.0),
         );
         ctx.opportunity = Some(opp);
         let rec = sizer.size(&ctx, &test_config());
         // 半Kelly上限25%，所以最大 2500
         assert!(rec.notional <= 2500.0);
-        assert!(rec.notional > 0.0, "Kelly notional should be > 0 with positive edge");
+        assert!(
+            rec.notional > 0.0,
+            "Kelly notional should be > 0 with positive edge"
+        );
         assert_eq!(rec.sizer_kind, PositionSizerKind::Kelly);
     }
 
@@ -358,15 +375,30 @@ mod tests {
         // Kelly: f* = (0.8*0.5 - 0.2)/0.5 = 0.4, half=0.2 → 2000 USDC > 0
         use pm_opportunity::Opportunity;
         let opp = Opportunity::new(
-            "test".into(), "test".into(), "test".into(),
+            "test".into(),
+            "test".into(),
+            "test".into(),
             chrono::Utc::now(),
             pm_opportunity::OpportunityType::Arbitrage,
-            80.0, 0.8, 80,
-            25.0, 20.0, 15.0, 10.0, 5.0, 10.0,
-            0.50, 50.0,
-            0.40, 0.50, 0.90,
-            None, 1000.0, 2000.0,
-            Some(500.0), Some(600.0),
+            80.0,
+            0.8,
+            80,
+            25.0,
+            20.0,
+            15.0,
+            10.0,
+            5.0,
+            10.0,
+            0.50,
+            50.0,
+            0.40,
+            0.50,
+            0.90,
+            None,
+            1000.0,
+            2000.0,
+            Some(500.0),
+            Some(600.0),
         );
         ctx.opportunity = Some(opp);
 
@@ -381,9 +413,21 @@ mod tests {
         for kind in &kinds {
             let sizer = create_sizer(*kind);
             let rec = sizer.size(&ctx, &config);
-            assert!(rec.notional > 0.0, "sizer {:?} returned zero notional", kind);
-            assert!(rec.notional.is_finite(), "sizer {:?} returned non-finite", kind);
-            assert!(!rec.explanation.is_empty(), "sizer {:?} returned empty explanation", kind);
+            assert!(
+                rec.notional > 0.0,
+                "sizer {:?} returned zero notional",
+                kind
+            );
+            assert!(
+                rec.notional.is_finite(),
+                "sizer {:?} returned non-finite",
+                kind
+            );
+            assert!(
+                !rec.explanation.is_empty(),
+                "sizer {:?} returned empty explanation",
+                kind
+            );
             assert_eq!(rec.sizer_kind, *kind);
         }
     }

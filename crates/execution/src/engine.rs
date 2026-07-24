@@ -94,10 +94,7 @@ pub enum ExecEvent {
         filled_quantity: f64,
     },
     /// 过期（零成交超时，整单作废）。
-    Expired {
-        order_id: String,
-        question: String,
-    },
+    Expired { order_id: String, question: String },
     /// 提交即被风控拒绝。
     Rejected {
         question: String,
@@ -462,7 +459,12 @@ impl ExecutionEngine {
 
     /// 提交 BUY 订单。Simulation Only。
     /// 风控顺序：价格合法性 -> 待处理上限 -> 现金充足。
-    pub fn submit_buy(&mut self, question: &str, price: f64, now: DateTime<Local>) -> SubmitOutcome {
+    pub fn submit_buy(
+        &mut self,
+        question: &str,
+        price: f64,
+        now: DateTime<Local>,
+    ) -> SubmitOutcome {
         if !price.is_finite() || price <= 0.0 {
             return self.reject(question, Side::Buy, TerminalReason::InvalidPrice, now);
         }

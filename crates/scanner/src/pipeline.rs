@@ -152,12 +152,18 @@ pub fn print_module_stats_table(stats: &[ModuleStats]) {
     }
     println!("{}", DASH);
     println!();
-    kv("总耗时", &format!("{} 毫秒", ModuleStats::total_duration_ms(stats)));
+    kv(
+        "总耗时",
+        &format!("{} 毫秒", ModuleStats::total_duration_ms(stats)),
+    );
     // 错误 / 警告汇总
     let errors: u64 = stats.iter().map(|s| s.error_count).sum();
     let warnings: u64 = stats.iter().map(|s| s.warning_count).sum();
     if errors > 0 || warnings > 0 {
-        kv("错误 / 警告", &format!("错误 {} · 警告 {}", errors, warnings));
+        kv(
+            "错误 / 警告",
+            &format!("错误 {} · 警告 {}", errors, warnings),
+        );
     }
 }
 
@@ -177,7 +183,10 @@ pub fn print_pipeline_timeline(stats: &[ModuleStats]) {
         }
     }
     println!();
-    kv("总耗时", &format!("{} 毫秒", ModuleStats::total_duration_ms(stats)));
+    kv(
+        "总耗时",
+        &format!("{} 毫秒", ModuleStats::total_duration_ms(stats)),
+    );
 }
 
 #[cfg(test)]
@@ -218,7 +227,11 @@ mod tests {
         assert_eq!(ms.input_count, 5);
         assert_eq!(ms.output_count, 3);
         assert!(ms.success);
-        assert!(ms.duration_ms >= 1, "duration should be >= 1ms, got {}", ms.duration_ms);
+        assert!(
+            ms.duration_ms >= 1,
+            "duration should be >= 1ms, got {}",
+            ms.duration_ms
+        );
         assert_eq!(ms.error_count, 0);
     }
 

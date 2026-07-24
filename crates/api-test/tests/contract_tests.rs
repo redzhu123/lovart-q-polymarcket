@@ -35,7 +35,11 @@ async fn contract_market_detail() {
     let validator = ResponseValidator::new();
 
     let result = pm_api_test::contract::markets::test_market_detail(&client, &validator).await;
-    assert!(result.passed, "Market Detail 合约测试失败: {:?}", result.errors);
+    assert!(
+        result.passed,
+        "Market Detail 合约测试失败: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]
@@ -101,7 +105,11 @@ async fn contract_server_time() {
     let validator = ResponseValidator::new();
 
     let result = pm_api_test::contract::health::test_server_time(&client, &validator).await;
-    assert!(result.passed, "Server Time 合约测试失败: {:?}", result.errors);
+    assert!(
+        result.passed,
+        "Server Time 合约测试失败: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]

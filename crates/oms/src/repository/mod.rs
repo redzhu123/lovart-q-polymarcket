@@ -54,7 +54,11 @@ pub trait OrderRepository: Send + Sync {
     fn list_active(&self) -> anyhow::Result<Vec<Order>>;
 
     /// 按时间范围过滤（created_at ∈ [from, to]）。
-    fn list_in_range(&self, from: DateTime<Local>, to: DateTime<Local>) -> anyhow::Result<Vec<Order>>;
+    fn list_in_range(
+        &self,
+        from: DateTime<Local>,
+        to: DateTime<Local>,
+    ) -> anyhow::Result<Vec<Order>>;
 
     /// 统计总订单数。
     fn count(&self) -> anyhow::Result<u64>;
@@ -129,7 +133,10 @@ impl RepositoryHealth {
                 self.message, "健康", self.order_count, self.event_count
             )
         } else {
-            format!("【异常】{} | 订单 {} | 事件 {}", self.message, self.order_count, self.event_count)
+            format!(
+                "【异常】{} | 订单 {} | 事件 {}",
+                self.message, self.order_count, self.event_count
+            )
         }
     }
 }

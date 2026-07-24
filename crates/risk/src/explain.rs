@@ -90,12 +90,26 @@ impl RiskExplain {
         match self.decision {
             RiskDecision::Accept => format!("✅ 接受 — 风险评分 {:.0}/100", self.score.total),
             RiskDecision::Review => {
-                let reason = self.reasons.first().map(|s| s.as_str()).unwrap_or("需人工审核");
-                format!("⚠️ 需审核 — {} — 风险评分 {:.0}/100", reason, self.score.total)
+                let reason = self
+                    .reasons
+                    .first()
+                    .map(|s| s.as_str())
+                    .unwrap_or("需人工审核");
+                format!(
+                    "⚠️ 需审核 — {} — 风险评分 {:.0}/100",
+                    reason, self.score.total
+                )
             }
             RiskDecision::Reject => {
-                let reason = self.reasons.first().map(|s| s.as_str()).unwrap_or("未通过风险检查");
-                format!("❌ 拒绝 — {} — 风险评分 {:.0}/100", reason, self.score.total)
+                let reason = self
+                    .reasons
+                    .first()
+                    .map(|s| s.as_str())
+                    .unwrap_or("未通过风险检查");
+                format!(
+                    "❌ 拒绝 — {} — 风险评分 {:.0}/100",
+                    reason, self.score.total
+                )
             }
         }
     }
@@ -104,10 +118,10 @@ impl RiskExplain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::score::RiskScore;
-    use chrono::Local;
     use crate::config::RiskConfig;
     use crate::context::RiskContext;
+    use crate::score::RiskScore;
+    use chrono::Local;
 
     #[test]
     fn explain_accept_contains_score() {

@@ -28,7 +28,7 @@ use crate::lifecycle::{CreateOrderInput, Lifecycle, LifecycleContext};
 use crate::matcher::{MatchDecision, MatchResult, Matcher};
 use crate::metrics::{OmsMetrics, OmsMetricsSubscriber};
 use crate::order::Order;
-use crate::recovery::{sync_order, Recovery, RecoveryReport, SyncReport};
+use crate::recovery::{Recovery, RecoveryReport, SyncReport, sync_order};
 use crate::repository::OrderRepository;
 use crate::state_machine::StateMachine;
 use crate::validator::{ValidationContext, ValidationResult, Validator};
@@ -300,7 +300,11 @@ impl Oms {
             repo_health.summary_zh(),
             self.gateway.name(),
             self.gateway.gateway_type(),
-            if self.gateway.live_enabled() { "⚠️ 真实交易" } else { "🔒 模拟交易" },
+            if self.gateway.live_enabled() {
+                "⚠️ 真实交易"
+            } else {
+                "🔒 模拟交易"
+            },
             balance_str,
             self.event_bus.subscriber_count(),
             self.event_bus.published_count(),
@@ -324,7 +328,7 @@ mod tests {
     use crate::order::OrderStatus;
     use pm_core::Side;
     use pm_execution::order::Direction;
-    use pm_gateway::{create_mock_gateway, OrderType, TimeInForce};
+    use pm_gateway::{OrderType, TimeInForce, create_mock_gateway};
 
     fn build_oms() -> Oms {
         let cfg = OmsConfig::default();

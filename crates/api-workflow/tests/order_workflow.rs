@@ -17,7 +17,11 @@ async fn order_lifecycle_dryrun_completes() {
     let mut engine = WorkflowEngine::new(cfg);
     let report = engine.run_full_lifecycle().await;
 
-    assert!(report.success, "订单生命周期应成功: {}", report.summary_zh());
+    assert!(
+        report.success,
+        "订单生命周期应成功: {}",
+        report.summary_zh()
+    );
     assert!(report.validation.passed, "校验应通过");
 }
 
@@ -49,7 +53,10 @@ async fn submitting_order_is_dryrun() {
         .iter()
         .find(|c| c.method == "POST" && c.path == "/order");
     assert!(dryrun_post.is_some(), "「构建订单」应构造 POST /order 请求");
-    assert!(dryrun_post.unwrap().dry_run, "POST /order 必须为 DryRun（未发送）");
+    assert!(
+        dryrun_post.unwrap().dry_run,
+        "POST /order 必须为 DryRun（未发送）"
+    );
 }
 
 #[tokio::test]
@@ -73,7 +80,10 @@ async fn order_status_queried_after_submit() {
         .iter()
         .find(|s| s.step == WorkflowState::SyncOrder)
         .and_then(|s| s.api_calls.iter().find(|c| c.path == "/orders"));
-    assert!(sync_order_call.is_some(), "「同步订单」应发起 GET /orders 调用");
+    assert!(
+        sync_order_call.is_some(),
+        "「同步订单」应发起 GET /orders 调用"
+    );
 }
 
 #[tokio::test]
@@ -88,5 +98,9 @@ async fn no_real_write_operations() {
         .iter()
         .filter(|c| c.is_write() && !c.dry_run)
         .collect();
-    assert!(real_writes.is_empty(), "DryRun 不应发送任何真实写操作: {:?}", real_writes);
+    assert!(
+        real_writes.is_empty(),
+        "DryRun 不应发送任何真实写操作: {:?}",
+        real_writes
+    );
 }

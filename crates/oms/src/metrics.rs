@@ -54,11 +54,17 @@ impl OmsMetrics {
             OrderEvent::OrderPendingSubmit { .. } => {}
             OrderEvent::OrderSubmitted { .. } => self.total_submitted += 1,
             OrderEvent::OrderAccepted { .. } => self.total_accepted += 1,
-            OrderEvent::OrderPartiallyFilled { filled, avg_price, .. } => {
+            OrderEvent::OrderPartiallyFilled {
+                filled, avg_price, ..
+            } => {
                 self.total_partially_filled += 1;
                 self.total_filled_notional += filled * avg_price;
             }
-            OrderEvent::OrderFilled { avg_price, slippage, .. } => {
+            OrderEvent::OrderFilled {
+                avg_price,
+                slippage,
+                ..
+            } => {
                 // 注意：这里不再累加 avg_price，因为没有 filled 字段。
                 // 简化：使用 100 默认估算
                 self.total_filled += 1;
@@ -69,9 +75,7 @@ impl OmsMetrics {
             OrderEvent::OrderExpired { .. } => self.total_expired += 1,
             OrderEvent::ValidationFailed { .. } => self.total_validation_failed += 1,
             OrderEvent::GatewayError { .. } => self.total_gateway_error += 1,
-            OrderEvent::StateTransitionRejected { .. } => {
-                self.total_state_transition_rejected += 1
-            }
+            OrderEvent::StateTransitionRejected { .. } => self.total_state_transition_rejected += 1,
             OrderEvent::RecoveryCompleted { .. } => self.total_recovery_completed += 1,
         }
     }

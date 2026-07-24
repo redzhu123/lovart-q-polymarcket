@@ -133,7 +133,10 @@ impl ValidationResult {
 
         for check in &self.checks {
             let icon = if check.passed { "✅" } else { "❌" };
-            report.push_str(&format!("  {} {}: {}\n", icon, check.check_name, check.detail));
+            report.push_str(&format!(
+                "  {} {}: {}\n",
+                icon, check.check_name, check.detail
+            ));
         }
 
         if !self.errors.is_empty() {
@@ -159,7 +162,11 @@ impl ValidationResult {
         report.push_str(&format!(
             "总耗时: {}ms | 结果: {}\n",
             self.latency_ms,
-            if self.passed { "✅ 通过" } else { "❌ 失败" },
+            if self.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            },
         ));
         report.push_str(&format!(
             "═══════════════════════════════════════════════════════════\n"
@@ -253,10 +260,7 @@ impl ResponseValidator {
         expected: u16,
     ) {
         let passed = response.status == expected;
-        let detail = format!(
-            "期望 {} → 实际 {}",
-            expected, response.status,
-        );
+        let detail = format!("期望 {} → 实际 {}", expected, response.status,);
 
         if passed {
             tracing::info!("    ✅ HTTP 状态: {}", detail);
@@ -326,13 +330,13 @@ impl ResponseValidator {
         let schema_result = self.schema_validator.validate(schema_name, body);
 
         if schema_result.passed {
-            tracing::info!(
-                "    ✅ Schema: 通过 ({}ms)",
-                schema_result.duration_ms
-            );
+            tracing::info!("    ✅ Schema: 通过 ({}ms)", schema_result.duration_ms);
             result.add_check(CheckResult::pass(
                 "Schema",
-                &format!("符合 {}.schema.json ({}ms)", schema_name, schema_result.duration_ms),
+                &format!(
+                    "符合 {}.schema.json ({}ms)",
+                    schema_name, schema_result.duration_ms
+                ),
             ));
         } else {
             let detail = format!("{} 个错误", schema_result.errors.len());
@@ -368,7 +372,12 @@ impl ResponseValidator {
             tracing::warn!("    ❌ 字段: {}/{} 通过", passed_count, total);
             result.add_check(CheckResult::fail(
                 "字段",
-                &format!("{}/{} 通过，{} 个失败", passed_count, total, total - passed_count),
+                &format!(
+                    "{}/{} 通过，{} 个失败",
+                    passed_count,
+                    total,
+                    total - passed_count
+                ),
             ));
         }
 
@@ -467,10 +476,7 @@ mod tests {
     #[test]
     fn validate_success_response() {
         let validator = ResponseValidator::new();
-        let resp = mock_response(
-            200,
-            serde_json::json!({"timestamp": 1712345678}),
-        );
+        let resp = mock_response(200, serde_json::json!({"timestamp": 1712345678}));
         let result = validator.validate(
             "Time",
             &resp,
@@ -485,10 +491,7 @@ mod tests {
     #[test]
     fn validate_wrong_status_fails() {
         let validator = ResponseValidator::new();
-        let resp = mock_response(
-            500,
-            serde_json::json!({"timestamp": 1712345678}),
-        );
+        let resp = mock_response(500, serde_json::json!({"timestamp": 1712345678}));
         let result = validator.validate(
             "Time",
             &resp,

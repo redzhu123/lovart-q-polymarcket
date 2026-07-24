@@ -165,10 +165,10 @@ mod tests {
     #[test]
     fn validate_many_counts() {
         let markets = vec![
-            um("1", "Q1", Some(0.4), Some(0.5)),    // valid
-            um("2", "", Some(0.4), Some(0.5)),      // invalid: empty question
-            um("3", "Q3", Some(2.0), Some(0.5)),    // invalid: price range
-            um("4", "Q4", Some(0.4), Some(0.5)),    // valid
+            um("1", "Q1", Some(0.4), Some(0.5)), // valid
+            um("2", "", Some(0.4), Some(0.5)),   // invalid: empty question
+            um("3", "Q3", Some(2.0), Some(0.5)), // invalid: price range
+            um("4", "Q4", Some(0.4), Some(0.5)), // valid
         ];
         let r = Validator::validate_many(&markets);
         assert_eq!(r.total, 4);

@@ -162,7 +162,10 @@ impl OpportunityStatus {
 
     /// 是否处于终态（不再参与活跃队列）。
     pub fn is_terminal(&self) -> bool {
-        matches!(self, OpportunityStatus::Expired | OpportunityStatus::Removed)
+        matches!(
+            self,
+            OpportunityStatus::Expired | OpportunityStatus::Removed
+        )
     }
 }
 
@@ -445,13 +448,22 @@ mod tests {
             85.0,
             0.9,
             80,
-            25.0, 20.0, 15.0, 10.0, 5.0, 10.0,
+            25.0,
+            20.0,
+            15.0,
+            10.0,
+            5.0,
+            10.0,
             0.05,
             5.0,
-            0.40, 0.50, 0.90,
+            0.40,
+            0.50,
+            0.90,
             Some(0.10),
-            1000.0, 2000.0,
-            Some(500.0), Some(600.0),
+            1000.0,
+            2000.0,
+            Some(500.0),
+            Some(600.0),
         );
         assert_eq!(opp.status, OpportunityStatus::Created);
         assert_eq!(opp.version, 1);

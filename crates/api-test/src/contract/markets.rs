@@ -9,10 +9,7 @@ use crate::validator::response::{ResponseValidator, ValidationResult};
 use serde_json::Value;
 
 /// 市场列表合约测试。
-pub async fn test_markets(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> ValidationResult {
+pub async fn test_markets(client: &ApiClient, validator: &ResponseValidator) -> ValidationResult {
     let contract = ContractTest::new(
         "市场列表",
         HttpMethod::Get,
@@ -26,15 +23,13 @@ pub async fn test_markets(
     let response = client.get(&contract.path).await;
 
     match response {
-        Ok(resp) => {
-            validator.validate(
-                &contract.name,
-                &resp,
-                &contract.schema_name,
-                contract.expected_status,
-                Some(|body: &Value| validate_markets_fields(body)),
-            )
-        }
+        Ok(resp) => validator.validate(
+            &contract.name,
+            &resp,
+            &contract.schema_name,
+            contract.expected_status,
+            Some(|body: &Value| validate_markets_fields(body)),
+        ),
         Err(e) => {
             let mut result = ValidationResult::new(&contract.name);
             result.add_error(&format!("请求失败: {}", e));
@@ -60,15 +55,13 @@ pub async fn test_market_detail(
     let response = client.get(&contract.path).await;
 
     match response {
-        Ok(resp) => {
-            validator.validate(
-                &contract.name,
-                &resp,
-                &contract.schema_name,
-                contract.expected_status,
-                Some(|body: &Value| validate_market_detail_fields(body)),
-            )
-        }
+        Ok(resp) => validator.validate(
+            &contract.name,
+            &resp,
+            &contract.schema_name,
+            contract.expected_status,
+            Some(|body: &Value| validate_market_detail_fields(body)),
+        ),
         Err(e) => {
             let mut result = ValidationResult::new(&contract.name);
             result.add_error(&format!("请求失败: {}", e));
@@ -169,7 +162,11 @@ mod tests {
         let validator = ResponseValidator::new();
 
         let result = test_markets(&client, &validator).await;
-        assert!(result.passed, "Markets contract test failed: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Markets contract test failed: {:?}",
+            result.errors
+        );
     }
 
     #[tokio::test]
@@ -179,6 +176,10 @@ mod tests {
         let validator = ResponseValidator::new();
 
         let result = test_market_detail(&client, &validator).await;
-        assert!(result.passed, "Market detail test failed: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Market detail test failed: {:?}",
+            result.errors
+        );
     }
 }

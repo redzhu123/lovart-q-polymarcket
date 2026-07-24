@@ -17,12 +17,12 @@ use crate::config::RiskConfig;
 use crate::context::RiskContext;
 use crate::events::{RiskEvent, RiskEventCollector, RiskEventKind};
 use crate::explain::RiskExplain;
-use crate::position_sizer::{create_sizer, PositionSizer};
 use crate::portfolio_risk::PortfolioRiskReport;
+use crate::position_sizer::{PositionSizer, create_sizer};
 use crate::rules::{
     ConsecutiveLossRule, DailyLossRule, DrawdownRule, ExposureLimitRule, LiquidityRule,
-    MaxOrderCountRule, MaxPositionCountRule, MaxSingleCapitalRule, PositionSizeLimitRule,
-    RiskRule, RuleResult, SlippageRule, VolatilityRule,
+    MaxOrderCountRule, MaxPositionCountRule, MaxSingleCapitalRule, PositionSizeLimitRule, RiskRule,
+    RuleResult, SlippageRule, VolatilityRule,
 };
 use crate::score::RiskScore;
 
@@ -259,18 +259,16 @@ impl RiskEngine {
         match decision {
             RiskDecision::Reject => {
                 if score.total < self.config.review_threshold {
-                    explain.add_suggestion(
-                        "风险评分过低，建议等待市场条件改善后再尝试".to_string(),
-                    );
+                    explain
+                        .add_suggestion("风险评分过低，建议等待市场条件改善后再尝试".to_string());
                 }
                 explain.add_suggestion(
                     "检查各项风险指标，调整仓位规模或选择更低风险的机会".to_string(),
                 );
             }
             RiskDecision::Review => {
-                explain.add_suggestion(
-                    "部分风险指标接近上限，建议人工审核确认后手动放行".to_string(),
-                );
+                explain
+                    .add_suggestion("部分风险指标接近上限，建议人工审核确认后手动放行".to_string());
             }
             RiskDecision::Accept => {
                 // 通过时无需额外建议
@@ -366,8 +364,7 @@ impl RiskEngine {
             "最大单笔资金占用" => RiskEventKind::CapitalUsageWarning,
             _ => RiskEventKind::RiskReview,
         };
-        RiskEvent::new(kind, format!("{}: {}", rule_name, msg))
-            .with_market(&suggestion.market_id)
+        RiskEvent::new(kind, format!("{}: {}", rule_name, msg)).with_market(&suggestion.market_id)
     }
 
     // ---- 仪表盘 ----
@@ -430,7 +427,14 @@ mod tests {
     }
 
     fn test_suggestion() -> TradeSuggestion {
-        TradeSuggestion::new("test-market", "测试问题", pm_core::Side::Buy, 0.5, 100.0, "DefaultStrategy")
+        TradeSuggestion::new(
+            "test-market",
+            "测试问题",
+            pm_core::Side::Buy,
+            0.5,
+            100.0,
+            "DefaultStrategy",
+        )
     }
 
     #[test]

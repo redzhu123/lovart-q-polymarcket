@@ -74,7 +74,10 @@ mod tests {
 
     #[test]
     fn mask_passphrase_hides_all() {
-        assert_eq!(mask_passphrase("correct horse battery staple"), "[PASSPHRASE]");
+        assert_eq!(
+            mask_passphrase("correct horse battery staple"),
+            "[PASSPHRASE]"
+        );
     }
 
     #[test]

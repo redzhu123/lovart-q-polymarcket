@@ -116,7 +116,11 @@ impl RiskReplay {
     pub fn report_zh(&self) -> String {
         let total = self.records.len();
         let accepted = self.records.iter().filter(|r| r.decision == "接受").count();
-        let reviewed = self.records.iter().filter(|r| r.decision == "需审核").count();
+        let reviewed = self
+            .records
+            .iter()
+            .filter(|r| r.decision == "需审核")
+            .count();
         let rejected = self.records.iter().filter(|r| r.decision == "拒绝").count();
 
         let avg_score = if total > 0 {
@@ -129,21 +133,52 @@ impl RiskReplay {
         lines.push("【风险回放报告】".to_string());
         lines.push(String::new());
         lines.push(format!("  总评估次数：  {}", total));
-        lines.push(format!("  接受：        {}（{:.0}%）", accepted, if total > 0 { accepted as f64 / total as f64 * 100.0 } else { 0.0 }));
-        lines.push(format!("  需审核：      {}（{:.0}%）", reviewed, if total > 0 { reviewed as f64 / total as f64 * 100.0 } else { 0.0 }));
-        lines.push(format!("  拒绝：        {}（{:.0}%）", rejected, if total > 0 { rejected as f64 / total as f64 * 100.0 } else { 0.0 }));
+        lines.push(format!(
+            "  接受：        {}（{:.0}%）",
+            accepted,
+            if total > 0 {
+                accepted as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            }
+        ));
+        lines.push(format!(
+            "  需审核：      {}（{:.0}%）",
+            reviewed,
+            if total > 0 {
+                reviewed as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            }
+        ));
+        lines.push(format!(
+            "  拒绝：        {}（{:.0}%）",
+            rejected,
+            if total > 0 {
+                rejected as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            }
+        ));
         lines.push(format!("  平均风险评分：{:.0}/100", avg_score));
         lines.push(String::new());
 
         // Top 5 最高风险评分
         if total > 0 {
             let mut sorted: Vec<_> = self.records.clone();
-            sorted.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap_or(std::cmp::Ordering::Equal));
+            sorted.sort_by(|a, b| {
+                b.risk_score
+                    .partial_cmp(&a.risk_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             lines.push("  Top 5 最低风险：".to_string());
             for r in sorted.iter().take(5) {
                 lines.push(format!(
                     "    {} | {} | 评分 {:.0} | {}",
-                    r.time, r.question.chars().take(25).collect::<String>(), r.risk_score, r.decision
+                    r.time,
+                    r.question.chars().take(25).collect::<String>(),
+                    r.risk_score,
+                    r.decision
                 ));
             }
             lines.push(String::new());
@@ -154,7 +189,10 @@ impl RiskReplay {
             for r in sorted.iter().take(5) {
                 lines.push(format!(
                     "    {} | {} | 评分 {:.0} | {}",
-                    r.time, r.question.chars().take(25).collect::<String>(), r.risk_score, r.decision
+                    r.time,
+                    r.question.chars().take(25).collect::<String>(),
+                    r.risk_score,
+                    r.decision
                 ));
             }
         }

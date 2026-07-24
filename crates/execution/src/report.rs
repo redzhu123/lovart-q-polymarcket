@@ -133,10 +133,7 @@ impl ExecutionReport {
         let avg_fill_rate = pm_utils::mean(&fill_rates);
 
         // 平均重试次数
-        let retries: Vec<f64> = orders
-            .iter()
-            .map(|o| o.retry_count as f64)
-            .collect();
+        let retries: Vec<f64> = orders.iter().map(|o| o.retry_count as f64).collect();
         let avg_retries = pm_utils::mean(&retries);
 
         Self {
@@ -198,9 +195,15 @@ impl ExecutionReport {
         println!();
         println!("  成功率       : {}", pm_utils::fmt_pct(self.success_rate));
         println!("  失败率       : {}", pm_utils::fmt_pct(self.failure_rate));
-        println!("  拒绝率       : {}", pm_utils::fmt_pct(self.rejection_rate));
+        println!(
+            "  拒绝率       : {}",
+            pm_utils::fmt_pct(self.rejection_rate)
+        );
         println!("  取消率       : {}", pm_utils::fmt_pct(self.cancel_rate));
-        println!("  部分成交率   : {}", pm_utils::fmt_pct(self.partial_fill_rate));
+        println!(
+            "  部分成交率   : {}",
+            pm_utils::fmt_pct(self.partial_fill_rate)
+        );
         println!();
         println!("── 平均指标 ──");
         println!();
@@ -254,10 +257,18 @@ mod tests {
     fn make_order(id: &str, status: OrderStatus, filled: f64, qty: f64) -> Order {
         let now = Local::now();
         let mut o = Order::new(
-            id.into(), format!("C-{}", id), "mkt-1".into(), "mock".into(),
-            Direction::Yes, Side::Buy,
-            0.45, qty,
-            "S1".into(), "R1".into(), "O1".into(), now,
+            id.into(),
+            format!("C-{}", id),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            Side::Buy,
+            0.45,
+            qty,
+            "S1".into(),
+            "R1".into(),
+            "O1".into(),
+            now,
         );
         // 直接设置状态（跳过 transition 验证）
         o.status = status;

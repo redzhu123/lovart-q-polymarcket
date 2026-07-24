@@ -10,10 +10,7 @@ use crate::client::http::ApiClient;
 use crate::validator::response::{CheckResult, ResponseValidator, ValidationResult};
 
 /// 无认证请求测试 — 期望返回 401 或有限数据。
-pub async fn test_no_auth(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> ValidationResult {
+pub async fn test_no_auth(client: &ApiClient, validator: &ResponseValidator) -> ValidationResult {
     let mut result = ValidationResult::new("认证-无认证");
 
     tracing::info!("【认证测试】无认证请求 → 期望 401");
@@ -24,10 +21,7 @@ pub async fn test_no_auth(
         Ok(resp) => {
             // 无认证时应该返回 401
             if resp.status == 401 {
-                result.add_check(CheckResult::pass(
-                    "无认证",
-                    "正确返回 401 Unauthorized",
-                ));
+                result.add_check(CheckResult::pass("无认证", "正确返回 401 Unauthorized"));
                 tracing::info!("    ✅ 无认证请求正确返回 401");
             } else if resp.status == 200 {
                 result.add_check(CheckResult::pass(
@@ -76,7 +70,11 @@ pub async fn test_api_key_auth(
                 &format!(
                     "HTTP {} {}",
                     resp.status,
-                    if passed { "认证成功" } else { "认证失败" }
+                    if passed {
+                        "认证成功"
+                    } else {
+                        "认证失败"
+                    }
                 ),
             ));
             result.latency_ms = resp.latency_ms;
@@ -107,11 +105,7 @@ pub async fn test_auth_suite(
     // 打印汇总
     let passed = results.iter().filter(|r| r.passed).count();
     let total = results.len();
-    tracing::info!(
-        "【认证测试汇总】{}/{} 通过",
-        passed,
-        total,
-    );
+    tracing::info!("【认证测试汇总】{}/{} 通过", passed, total,);
 
     results
 }

@@ -143,11 +143,7 @@ impl WsTestManager {
         ];
 
         let passed = results.iter().filter(|r| r.passed).count();
-        tracing::info!(
-            "【WebSocket 测试汇总】{}/{} 通过",
-            passed,
-            results.len(),
-        );
+        tracing::info!("【WebSocket 测试汇总】{}/{} 通过", passed, results.len(),);
 
         results
     }
@@ -194,7 +190,10 @@ impl WsTestManager {
         });
 
         let msg = tokio_tungstenite::tungstenite::Message::Text(subscribe_msg.to_string().into());
-        write.send(msg).await.map_err(|e| format!("发送订阅失败: {}", e))?;
+        write
+            .send(msg)
+            .await
+            .map_err(|e| format!("发送订阅失败: {}", e))?;
 
         tracing::info!("已发送订阅消息");
 

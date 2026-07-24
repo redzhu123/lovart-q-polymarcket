@@ -113,28 +113,72 @@ pub struct GatewayConfig {
 
 // ---- 默认值函数 ----
 
-fn default_gateway_type() -> String { "mock".into() }
-fn default_polymarket_api_url() -> String { "https://clob.polymarket.com".into() }
-fn default_polymarket_ws_url() -> String { "wss://ws.polymarket.com".into() }
-fn default_api_key_env() -> String { "POLYMARKET_API_KEY".into() }
-fn default_api_secret_env() -> String { "POLYMARKET_API_SECRET".into() }
-fn default_api_passphrase_env() -> String { "POLYMARKET_API_PASSPHRASE".into() }
-fn default_max_retries() -> u32 { 3 }
-fn default_retry_base_ms() -> u64 { 500 }
-fn default_retry_max_ms() -> u64 { 15000 }
-fn default_backoff_multiplier() -> f64 { 2.0 }
-fn default_cb_failure_threshold() -> u32 { 5 }
-fn default_cb_recovery_timeout_ms() -> u64 { 30000 }
-fn default_cb_half_open_max() -> u32 { 3 }
-fn default_rate_limit_per_sec() -> u32 { 10 }
-fn default_rate_limit_per_min() -> u32 { 300 }
-fn default_health_check_interval_secs() -> u64 { 30 }
-fn default_api_timeout_ms() -> u64 { 10000 }
-fn default_order_sync_interval_secs() -> u64 { 5 }
-fn default_balance_sync_interval_secs() -> u64 { 30 }
-fn default_position_sync_interval_secs() -> u64 { 15 }
-fn default_gateway_metrics_csv() -> String { "data/gateway_metrics.csv".into() }
-fn default_gateway_health_csv() -> String { "data/gateway_health.csv".into() }
+fn default_gateway_type() -> String {
+    "mock".into()
+}
+fn default_polymarket_api_url() -> String {
+    "https://clob.polymarket.com".into()
+}
+fn default_polymarket_ws_url() -> String {
+    "wss://ws.polymarket.com".into()
+}
+fn default_api_key_env() -> String {
+    "POLYMARKET_API_KEY".into()
+}
+fn default_api_secret_env() -> String {
+    "POLYMARKET_API_SECRET".into()
+}
+fn default_api_passphrase_env() -> String {
+    "POLYMARKET_API_PASSPHRASE".into()
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_retry_base_ms() -> u64 {
+    500
+}
+fn default_retry_max_ms() -> u64 {
+    15000
+}
+fn default_backoff_multiplier() -> f64 {
+    2.0
+}
+fn default_cb_failure_threshold() -> u32 {
+    5
+}
+fn default_cb_recovery_timeout_ms() -> u64 {
+    30000
+}
+fn default_cb_half_open_max() -> u32 {
+    3
+}
+fn default_rate_limit_per_sec() -> u32 {
+    10
+}
+fn default_rate_limit_per_min() -> u32 {
+    300
+}
+fn default_health_check_interval_secs() -> u64 {
+    30
+}
+fn default_api_timeout_ms() -> u64 {
+    10000
+}
+fn default_order_sync_interval_secs() -> u64 {
+    5
+}
+fn default_balance_sync_interval_secs() -> u64 {
+    30
+}
+fn default_position_sync_interval_secs() -> u64 {
+    15
+}
+fn default_gateway_metrics_csv() -> String {
+    "data/gateway_metrics.csv".into()
+}
+fn default_gateway_health_csv() -> String {
+    "data/gateway_health.csv".into()
+}
 
 impl Default for GatewayConfig {
     fn default() -> Self {

@@ -78,10 +78,11 @@ impl PaperTradingEngine {
         now: DateTime<Local>,
     ) -> OpenOutcome {
         // 风控闸
-        if let Err(r) = self
-            .risk
-            .check_open_position(entry_price, self.portfolio.available_cash, self.open_questions.len())
-        {
+        if let Err(r) = self.risk.check_open_position(
+            entry_price,
+            self.portfolio.available_cash,
+            self.open_questions.len(),
+        ) {
             return OpenOutcome::Rejected(r);
         }
         // 单笔固定成本 = 风控策略的 max_position_size；quantity = size / price

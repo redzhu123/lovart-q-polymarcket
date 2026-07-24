@@ -446,10 +446,7 @@ pub enum RetryError {
 
     /// 断路器打开。
     #[error("操作 '{operation}' 被断路器拦截（第 {attempt} 次尝试）")]
-    CircuitOpen {
-        operation: String,
-        attempt: u32,
-    },
+    CircuitOpen { operation: String, attempt: u32 },
 }
 
 // ============================================================================
@@ -469,10 +466,10 @@ mod tests {
         let d2 = b.next_delay_ms();
         let d3 = b.next_delay_ms();
 
-        assert_eq!(d0, 100);  // 100 * 2^0
-        assert_eq!(d1, 200);  // 100 * 2^1
-        assert_eq!(d2, 400);  // 100 * 2^2
-        assert_eq!(d3, 800);  // 100 * 2^3
+        assert_eq!(d0, 100); // 100 * 2^0
+        assert_eq!(d1, 200); // 100 * 2^1
+        assert_eq!(d2, 400); // 100 * 2^2
+        assert_eq!(d3, 800); // 100 * 2^3
     }
 
     #[test]

@@ -102,15 +102,13 @@ impl ContractTest {
         };
 
         match response {
-            Ok(resp) => {
-                validator.validate(
-                    &self.name,
-                    &resp,
-                    &self.schema_name,
-                    self.expected_status,
-                    None::<fn(&Value) -> Vec<crate::validator::field::FieldCheckResult>>,
-                )
-            }
+            Ok(resp) => validator.validate(
+                &self.name,
+                &resp,
+                &self.schema_name,
+                self.expected_status,
+                None::<fn(&Value) -> Vec<crate::validator::field::FieldCheckResult>>,
+            ),
             Err(e) => {
                 let mut result = ValidationResult::new(&self.name);
                 result.add_error(&format!("请求失败: {}", e));
@@ -149,15 +147,13 @@ impl ContractTest {
         };
 
         match response {
-            Ok(resp) => {
-                validator.validate(
-                    &self.name,
-                    &resp,
-                    &self.schema_name,
-                    self.expected_status,
-                    None::<fn(&Value) -> Vec<crate::validator::field::FieldCheckResult>>,
-                )
-            }
+            Ok(resp) => validator.validate(
+                &self.name,
+                &resp,
+                &self.schema_name,
+                self.expected_status,
+                None::<fn(&Value) -> Vec<crate::validator::field::FieldCheckResult>>,
+            ),
             Err(e) => {
                 let mut result = ValidationResult::new(&self.name);
                 result.add_error(&format!("Live 请求失败: {}", e));

@@ -97,57 +97,75 @@ impl StateMachine {
         let mut transitions: HashMap<OrderStatus, Vec<OrderStatus>> = HashMap::new();
 
         // Created → Validated | PendingSubmit | Cancelled | Rejected | Expired
-        transitions.insert(OrderStatus::Created, vec![
-            OrderStatus::Validated,
-            OrderStatus::PendingSubmit,
-            OrderStatus::Cancelled,
-            OrderStatus::Rejected,
-            OrderStatus::Expired,
-        ]);
+        transitions.insert(
+            OrderStatus::Created,
+            vec![
+                OrderStatus::Validated,
+                OrderStatus::PendingSubmit,
+                OrderStatus::Cancelled,
+                OrderStatus::Rejected,
+                OrderStatus::Expired,
+            ],
+        );
 
         // Validated → PendingSubmit | Cancelled | Rejected | Expired
-        transitions.insert(OrderStatus::Validated, vec![
-            OrderStatus::PendingSubmit,
-            OrderStatus::Cancelled,
-            OrderStatus::Rejected,
-            OrderStatus::Expired,
-        ]);
+        transitions.insert(
+            OrderStatus::Validated,
+            vec![
+                OrderStatus::PendingSubmit,
+                OrderStatus::Cancelled,
+                OrderStatus::Rejected,
+                OrderStatus::Expired,
+            ],
+        );
 
         // PendingSubmit → Submitted | Cancelled | Rejected | Expired
-        transitions.insert(OrderStatus::PendingSubmit, vec![
-            OrderStatus::Submitted,
-            OrderStatus::Cancelled,
-            OrderStatus::Rejected,
-            OrderStatus::Expired,
-        ]);
+        transitions.insert(
+            OrderStatus::PendingSubmit,
+            vec![
+                OrderStatus::Submitted,
+                OrderStatus::Cancelled,
+                OrderStatus::Rejected,
+                OrderStatus::Expired,
+            ],
+        );
 
         // Submitted → Accepted | PartiallyFilled | Filled | Cancelled | Rejected | Expired
-        transitions.insert(OrderStatus::Submitted, vec![
-            OrderStatus::Accepted,
-            OrderStatus::PartiallyFilled,
-            OrderStatus::Filled,
-            OrderStatus::Cancelled,
-            OrderStatus::Rejected,
-            OrderStatus::Expired,
-        ]);
+        transitions.insert(
+            OrderStatus::Submitted,
+            vec![
+                OrderStatus::Accepted,
+                OrderStatus::PartiallyFilled,
+                OrderStatus::Filled,
+                OrderStatus::Cancelled,
+                OrderStatus::Rejected,
+                OrderStatus::Expired,
+            ],
+        );
 
         // Accepted → PartiallyFilled | Filled | Cancelled | Rejected | Expired
-        transitions.insert(OrderStatus::Accepted, vec![
-            OrderStatus::PartiallyFilled,
-            OrderStatus::Filled,
-            OrderStatus::Cancelled,
-            OrderStatus::Rejected,
-            OrderStatus::Expired,
-        ]);
+        transitions.insert(
+            OrderStatus::Accepted,
+            vec![
+                OrderStatus::PartiallyFilled,
+                OrderStatus::Filled,
+                OrderStatus::Cancelled,
+                OrderStatus::Rejected,
+                OrderStatus::Expired,
+            ],
+        );
 
         // PartiallyFilled → Filled | PartiallyFilled | Cancelled | Rejected | Expired
-        transitions.insert(OrderStatus::PartiallyFilled, vec![
+        transitions.insert(
             OrderStatus::PartiallyFilled,
-            OrderStatus::Filled,
-            OrderStatus::Cancelled,
-            OrderStatus::Rejected,
-            OrderStatus::Expired,
-        ]);
+            vec![
+                OrderStatus::PartiallyFilled,
+                OrderStatus::Filled,
+                OrderStatus::Cancelled,
+                OrderStatus::Rejected,
+                OrderStatus::Expired,
+            ],
+        );
 
         // 终态：Filled / Cancelled / Rejected / Expired → 无转移
         // Completed：聚合态，运行时无转移
@@ -299,13 +317,21 @@ impl StateMachine {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum TransitionError {
     #[error("从终态转移被拒绝：{message}")]
-    FromTerminal { message: String, from: OrderStatus, to: OrderStatus },
+    FromTerminal {
+        message: String,
+        from: OrderStatus,
+        to: OrderStatus,
+    },
 
     #[error("不允许自转：{message}")]
     SameState { message: String, state: OrderStatus },
 
     #[error("转移路径不在白名单：{message}")]
-    NotAllowed { message: String, from: OrderStatus, to: OrderStatus },
+    NotAllowed {
+        message: String,
+        from: OrderStatus,
+        to: OrderStatus,
+    },
 }
 
 impl TransitionError {
@@ -375,9 +401,10 @@ mod tests {
     #[test]
     fn partial_filled_self_loop_allowed() {
         let sm = StateMachine::new();
-        assert!(sm
-            .validate_transition(OrderStatus::PartiallyFilled, OrderStatus::PartiallyFilled)
-            .is_ok());
+        assert!(
+            sm.validate_transition(OrderStatus::PartiallyFilled, OrderStatus::PartiallyFilled)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -401,7 +428,12 @@ mod tests {
         ] {
             for t in &targets {
                 let result = sm.validate_transition(terminal, *t);
-                assert!(result.is_err(), "{:?} → {:?} should be rejected", terminal, t);
+                assert!(
+                    result.is_err(),
+                    "{:?} → {:?} should be rejected",
+                    terminal,
+                    t
+                );
             }
         }
     }
@@ -410,13 +442,15 @@ mod tests {
     fn illegal_skip_transitions_rejected() {
         let sm = StateMachine::new();
         // 跳过 Validated 直接进入 Submitted：非法
-        assert!(sm
-            .validate_transition(OrderStatus::Created, OrderStatus::Submitted)
-            .is_err());
+        assert!(
+            sm.validate_transition(OrderStatus::Created, OrderStatus::Submitted)
+                .is_err()
+        );
         // Validated 跳到 Accepted：非法
-        assert!(sm
-            .validate_transition(OrderStatus::Validated, OrderStatus::Accepted)
-            .is_err());
+        assert!(
+            sm.validate_transition(OrderStatus::Validated, OrderStatus::Accepted)
+                .is_err()
+        );
     }
 
     #[test]
@@ -473,7 +507,11 @@ mod tests {
             .validate_transition(OrderStatus::Created, OrderStatus::Submitted)
             .unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("白名单") || msg.contains("不允许"), "got: {}", msg);
+        assert!(
+            msg.contains("白名单") || msg.contains("不允许"),
+            "got: {}",
+            msg
+        );
 
         let err = sm
             .validate_transition(OrderStatus::Filled, OrderStatus::Created)

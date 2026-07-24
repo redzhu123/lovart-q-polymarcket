@@ -76,17 +76,19 @@ pub mod prelude {
     pub use crate::api::{Oms, OmsConfig};
     pub use crate::create_csv_oms;
     pub use crate::create_default_oms;
-    pub use crate::events::{event_to_csv_row, EventBus, OrderEvent, Subscriber, OMS_EVENTS_HEADER};
+    pub use crate::events::{
+        EventBus, OMS_EVENTS_HEADER, OrderEvent, Subscriber, event_to_csv_row,
+    };
     pub use crate::lifecycle::{CreateOrderInput, Lifecycle, LifecycleContext};
     pub use crate::matcher::{MatchDecision, MatchResult, Matcher};
     pub use crate::metrics::{OmsMetrics, OmsMetricsSubscriber};
     pub use crate::order::{Order, OrderStatus, StatusChange};
-    pub use crate::recovery::{sync_order, Recovery, RecoveryReport, SyncReport};
+    pub use crate::recovery::{Recovery, RecoveryReport, SyncReport, sync_order};
     pub use crate::repository::csv::CsvRepository;
     pub use crate::repository::memory::InMemoryRepository;
     pub use crate::repository::sqlite::SqliteRepository;
     pub use crate::repository::{
-        create_repository, OrderRepository, RepositoryHealth, RepositoryType,
+        OrderRepository, RepositoryHealth, RepositoryType, create_repository,
     };
     pub use crate::state_machine::{StateMachine, StateTransition, TransitionError};
     pub use crate::validator::{
@@ -132,8 +134,7 @@ pub fn create_csv_oms(
 /// 初始化 OMS 中文 tracing。
 pub fn init_logging(level: &str) {
     use tracing_subscriber::EnvFilter;
-    let filter = EnvFilter::try_from_env("PM_OMS_LOG")
-        .unwrap_or_else(|_| EnvFilter::new(level));
+    let filter = EnvFilter::try_from_env("PM_OMS_LOG").unwrap_or_else(|_| EnvFilter::new(level));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)

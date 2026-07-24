@@ -10,9 +10,9 @@
 //! 机会文件读取复用 `pm-storage::load_sorted_opportunities`，避免重复实现。
 
 pub mod backtest;
-pub mod report;
 pub mod replay;
+pub mod report;
 
 pub use backtest::run_backtest;
-pub use report::BacktestReport;
 pub use replay::run_replay;
+pub use report::BacktestReport;

@@ -50,7 +50,11 @@ impl HealthChecker {
     }
 
     /// 执行健康检查。
-    pub async fn check(&mut self, gateway: &dyn ExchangeGateway, now: DateTime<Local>) -> HealthReport {
+    pub async fn check(
+        &mut self,
+        gateway: &dyn ExchangeGateway,
+        now: DateTime<Local>,
+    ) -> HealthReport {
         self.total_checks += 1;
 
         // 1. Ping
@@ -153,10 +157,22 @@ pub struct HealthReport {
 impl HealthReport {
     /// 中文报告。
     pub fn report_zh(&self) -> String {
-        let overall = if self.healthy { "✅ 健康" } else { "❌ 异常" };
-        let live = if self.live_enabled { "⚠️ 真实交易" } else { "🔒 模拟交易" };
+        let overall = if self.healthy {
+            "✅ 健康"
+        } else {
+            "❌ 异常"
+        };
+        let live = if self.live_enabled {
+            "⚠️ 真实交易"
+        } else {
+            "🔒 模拟交易"
+        };
         let ping = if self.ping_ok { "✅" } else { "❌" };
-        let ws = if self.ws_connected { "✅ 已连接" } else { "❌ 未连接" };
+        let ws = if self.ws_connected {
+            "✅ 已连接"
+        } else {
+            "❌ 未连接"
+        };
         let balance = if self.balance_ok { "✅" } else { "❌" };
 
         format!(

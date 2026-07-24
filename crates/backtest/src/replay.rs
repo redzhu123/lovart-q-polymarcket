@@ -27,15 +27,16 @@ pub async fn run_replay(cfg: &Config) -> Result<()> {
     let speed = cfg.replay.speed.max(1);
 
     println!();
-    println!("Loaded {} opportunities from {}", opps.len(), cfg.paths.opportunities_csv);
+    println!(
+        "Loaded {} opportunities from {}",
+        opps.len(),
+        cfg.paths.opportunities_csv
+    );
     println!("Replay speed: {}x", speed);
     println!();
 
     // 数据非空，first / max 必有值；用 context 兜底避免 unwrap
-    let t_start = opps
-        .first()
-        .map(|o| o.start_time)
-        .context("回放数据为空")?;
+    let t_start = opps.first().map(|o| o.start_time).context("回放数据为空")?;
     let t_end = opps
         .iter()
         .map(|o| o.end_time)
@@ -126,8 +127,7 @@ pub async fn run_replay(cfg: &Config) -> Result<()> {
         t += chrono::Duration::seconds(step_secs as i64);
 
         // 按倍率 sleep：1x 睡 step_secs，Nx 睡 step_secs/N
-        let sleep_dur =
-            Duration::from_secs_f64(step_secs as f64 / speed as f64);
+        let sleep_dur = Duration::from_secs_f64(step_secs as f64 / speed as f64);
         tokio::time::sleep(sleep_dur).await;
     }
 

@@ -187,10 +187,7 @@ impl ValidationRule for PositionLimitRule {
         use pm_core::Side;
         if order.side == Side::Buy && ctx.open_positions >= ctx.max_positions {
             return ValidationResult::Reject {
-                reason: format!(
-                    "持仓已满: {}/{}",
-                    ctx.open_positions, ctx.max_positions
-                ),
+                reason: format!("持仓已满: {}/{}", ctx.open_positions, ctx.max_positions),
             };
         }
         ValidationResult::Pass
@@ -266,9 +263,7 @@ pub struct ExecutionValidator {
 impl ExecutionValidator {
     /// 创建包含所有内置规则的 Validator。
     pub fn new() -> Self {
-        Self {
-            rules: Vec::new(),
-        }
+        Self { rules: Vec::new() }
     }
 
     /// 创建包含所有默认规则的 Validator。
@@ -425,13 +420,26 @@ mod tests {
         let v = ExecutionValidator::with_default_rules();
         let now = Local::now();
         let o = Order::new(
-            "EX-001".into(), "C1".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, Side::Buy,
-            0.0, 100.0,
-            "S".into(), "R".into(), "O".into(), now,
+            "EX-001".into(),
+            "C1".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            Side::Buy,
+            0.0,
+            100.0,
+            "S".into(),
+            "R".into(),
+            "O".into(),
+            now,
         );
         let outcome = v.validate(&o, &ValidationContext::default());
-        assert!(outcome.rejection_reasons().iter().any(|r| r.contains("价格")));
+        assert!(
+            outcome
+                .rejection_reasons()
+                .iter()
+                .any(|r| r.contains("价格"))
+        );
     }
 
     #[test]
@@ -439,17 +447,30 @@ mod tests {
         let v = ExecutionValidator::with_default_rules();
         let now = Local::now();
         let o = Order::new(
-            "EX-001".into(), "C1".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, Side::Buy,
-            0.5, 100000.0, // 需要 50000 USDC
-            "S".into(), "R".into(), "O".into(), now,
+            "EX-001".into(),
+            "C1".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            Side::Buy,
+            0.5,
+            100000.0, // 需要 50000 USDC
+            "S".into(),
+            "R".into(),
+            "O".into(),
+            now,
         );
         let ctx = ValidationContext {
             available_cash: 100.0, // 只有 100
             ..ValidationContext::default()
         };
         let outcome = v.validate(&o, &ctx);
-        assert!(outcome.rejection_reasons().iter().any(|r| r.contains("资金")));
+        assert!(
+            outcome
+                .rejection_reasons()
+                .iter()
+                .any(|r| r.contains("资金"))
+        );
     }
 
     #[test]
@@ -462,7 +483,12 @@ mod tests {
             ..ValidationContext::default()
         };
         let outcome = v.validate(&o, &ctx);
-        assert!(outcome.rejection_reasons().iter().any(|r| r.contains("待处理")));
+        assert!(
+            outcome
+                .rejection_reasons()
+                .iter()
+                .any(|r| r.contains("待处理"))
+        );
     }
 
     #[test]
@@ -472,7 +498,12 @@ mod tests {
         let mut ctx = ValidationContext::default();
         ctx.existing_client_ids.insert("CLI-001".to_string());
         let outcome = v.validate(&o, &ctx);
-        assert!(outcome.rejection_reasons().iter().any(|r| r.contains("重复")));
+        assert!(
+            outcome
+                .rejection_reasons()
+                .iter()
+                .any(|r| r.contains("重复"))
+        );
     }
 
     #[test]
@@ -484,7 +515,12 @@ mod tests {
             ..ValidationContext::default()
         };
         let outcome = v.validate(&o, &ctx);
-        assert!(outcome.rejection_reasons().iter().any(|r| r.contains("市场")));
+        assert!(
+            outcome
+                .rejection_reasons()
+                .iter()
+                .any(|r| r.contains("市场"))
+        );
     }
 
     #[test]
@@ -492,10 +528,18 @@ mod tests {
         let v = ExecutionValidator::with_default_rules();
         let now = Local::now();
         let o = Order::new(
-            "EX-001".into(), "C1".into(), "mkt-1".into(), "mock".into(),
-            Direction::Yes, Side::Buy,
-            0.0, 0.0, // 价格和数量都非法
-            "S".into(), "R".into(), "O".into(), now,
+            "EX-001".into(),
+            "C1".into(),
+            "mkt-1".into(),
+            "mock".into(),
+            Direction::Yes,
+            Side::Buy,
+            0.0,
+            0.0, // 价格和数量都非法
+            "S".into(),
+            "R".into(),
+            "O".into(),
+            now,
         );
         let outcome = v.validate_fast(&o, &ValidationContext::default());
         assert!(!outcome.is_pass());

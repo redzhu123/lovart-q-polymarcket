@@ -30,7 +30,11 @@ impl ExplainEngine {
         lines.push("── 市场数据 ──".into());
         lines.push(format!("  YES 价格 : {:.4}", opp.yes_price));
         lines.push(format!("  NO  价格 : {:.4}", opp.no_price));
-        lines.push(format!("  SUM      : {:.4}  (1.0 - SUM = {:.4})", opp.sum, 1.0 - opp.sum));
+        lines.push(format!(
+            "  SUM      : {:.4}  (1.0 - SUM = {:.4})",
+            opp.sum,
+            1.0 - opp.sum
+        ));
         if let Some(spread) = opp.spread {
             lines.push(format!("  价差     : {:.4}", spread));
         } else {
@@ -106,16 +110,28 @@ impl ExplainEngine {
         lines.push(format!("  类型       : {}", opp.opportunity_type.as_zh()));
         lines.push(match opp.opportunity_type {
             crate::model::OpportunityType::Arbitrage => {
-                format!("  原因       : SUM = {:.4}，低于 0.90，存在显著套利空间", opp.sum)
+                format!(
+                    "  原因       : SUM = {:.4}，低于 0.90，存在显著套利空间",
+                    opp.sum
+                )
             }
             crate::model::OpportunityType::Spread => {
-                format!("  原因       : SUM = {:.4}，在 [0.90, 0.98] 区间，价差套利", opp.sum)
+                format!(
+                    "  原因       : SUM = {:.4}，在 [0.90, 0.98] 区间，价差套利",
+                    opp.sum
+                )
             }
             crate::model::OpportunityType::PriceGap => {
-                format!("  原因       : 价差 = {:.4}，超过 0.05 阈值", opp.spread.unwrap_or(0.0))
+                format!(
+                    "  原因       : 价差 = {:.4}，超过 0.05 阈值",
+                    opp.spread.unwrap_or(0.0)
+                )
             }
             crate::model::OpportunityType::Liquidity => {
-                format!("  原因       : 流动性 = {:.2}，超过 10,000 阈值", opp.liquidity)
+                format!(
+                    "  原因       : 流动性 = {:.2}，超过 10,000 阈值",
+                    opp.liquidity
+                )
             }
             _ => "  原因       : 综合判定（数据不足以归入特定类型）".into(),
         });
@@ -126,7 +142,9 @@ impl ExplainEngine {
         if opp.priority >= 80 {
             lines.push(format!(
                 "  高优先级（{}）：评分 {:.0} + 置信度 {:.0}%，综合表现优异",
-                opp.priority, opp.score, opp.confidence * 100.0
+                opp.priority,
+                opp.score,
+                opp.confidence * 100.0
             ));
         } else if opp.priority >= 50 {
             lines.push(format!(
@@ -150,10 +168,18 @@ impl ExplainEngine {
     pub fn summary_reason(opp: &Opportunity) -> String {
         match opp.opportunity_type {
             crate::model::OpportunityType::Arbitrage => {
-                format!("套利：SUM={:.4}，偏离 1.0 达 {:.2}%", opp.sum, (1.0 - opp.sum) * 100.0)
+                format!(
+                    "套利：SUM={:.4}，偏离 1.0 达 {:.2}%",
+                    opp.sum,
+                    (1.0 - opp.sum) * 100.0
+                )
             }
             crate::model::OpportunityType::Spread => {
-                format!("价差：SUM={:.4}，价差空间 {:.2}%", opp.sum, (1.0 - opp.sum) * 100.0)
+                format!(
+                    "价差：SUM={:.4}，价差空间 {:.2}%",
+                    opp.sum,
+                    (1.0 - opp.sum) * 100.0
+                )
             }
             crate::model::OpportunityType::PriceGap => {
                 format!("价格缺口：价差 = {:.4}", opp.spread.unwrap_or(0.0))
@@ -183,13 +209,25 @@ mod tests {
             "test".into(),
             Utc::now(),
             opp_type,
-            85.0, 0.9, 85,
-            25.0, 20.0, 18.0, 12.0, 5.0, 5.0,
-            0.02, 2.0,
-            0.42, 0.50, sum,
+            85.0,
+            0.9,
+            85,
+            25.0,
+            20.0,
+            18.0,
+            12.0,
+            5.0,
+            5.0,
+            0.02,
+            2.0,
+            0.42,
+            0.50,
+            sum,
             spread,
-            5000.0, 8000.0,
-            Some(2000.0), Some(2500.0),
+            5000.0,
+            8000.0,
+            Some(2000.0),
+            Some(2500.0),
         )
     }
 
@@ -226,6 +264,8 @@ mod tests {
         let high = make_opp(OpportunityType::Arbitrage, 0.85, Some(0.08));
         // high priority opp
         let text = ExplainEngine::explain(&high);
-        assert!(text.contains("高优先级") || text.contains("中等优先级") || text.contains("低优先级"));
+        assert!(
+            text.contains("高优先级") || text.contains("中等优先级") || text.contains("低优先级")
+        );
     }
 }

@@ -84,10 +84,7 @@ impl GatewayError {
         Self::NetworkError {
             code: "GW_NET_001",
             message: msg.clone(),
-            suggestion: format!(
-                "请检查网络连接和 API 地址是否正确。错误详情: {}",
-                msg
-            ),
+            suggestion: format!("请检查网络连接和 API 地址是否正确。错误详情: {}", msg),
         }
     }
 
@@ -227,9 +224,7 @@ impl GatewayError {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Self::NetworkError { .. }
-                | Self::RateLimitError { .. }
-                | Self::TimeoutError { .. }
+            Self::NetworkError { .. } | Self::RateLimitError { .. } | Self::TimeoutError { .. }
         )
     }
 
@@ -260,9 +255,7 @@ impl std::error::Error for GatewayError {}
 impl From<pm_api_test::client::http::ApiClientError> for GatewayError {
     fn from(err: pm_api_test::client::http::ApiClientError) -> Self {
         match err {
-            pm_api_test::client::http::ApiClientError::RequestFailed(msg) => {
-                Self::network(msg)
-            }
+            pm_api_test::client::http::ApiClientError::RequestFailed(msg) => Self::network(msg),
             pm_api_test::client::http::ApiClientError::MaxRetriesExceeded {
                 attempts,
                 last_error,
@@ -361,8 +354,7 @@ mod tests {
 
     #[test]
     fn from_api_client_error() {
-        let api_err =
-            pm_api_test::client::http::ApiClientError::RequestFailed("连接超时".into());
+        let api_err = pm_api_test::client::http::ApiClientError::RequestFailed("连接超时".into());
         let gw_err: GatewayError = api_err.into();
         assert_eq!(gw_err.code(), "GW_NET_001");
         assert!(gw_err.is_retryable());

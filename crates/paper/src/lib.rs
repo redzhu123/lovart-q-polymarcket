@@ -14,8 +14,8 @@ pub mod history;
 pub mod records;
 
 pub use engine::{CloseOutcome, OpenOutcome, PaperTradingEngine};
-pub use history::{paper_backtest, run_paper_history, PaperHistoryReport};
+pub use history::{PaperHistoryReport, paper_backtest, run_paper_history};
 pub use records::{
-    append_orders, append_portfolio, append_positions, ensure_csv, load_order_base,
-    OrderRecord, PortfolioRecord, PositionRecord,
+    OrderRecord, PortfolioRecord, PositionRecord, append_orders, append_portfolio,
+    append_positions, ensure_csv, load_order_base,
 };

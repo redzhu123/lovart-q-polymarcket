@@ -226,7 +226,10 @@ impl ConnectionManager {
     /// 标记 HTTP 连接失败。
     pub fn http_failed(&mut self, reason: &str) {
         self.stats.failed_connections += 1;
-        warn!("HTTP 连接失败: {} (重试 {}/{})", reason, self.retry_count, self.retry_policy.max_retries);
+        warn!(
+            "HTTP 连接失败: {} (重试 {}/{})",
+            reason, self.retry_count, self.retry_policy.max_retries
+        );
 
         if self.retry_count < self.retry_policy.max_retries {
             self.http_state = ConnectionState::Reconnecting;
@@ -236,7 +239,10 @@ impl ConnectionManager {
             debug!("将在 {}ms 后重连", backoff);
         } else {
             self.http_state = ConnectionState::Failed;
-            warn!("HTTP 重连已达上限 ({} 次)，放弃", self.retry_policy.max_retries);
+            warn!(
+                "HTTP 重连已达上限 ({} 次)，放弃",
+                self.retry_policy.max_retries
+            );
         }
     }
 
@@ -299,7 +305,8 @@ impl ConnectionManager {
         };
         format!(
             "HTTP: {}\nWebSocket: {}\n{}",
-            http_status, ws_status,
+            http_status,
+            ws_status,
             self.stats.summary_zh()
         )
     }

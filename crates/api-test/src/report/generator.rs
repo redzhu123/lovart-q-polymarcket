@@ -81,10 +81,16 @@ impl ReportGenerator {
         // 摘要
         md.push_str("## 摘要\n\n");
         md.push_str("| 指标 | 值 |\n|------|----|\n");
-        md.push_str(&format!("| 总接口数 | {} |\n", report.summary.total_endpoints));
+        md.push_str(&format!(
+            "| 总接口数 | {} |\n",
+            report.summary.total_endpoints
+        ));
         md.push_str(&format!("| 通过 | {} |\n", report.summary.passed));
         md.push_str(&format!("| 失败 | {} |\n", report.summary.failed));
-        md.push_str(&format!("| 平均延迟 | {:.0}ms |\n", report.summary.avg_latency_ms));
+        md.push_str(&format!(
+            "| 平均延迟 | {:.0}ms |\n",
+            report.summary.avg_latency_ms
+        ));
         md.push_str(&format!(
             "| 最快接口 | {} ({}ms) |\n",
             report.summary.fastest.0, report.summary.fastest.1
@@ -102,7 +108,11 @@ impl ReportGenerator {
         md.push_str("## 端点结果\n\n");
         md.push_str("| 接口 | 结果 | HTTP | 延迟 |\n|------|------|------|------|\n");
         for ep in &report.endpoint_results {
-            let result = if ep.passed { "✅ 通过" } else { "❌ 失败" };
+            let result = if ep.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            };
             md.push_str(&format!(
                 "| {} | {} | {} | {}ms |\n",
                 ep.name, result, ep.status, ep.latency_ms
@@ -114,10 +124,7 @@ impl ReportGenerator {
         if !report.summary.errors.is_empty() {
             md.push_str("## 错误\n\n");
             for err in &report.summary.errors {
-                md.push_str(&format!(
-                    "- **{}**: {}\n",
-                    err.endpoint, err.message
-                ));
+                md.push_str(&format!("- **{}**: {}\n", err.endpoint, err.message));
             }
             md.push_str("\n");
         }
@@ -192,12 +199,30 @@ impl ReportGenerator {
 
         // 摘要表
         html.push_str("<h2>摘要</h2>\n<table>\n");
-        html.push_str(&format!("<tr><td>总接口数</td><td>{}</td></tr>\n", report.summary.total_endpoints));
-        html.push_str(&format!("<tr><td>通过</td><td class=\"pass\">{}</td></tr>\n", report.summary.passed));
-        html.push_str(&format!("<tr><td>失败</td><td class=\"fail\">{}</td></tr>\n", report.summary.failed));
-        html.push_str(&format!("<tr><td>平均延迟</td><td>{:.0}ms</td></tr>\n", report.summary.avg_latency_ms));
-        html.push_str(&format!("<tr><td>最快</td><td>{} ({}ms)</td></tr>\n", report.summary.fastest.0, report.summary.fastest.1));
-        html.push_str(&format!("<tr><td>最慢</td><td>{} ({}ms)</td></tr>\n", report.summary.slowest.0, report.summary.slowest.1));
+        html.push_str(&format!(
+            "<tr><td>总接口数</td><td>{}</td></tr>\n",
+            report.summary.total_endpoints
+        ));
+        html.push_str(&format!(
+            "<tr><td>通过</td><td class=\"pass\">{}</td></tr>\n",
+            report.summary.passed
+        ));
+        html.push_str(&format!(
+            "<tr><td>失败</td><td class=\"fail\">{}</td></tr>\n",
+            report.summary.failed
+        ));
+        html.push_str(&format!(
+            "<tr><td>平均延迟</td><td>{:.0}ms</td></tr>\n",
+            report.summary.avg_latency_ms
+        ));
+        html.push_str(&format!(
+            "<tr><td>最快</td><td>{} ({}ms)</td></tr>\n",
+            report.summary.fastest.0, report.summary.fastest.1
+        ));
+        html.push_str(&format!(
+            "<tr><td>最慢</td><td>{} ({}ms)</td></tr>\n",
+            report.summary.slowest.0, report.summary.slowest.1
+        ));
         html.push_str("</table>\n");
 
         // 端点结果
@@ -205,7 +230,11 @@ impl ReportGenerator {
         html.push_str("<tr><th>接口</th><th>结果</th><th>HTTP</th><th>延迟</th></tr>\n");
         for ep in &report.endpoint_results {
             let result_class = if ep.passed { "pass" } else { "fail" };
-            let result_text = if ep.passed { "✅ 通过" } else { "❌ 失败" };
+            let result_text = if ep.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            };
             html.push_str(&format!(
                 "<tr><td>{}</td><td class=\"{}\">{}</td><td>{}</td><td>{}ms</td></tr>\n",
                 ep.name, result_class, result_text, ep.status, ep.latency_ms
@@ -235,8 +264,8 @@ impl ReportGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{ReportSummary, TestType};
+    use super::*;
     use tempfile::tempdir;
 
     #[test]

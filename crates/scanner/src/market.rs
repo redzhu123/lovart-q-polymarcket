@@ -15,9 +15,7 @@ use rand::seq::SliceRandom;
 
 use pm_models::{OppSnapshot, UnifiedMarket};
 
-use crate::stats::{
-    MarketRejection, MarketSample, RoundAnalysis, RejectionReason,
-};
+use crate::stats::{MarketRejection, MarketSample, RejectionReason, RoundAnalysis};
 
 /// 从市场中识别潜在套利机会：active && !closed 且为二元市场且 SUM < `threshold`。
 /// 返回按 SUM 升序排列的快照列表（SUM 越低，套利空间越大，排在越前）。
@@ -141,7 +139,11 @@ fn analyze_markets_inner(markets: &[UnifiedMarket], threshold: f64, detail: bool
     }
 
     // NaN 视作相等，避免 sort 异常
-    snaps.sort_by(|x, y| x.sum.partial_cmp(&y.sum).unwrap_or(std::cmp::Ordering::Equal));
+    snaps.sort_by(|x, y| {
+        x.sum
+            .partial_cmp(&y.sum)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     a.opportunities = snaps;
     a
 }
@@ -156,7 +158,10 @@ fn pick_random_samples(markets: &[UnifiedMarket], k: usize) -> Vec<MarketSample>
     }
     let mut idx: Vec<usize> = (0..markets.len()).collect();
     idx.shuffle(&mut rand::rng());
-    idx.iter().take(k).map(|&i| MarketSample::from(&markets[i])).collect()
+    idx.iter()
+        .take(k)
+        .map(|&i| MarketSample::from(&markets[i]))
+        .collect()
 }
 
 #[cfg(test)]
@@ -217,7 +222,7 @@ mod tests {
     fn find_opportunities_filters_by_threshold_and_binary() {
         // SUM<0.99 才算机会；归一化市场 SUM≈1.0 常态下不入选
         let markets = vec![
-            market("Low", 0.40, 0.55, true, false),   // SUM=0.95 -> 机会
+            market("Low", 0.40, 0.55, true, false),    // SUM=0.95 -> 机会
             market("Normal", 0.43, 0.57, true, false), // SUM=1.00 -> 非
             market("Closed", 0.30, 0.40, true, true),  // closed -> 非
             market("Inactive", 0.30, 0.40, false, false), // inactive -> 非
@@ -268,7 +273,7 @@ mod tests {
     #[test]
     fn analyze_counts_all_stages() {
         let markets = vec![
-            market("Opp", 0.40, 0.55, true, false),      // 机会
+            market("Opp", 0.40, 0.55, true, false),       // 机会
             market("Strat", 0.43, 0.57, true, false),     // sum>=threshold -> strategy
             market("Closed", 0.30, 0.40, true, true),     // closed
             market("Inactive", 0.30, 0.40, false, false), // inactive

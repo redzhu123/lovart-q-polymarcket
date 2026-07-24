@@ -48,7 +48,10 @@ async fn sync_balance_step_after_position() {
         .steps
         .iter()
         .position(|s| s.step == WorkflowState::SyncBalance);
-    assert!(pos_idx.is_some() && bal_idx.is_some(), "应包含同步持仓与同步余额步骤");
+    assert!(
+        pos_idx.is_some() && bal_idx.is_some(),
+        "应包含同步持仓与同步余额步骤"
+    );
     assert!(
         bal_idx.unwrap() > pos_idx.unwrap(),
         "同步余额必须在同步持仓之后"

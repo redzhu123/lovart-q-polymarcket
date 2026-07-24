@@ -25,10 +25,7 @@ pub struct MarketDataCache {
 impl MarketDataCache {
     /// 构造：指定 TTL。
     pub fn new(ttl: Duration) -> Self {
-        Self {
-            ttl,
-            entry: None,
-        }
+        Self { ttl, entry: None }
     }
 
     /// TTL（秒）。
@@ -72,8 +69,8 @@ impl MarketDataCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pm_models::MarketStatus;
     use chrono::Utc;
+    use pm_models::MarketStatus;
 
     fn sample_market(id: &str) -> UnifiedMarket {
         UnifiedMarket {
@@ -125,7 +122,10 @@ mod tests {
     fn set_overwrites() {
         let mut c = MarketDataCache::new(Duration::from_secs(10));
         c.set(vec![sample_market("m1")], FetchStats::default());
-        c.set(vec![sample_market("m2"), sample_market("m3")], FetchStats::default());
+        c.set(
+            vec![sample_market("m2"), sample_market("m3")],
+            FetchStats::default(),
+        );
         assert_eq!(c.size(), 2);
         let (m, _) = c.get_fresh().expect("fresh");
         assert_eq!(m.len(), 2);

@@ -80,37 +80,42 @@ fn rejected_or_expired_from_any_active_state() {
 #[test]
 fn partially_filled_self_loop_allowed() {
     let sm = StateMachine::new();
-    assert!(sm
-        .validate_transition(OrderStatus::PartiallyFilled, OrderStatus::PartiallyFilled)
-        .is_ok());
+    assert!(
+        sm.validate_transition(OrderStatus::PartiallyFilled, OrderStatus::PartiallyFilled)
+            .is_ok()
+    );
 }
 
 #[test]
 fn created_can_be_cancelled_directly() {
     let sm = StateMachine::new();
-    assert!(sm
-        .validate_transition(OrderStatus::Created, OrderStatus::Cancelled)
-        .is_ok());
+    assert!(
+        sm.validate_transition(OrderStatus::Created, OrderStatus::Cancelled)
+            .is_ok()
+    );
 }
 
 #[test]
 fn validated_can_be_cancelled() {
     let sm = StateMachine::new();
-    assert!(sm
-        .validate_transition(OrderStatus::Validated, OrderStatus::Cancelled)
-        .is_ok());
+    assert!(
+        sm.validate_transition(OrderStatus::Validated, OrderStatus::Cancelled)
+            .is_ok()
+    );
 }
 
 #[test]
 fn illegal_skip_rejected() {
     let sm = StateMachine::new();
     // 跳级
-    assert!(sm
-        .validate_transition(OrderStatus::Created, OrderStatus::Submitted)
-        .is_err());
-    assert!(sm
-        .validate_transition(OrderStatus::Validated, OrderStatus::Accepted)
-        .is_err());
+    assert!(
+        sm.validate_transition(OrderStatus::Created, OrderStatus::Submitted)
+            .is_err()
+    );
+    assert!(
+        sm.validate_transition(OrderStatus::Validated, OrderStatus::Accepted)
+            .is_err()
+    );
 }
 
 #[test]

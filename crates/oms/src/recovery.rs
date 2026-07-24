@@ -141,9 +141,10 @@ impl Recovery {
         let mut failures: Vec<(String, String)> = Vec::new();
 
         for order in &pending {
-            match Self::sync_one(order, repository, event_bus, state_machine, gateway).await
-            {
-                SyncOutcome::Synced { status_changed: changed } => {
+            match Self::sync_one(order, repository, event_bus, state_machine, gateway).await {
+                SyncOutcome::Synced {
+                    status_changed: changed,
+                } => {
                     synced += 1;
                     if changed {
                         status_changed += 1;
@@ -162,12 +163,7 @@ impl Recovery {
             timestamp: completed_at,
         });
 
-        tracing::info!(
-            synced,
-            status_changed,
-            failed,
-            "OMS 启动恢复完成"
-        );
+        tracing::info!(synced, status_changed, failed, "OMS 启动恢复完成");
 
         RecoveryReport {
             started_at,
@@ -195,7 +191,9 @@ impl Recovery {
                 order_id = %order.order_id,
                 "OMS 订单无 ExchangeOrderId，跳过同步"
             );
-            return SyncOutcome::Synced { status_changed: false };
+            return SyncOutcome::Synced {
+                status_changed: false,
+            };
         };
 
         // 通过 Gateway 查询
@@ -231,7 +229,9 @@ impl Recovery {
                         };
                     }
                 }
-                SyncOutcome::Synced { status_changed: changed }
+                SyncOutcome::Synced {
+                    status_changed: changed,
+                }
             }
             Err(e) => SyncOutcome::Failed { reason: e },
         }
@@ -392,11 +392,7 @@ pub async fn sync_order(
     Ok(SyncReport {
         order_id: order.order_id.clone(),
         status_changed: true,
-        message: format!(
-            "{} → {}",
-            old_status.as_zh(),
-            order.status.as_zh()
-        ),
+        message: format!("{} → {}", old_status.as_zh(), order.status.as_zh()),
     })
 }
 
@@ -413,7 +409,11 @@ impl SyncReport {
         format!(
             "订单 {}：{} | {}",
             self.order_id,
-            if self.status_changed { "已变化" } else { "无变化" },
+            if self.status_changed {
+                "已变化"
+            } else {
+                "无变化"
+            },
             self.message
         )
     }
@@ -432,7 +432,7 @@ mod tests {
     use crate::state_machine::StateMachine;
     use chrono::Local;
     use pm_core::Side;
-    use pm_gateway::{create_mock_gateway, OrderType, TimeInForce};
+    use pm_gateway::{OrderType, TimeInForce, create_mock_gateway};
 
     fn build_order() -> Order {
         let now = Local::now();
@@ -485,8 +485,7 @@ mod tests {
             failed_count: 1,
             failures: Vec::new(),
         };
-        r.failures
-            .push(("OMS-001".into(), "Gateway 超时".into()));
+        r.failures.push(("OMS-001".into(), "Gateway 超时".into()));
         assert!(r.failure_summary().contains("OMS-001"));
     }
 
@@ -524,7 +523,9 @@ mod tests {
         let sm = StateMachine::new();
         let gateway = create_mock_gateway();
         let mut o = build_order();
-        let report = sync_order(&mut o, gateway.as_ref(), &repo, &bus, &sm).await.unwrap();
+        let report = sync_order(&mut o, gateway.as_ref(), &repo, &bus, &sm)
+            .await
+            .unwrap();
         assert!(!report.status_changed);
         assert!(report.message.contains("未提交"));
     }

@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Local};
 
-use pm_models::{FinishedOpportunity, OpportunityState, OppSnapshot, TrackUpdate};
+use pm_models::{FinishedOpportunity, OppSnapshot, OpportunityState, TrackUpdate};
 
 /// 跟踪器：以 Question 为 Key 持有所有活跃机会的状态。
 pub struct OpportunityTracker {

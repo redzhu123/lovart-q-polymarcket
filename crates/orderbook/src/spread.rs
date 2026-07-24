@@ -172,7 +172,10 @@ impl SpreadAnalyzer {
             println!("平均绝对价差  : {:.4}", summary.average_spread);
             println!("最大绝对价差  : {:.4}", summary.maximum_spread);
             println!("最小绝对价差  : {:.4}", summary.minimum_spread);
-            println!("平均相对价差  : {:.2}%", summary.average_relative_spread_pct);
+            println!(
+                "平均相对价差  : {:.2}%",
+                summary.average_relative_spread_pct
+            );
             println!("平均中间价    : {:.4}", summary.average_mid_price);
         } else {
             println!("（无有效价差数据，无法计算统计指标）");

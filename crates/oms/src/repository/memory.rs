@@ -147,11 +147,7 @@ impl OrderRepository for InMemoryRepository {
         Ok(removed)
     }
 
-    fn append_status_change(
-        &self,
-        order_id: &str,
-        change: &StatusChange,
-    ) -> anyhow::Result<()> {
+    fn append_status_change(&self, order_id: &str, change: &StatusChange) -> anyhow::Result<()> {
         let mut sc = self.status_changes.lock().unwrap();
         sc.entry(order_id.to_string())
             .or_insert_with(Vec::new)
@@ -300,7 +296,11 @@ mod tests {
         }
         assert_eq!(repo.count().unwrap(), 5);
         let counts = repo.count_by_status().unwrap();
-        assert!(counts.iter().any(|(s, c)| *s == OrderStatus::Created && *c == 5));
+        assert!(
+            counts
+                .iter()
+                .any(|(s, c)| *s == OrderStatus::Created && *c == 5)
+        );
     }
 
     #[test]

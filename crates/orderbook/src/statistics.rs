@@ -144,8 +144,10 @@ impl MarketStatistics {
         self.orderbook_count += orderbooks.len();
 
         // 价差分析
-        let spread_reports: Vec<SpreadReport> =
-            orderbooks.iter().map(|ob| SpreadAnalyzer::analyze(ob)).collect();
+        let spread_reports: Vec<SpreadReport> = orderbooks
+            .iter()
+            .map(|ob| SpreadAnalyzer::analyze(ob))
+            .collect();
         let valid_spreads: Vec<f64> = spread_reports.iter().filter_map(|r| r.spread).collect();
 
         for s in &valid_spreads {
@@ -381,8 +383,12 @@ mod tests {
         // 极浅 (total < 100)
         dist.classify(&DepthReport {
             market_id: "a".into(),
-            bid_top1: 10.0, bid_top5: 30.0, bid_top10: 30.0,
-            ask_top1: 10.0, ask_top5: 20.0, ask_top10: 20.0,
+            bid_top1: 10.0,
+            bid_top5: 30.0,
+            bid_top10: 30.0,
+            ask_top1: 10.0,
+            ask_top5: 20.0,
+            ask_top10: 20.0,
             imbalance: 0.0,
         });
         assert_eq!(dist.very_shallow, 1);
@@ -390,8 +396,12 @@ mod tests {
         // 极深 (total > 10000)
         dist.classify(&DepthReport {
             market_id: "b".into(),
-            bid_top1: 5000.0, bid_top5: 6000.0, bid_top10: 6000.0,
-            ask_top1: 5000.0, ask_top5: 6000.0, ask_top10: 6000.0,
+            bid_top1: 5000.0,
+            bid_top5: 6000.0,
+            bid_top10: 6000.0,
+            ask_top1: 5000.0,
+            ask_top5: 6000.0,
+            ask_top10: 6000.0,
             imbalance: 0.0,
         });
         assert_eq!(dist.very_deep, 1);

@@ -293,9 +293,18 @@ mod tests {
     fn record_batch() {
         let now = Local::now();
         let events = vec![
-            ExecutionEvent::OrderCreated { order_id: "1".into(), timestamp: now },
-            ExecutionEvent::OrderCreated { order_id: "2".into(), timestamp: now },
-            ExecutionEvent::OrderCreated { order_id: "3".into(), timestamp: now },
+            ExecutionEvent::OrderCreated {
+                order_id: "1".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderCreated {
+                order_id: "2".into(),
+                timestamp: now,
+            },
+            ExecutionEvent::OrderCreated {
+                order_id: "3".into(),
+                timestamp: now,
+            },
         ];
         let mut m = ExecutionMetrics::new();
         m.record_batch(&events);

@@ -141,7 +141,12 @@ mod tests {
         ConfidenceEngine::new()
     }
 
-    fn test_market(yes: Option<f64>, no: Option<f64>, liquidity: f64, outcome_count: usize) -> UnifiedMarket {
+    fn test_market(
+        yes: Option<f64>,
+        no: Option<f64>,
+        liquidity: f64,
+        outcome_count: usize,
+    ) -> UnifiedMarket {
         UnifiedMarket {
             market_id: "m1".into(),
             question: "测试问题".into(),

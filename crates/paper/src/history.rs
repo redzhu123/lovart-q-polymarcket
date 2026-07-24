@@ -103,7 +103,10 @@ pub fn paper_backtest(
         match outcome {
             crate::engine::OpenOutcome::Filled(_) => {
                 opened += 1;
-                if eng.close_position(&opp.question, opp.last_yes, opp.end_time).is_some() {
+                if eng
+                    .close_position(&opp.question, opp.last_yes, opp.end_time)
+                    .is_some()
+                {
                     closed += 1;
                 }
             }
@@ -115,18 +118,15 @@ pub fn paper_backtest(
     }
 
     let pf = eng.portfolio();
-    let (winners, losers) = pf
-        .closed_positions
-        .iter()
-        .fold((0u64, 0u64), |(w, l), p| {
-            if p.realized_pnl > 0.0 {
-                (w + 1, l)
-            } else if p.realized_pnl < 0.0 {
-                (w, l + 1)
-            } else {
-                (w, l)
-            }
-        });
+    let (winners, losers) = pf.closed_positions.iter().fold((0u64, 0u64), |(w, l), p| {
+        if p.realized_pnl > 0.0 {
+            (w + 1, l)
+        } else if p.realized_pnl < 0.0 {
+            (w, l + 1)
+        } else {
+            (w, l)
+        }
+    });
 
     PaperHistoryReport {
         total_opportunities: opps.len() as u64,

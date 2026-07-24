@@ -38,13 +38,23 @@ impl RateLimitReport {
         tracing::info!("│  【速率限制测试报告】");
         tracing::info!("├──────────────────────────────────────────────────────────┤");
         tracing::info!("│  总请求数:   {}", self.total_requests);
-        tracing::info!("│  成功:       {} ({}%)",
+        tracing::info!(
+            "│  成功:       {} ({}%)",
             self.success,
-            if self.total_requests > 0 { self.success * 100 / self.total_requests } else { 0 }
+            if self.total_requests > 0 {
+                self.success * 100 / self.total_requests
+            } else {
+                0
+            }
         );
-        tracing::info!("│  触发限流:   {} ({}%)",
+        tracing::info!(
+            "│  触发限流:   {} ({}%)",
             self.rate_limited,
-            if self.total_requests > 0 { self.rate_limited * 100 / self.total_requests } else { 0 }
+            if self.total_requests > 0 {
+                self.rate_limited * 100 / self.total_requests
+            } else {
+                0
+            }
         );
         tracing::info!("│  错误:       {}", self.errors);
         tracing::info!("│  平均延迟:   {:.0}ms", self.avg_latency_ms);
@@ -97,12 +107,7 @@ pub async fn test_rate_limit(client: &ApiClient, burst_count: usize) -> RateLimi
                     );
                 } else if resp.is_success() {
                     success += 1;
-                    tracing::debug!(
-                        "  [{}/{}] HTTP 200 ({}ms)",
-                        i + 1,
-                        burst_count,
-                        latency
-                    );
+                    tracing::debug!("  [{}/{}] HTTP 200 ({}ms)", i + 1, burst_count, latency);
                 } else {
                     errors += 1;
                     tracing::warn!(

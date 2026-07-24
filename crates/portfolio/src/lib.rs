@@ -85,18 +85,12 @@ impl Portfolio {
 
     /// 已实现盈亏 = closed_positions 的 realized_pnl 之和。
     fn realized_pnl(&self) -> f64 {
-        self.closed_positions
-            .iter()
-            .map(|p| p.realized_pnl)
-            .sum()
+        self.closed_positions.iter().map(|p| p.realized_pnl).sum()
     }
 
     /// 未实现盈亏 = open_positions 的 unrealized_pnl 之和。
     fn unrealized_pnl(&self) -> f64 {
-        self.open_positions
-            .iter()
-            .map(|p| p.unrealized_pnl)
-            .sum()
+        self.open_positions.iter().map(|p| p.unrealized_pnl).sum()
     }
 
     /// 重算 total_value / total_pnl。每轮开仓 / 平仓 / mark 完成后调用一次。
@@ -135,7 +129,12 @@ impl Portfolio {
 
     /// 平仓：按 question 关闭持仓，移入 closed_positions，返回已关闭的快照。
     /// 找不到返回 None。调用方负责从 open_questions 同步移除。
-    pub fn close(&mut self, question: &str, exit_price: f64, now: DateTime<Local>) -> Option<Position> {
+    pub fn close(
+        &mut self,
+        question: &str,
+        exit_price: f64,
+        now: DateTime<Local>,
+    ) -> Option<Position> {
         let idx = self
             .open_positions
             .iter()
@@ -249,12 +248,8 @@ mod tests {
     fn roi_uses_actual_initial_capital() {
         let mut pf = Portfolio::new(5000.0);
         // 制造 100 已实现盈利
-        pf.closed_positions.push(Position::open(
-            "X".into(),
-            1.0,
-            100.0,
-            Local::now(),
-        ));
+        pf.closed_positions
+            .push(Position::open("X".into(), 1.0, 100.0, Local::now()));
         pf.revalue();
         // total_pnl 来自 realized (未实现为 0，因为 mark 未调用 -> unreal=0)
         assert!(approx(pf.roi(), 0.0 / 5000.0));

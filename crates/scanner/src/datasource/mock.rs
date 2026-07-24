@@ -10,9 +10,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
-use pm_models::{
-    MarketStatus, OrderBook, PriceQuote, ProviderCapability, UnifiedMarket,
-};
+use pm_models::{MarketStatus, OrderBook, PriceQuote, ProviderCapability, UnifiedMarket};
 
 use crate::datasource::{HealthProbe, MarketDataProvider};
 use crate::stats::{FetchResult, FetchStats};
@@ -64,11 +62,46 @@ fn mock_capability() -> ProviderCapability {
 fn default_markets() -> Vec<UnifiedMarket> {
     let now = Utc::now();
     vec![
-        unified("mock-arb", "套利样本A", Some(0.40), Some(0.55), MarketStatus::Active, now),
-        unified("mock-norm1", "归一化样本B", Some(0.43), Some(0.57), MarketStatus::Active, now),
-        unified("mock-norm2", "归一化样本C", Some(0.50), Some(0.50), MarketStatus::Active, now),
-        unified("mock-noprice", "缺价样本D", None, None, MarketStatus::Active, now),
-        unified("mock-closed", "已关闭样本E", Some(0.30), Some(0.70), MarketStatus::Closed, now),
+        unified(
+            "mock-arb",
+            "套利样本A",
+            Some(0.40),
+            Some(0.55),
+            MarketStatus::Active,
+            now,
+        ),
+        unified(
+            "mock-norm1",
+            "归一化样本B",
+            Some(0.43),
+            Some(0.57),
+            MarketStatus::Active,
+            now,
+        ),
+        unified(
+            "mock-norm2",
+            "归一化样本C",
+            Some(0.50),
+            Some(0.50),
+            MarketStatus::Active,
+            now,
+        ),
+        unified(
+            "mock-noprice",
+            "缺价样本D",
+            None,
+            None,
+            MarketStatus::Active,
+            now,
+        ),
+        unified(
+            "mock-closed",
+            "已关闭样本E",
+            Some(0.30),
+            Some(0.70),
+            MarketStatus::Closed,
+            now,
+        ),
     ]
 }
 
@@ -124,16 +157,48 @@ impl MarketDataProvider for MockProvider {
                 // 对已知套利样本给出多档盘口；其余给 None（不伪造未知市场的真实深度）。
                 if id == "mock-arb" {
                     let bid_levels = vec![
-                        PriceLevel { price: 0.39, size: 50.0, level: 1 },
-                        PriceLevel { price: 0.38, size: 100.0, level: 2 },
-                        PriceLevel { price: 0.37, size: 200.0, level: 3 },
-                        PriceLevel { price: 0.36, size: 150.0, level: 4 },
-                        PriceLevel { price: 0.35, size: 100.0, level: 5 },
+                        PriceLevel {
+                            price: 0.39,
+                            size: 50.0,
+                            level: 1,
+                        },
+                        PriceLevel {
+                            price: 0.38,
+                            size: 100.0,
+                            level: 2,
+                        },
+                        PriceLevel {
+                            price: 0.37,
+                            size: 200.0,
+                            level: 3,
+                        },
+                        PriceLevel {
+                            price: 0.36,
+                            size: 150.0,
+                            level: 4,
+                        },
+                        PriceLevel {
+                            price: 0.35,
+                            size: 100.0,
+                            level: 5,
+                        },
                     ];
                     let ask_levels = vec![
-                        PriceLevel { price: 0.41, size: 60.0, level: 1 },
-                        PriceLevel { price: 0.42, size: 80.0, level: 2 },
-                        PriceLevel { price: 0.43, size: 120.0, level: 3 },
+                        PriceLevel {
+                            price: 0.41,
+                            size: 60.0,
+                            level: 1,
+                        },
+                        PriceLevel {
+                            price: 0.42,
+                            size: 80.0,
+                            level: 2,
+                        },
+                        PriceLevel {
+                            price: 0.43,
+                            size: 120.0,
+                            level: 3,
+                        },
                     ];
                     let bid_vol: f64 = bid_levels.iter().map(|l| l.size).sum();
                     let ask_vol: f64 = ask_levels.iter().map(|l| l.size).sum();
@@ -203,12 +268,24 @@ mod tests {
         let r = p.fetch_markets().await.expect("fetch");
         assert_eq!(r.markets.len(), 5);
         // 套利样本 SUM=0.95 < 0.99
-        let arb = r.markets.iter().find(|m| m.market_id == "mock-arb").unwrap();
+        let arb = r
+            .markets
+            .iter()
+            .find(|m| m.market_id == "mock-arb")
+            .unwrap();
         let sum = arb.yes_price.unwrap() + arb.no_price.unwrap();
         assert!(sum < 0.99);
         // 含缺价 / 已关闭
-        assert!(r.markets.iter().any(|m| m.market_id == "mock-noprice" && m.yes_price.is_none()));
-        assert!(r.markets.iter().any(|m| m.market_id == "mock-closed" && m.closed()));
+        assert!(
+            r.markets
+                .iter()
+                .any(|m| m.market_id == "mock-noprice" && m.yes_price.is_none())
+        );
+        assert!(
+            r.markets
+                .iter()
+                .any(|m| m.market_id == "mock-closed" && m.closed())
+        );
     }
 
     #[tokio::test]

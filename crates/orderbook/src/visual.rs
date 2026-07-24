@@ -78,10 +78,7 @@ impl OrderBookVisualizer {
         // 格式：Label  Price  Bar  Size
         let line = format!(
             "{}  {:.4}  {}  {:.1}\n",
-            label,
-            level.price,
-            bar,
-            level.size
+            label, level.price, bar, level.size
         );
         buf.push_str(&line);
     }

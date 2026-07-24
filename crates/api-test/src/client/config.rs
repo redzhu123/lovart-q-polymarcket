@@ -203,10 +203,7 @@ impl ApiTestConfig {
         } else {
             "🔒 DryRun 模式"
         };
-        let proxy_str = self
-            .proxy_url
-            .as_deref()
-            .unwrap_or("未配置");
+        let proxy_str = self.proxy_url.as_deref().unwrap_or("未配置");
         let auth_str = if self.api_key.is_some() {
             "已配置"
         } else {

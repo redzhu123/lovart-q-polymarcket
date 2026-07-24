@@ -56,18 +56,42 @@ pub struct ExecutionConfigV106 {
 
 // ---- 默认值函数 ----
 
-fn default_capital() -> f64 { 10000.0 }
-fn default_max_pending() -> usize { 20 }
-fn default_order_notional() -> f64 { 100.0 }
-fn default_max_fill_delay() -> u32 { 3 }
-fn default_max_wait_scans() -> u32 { 5 }
-fn default_max_queue_size() -> usize { 1000 }
-fn default_max_retries() -> u32 { 3 }
-fn default_retry_delay_ms() -> u64 { 1000 }
-fn default_timeout_ms() -> u64 { 30000 }
-fn default_max_orders_per_second() -> u32 { 10 }
-fn default_burst_size() -> u32 { 5 }
-fn default_gateway() -> String { "mock".into() }
+fn default_capital() -> f64 {
+    10000.0
+}
+fn default_max_pending() -> usize {
+    20
+}
+fn default_order_notional() -> f64 {
+    100.0
+}
+fn default_max_fill_delay() -> u32 {
+    3
+}
+fn default_max_wait_scans() -> u32 {
+    5
+}
+fn default_max_queue_size() -> usize {
+    1000
+}
+fn default_max_retries() -> u32 {
+    3
+}
+fn default_retry_delay_ms() -> u64 {
+    1000
+}
+fn default_timeout_ms() -> u64 {
+    30000
+}
+fn default_max_orders_per_second() -> u32 {
+    10
+}
+fn default_burst_size() -> u32 {
+    5
+}
+fn default_gateway() -> String {
+    "mock".into()
+}
 
 impl Default for ExecutionConfigV106 {
     fn default() -> Self {

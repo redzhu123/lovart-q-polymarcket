@@ -127,7 +127,10 @@ impl OpportunityFilter {
                 opp.liquidity, self.config.min_liquidity
             )
         } else if opp.score < self.config.min_score {
-            format!("评分过低（{:.1} < {:.1}）", opp.score, self.config.min_score)
+            format!(
+                "评分过低（{:.1} < {:.1}）",
+                opp.score, self.config.min_score
+            )
         } else if opp.confidence < self.config.min_confidence {
             format!(
                 "置信度不足（{:.0}% < {:.0}%）",
@@ -195,14 +198,30 @@ mod tests {
 
     fn make_opp(score: f64, confidence: f64, liquidity: f64, risk: f64) -> Opportunity {
         Opportunity::new(
-            "m1".into(), "Q".into(), "test".into(), Utc::now(),
+            "m1".into(),
+            "Q".into(),
+            "test".into(),
+            Utc::now(),
             OpportunityType::Unknown,
-            score, confidence, (score * confidence) as u8,
-            score * 0.25, score * 0.20, 0.0, 0.0, 0.0, risk,
-            0.01, 1.0,
-            0.5, 0.5, 1.0,
-            None, 1000.0, liquidity,
-            None, None,
+            score,
+            confidence,
+            (score * confidence) as u8,
+            score * 0.25,
+            score * 0.20,
+            0.0,
+            0.0,
+            0.0,
+            risk,
+            0.01,
+            1.0,
+            0.5,
+            0.5,
+            1.0,
+            None,
+            1000.0,
+            liquidity,
+            None,
+            None,
         )
     }
 
@@ -240,8 +259,8 @@ mod tests {
     fn filter_result_counts_are_correct() {
         let filter = OpportunityFilter::new();
         let opps = vec![
-            make_opp(90.0, 0.9, 5000.0, 10.0), // accepted
-            make_opp(10.0, 0.9, 5000.0, 10.0), // rejected: low score
+            make_opp(90.0, 0.9, 5000.0, 10.0),  // accepted
+            make_opp(10.0, 0.9, 5000.0, 10.0),  // rejected: low score
             make_opp(80.0, 0.05, 5000.0, 10.0), // rejected: low confidence
         ];
         let result = filter.filter(&opps);

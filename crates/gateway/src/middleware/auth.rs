@@ -40,10 +40,7 @@ impl AuthMiddleware {
 
     /// 获取认证头（供 Transport 层使用）。
     pub fn auth_headers(&self) -> Vec<(String, String)> {
-        self.provider
-            .headers()
-            .into_iter()
-            .collect()
+        self.provider.headers().into_iter().collect()
     }
 }
 

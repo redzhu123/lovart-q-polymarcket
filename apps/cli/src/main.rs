@@ -11,23 +11,25 @@
 //! Simulation Only -- 不连接钱包 / 不真实交易 / 不签名 / 不下单 / 无 Polygon / WebSocket / 数据库 / Redis。
 
 use anyhow::Result;
-use pm_orderbook::{
-    DepthAnalyzer, LiquidityAnalyzer, MarketStatistics, OrderBookSnapshot,
-    OrderBookValidator, OrderBookVisualizer, SpreadAnalyzer,
-};
-use pm_risk::{
-    RiskConfig, RiskContext, RiskDashboard, RiskEngine, RiskReplay, TradeSuggestion,
-};
-use pm_scanner::DataSourceManager;
-use pm_trading::{
-    self, diagnose_connection, diagnose_credential, diagnose_health, diagnose_provider,
-    diagnose_session, MockTradingProvider, TradingConfig,
-};
+use pm_auth::{self, diagnose_auth_credential, diagnose_auth_health, diagnose_auth_session};
 use pm_gateway::{
-    self, create_gateway, diagnose_account, diagnose_balance, diagnose_gateway,
-    GatewayConfig,
+    self, GatewayConfig, create_gateway, diagnose_account, diagnose_balance, diagnose_gateway,
 };
+use pm_market_framework::MarketFramework;
+use pm_market_framework::prelude::*;
 use pm_oms::prelude::*;
+use pm_orderbook::{
+    DepthAnalyzer, LiquidityAnalyzer, MarketStatistics, OrderBookSnapshot, OrderBookValidator,
+    OrderBookVisualizer, SpreadAnalyzer,
+};
+use pm_risk::{RiskConfig, RiskContext, RiskDashboard, RiskEngine, RiskReplay, TradeSuggestion};
+use pm_scanner::DataSourceManager;
+use pm_settlement::prelude::*;
+use pm_trading::{
+    self, MockTradingProvider, TradingConfig, diagnose_connection, diagnose_credential,
+    diagnose_health, diagnose_provider, diagnose_session,
+};
+use pm_wallet::{self, diagnose_wallet_accounts, diagnose_wallet_balance, diagnose_wallet_health};
 
 const CONFIG_PATH: &str = "config.toml";
 
@@ -48,9 +50,8 @@ async fn main() -> Result<()> {
         pm_models::LogLevel::Debug => "debug",
         pm_models::LogLevel::Trace => "trace",
     };
-    let filter = format!(
-        "{level_filter},hyper=warn,hyper_util=warn,reqwest=warn,tower=warn,rustls=warn"
-    );
+    let filter =
+        format!("{level_filter},hyper=warn,hyper_util=warn,reqwest=warn,tower=warn,rustls=warn");
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -235,6 +236,93 @@ async fn main() -> Result<()> {
             println!("模式：OMS 演示（创建 5 个订单 + 推进到终态）");
             run_oms_demo(&cfg).await
         }
+        // ---- P2-05 PMS CLI ----
+        "portfolio" => {
+            println!("模式：投资组合");
+            run_portfolio(&cfg)
+        }
+        "positions" => {
+            println!("模式：持仓列表");
+            run_positions(&cfg)
+        }
+        "pnl" => {
+            println!("模式：盈亏报告");
+            run_pnl(&cfg)
+        }
+        "exposure" => {
+            println!("模式：风险敞口");
+            run_exposure(&cfg)
+        }
+        // ---- P2-06 Auth & Wallet Infrastructure CLI ----
+        "auth" => {
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("health");
+            match sub {
+                "health" => {
+                    println!("模式：认证健康检查");
+                    run_auth_health(&cfg).await
+                }
+                "session" => {
+                    println!("模式：会话诊断");
+                    run_auth_session(&cfg).await
+                }
+                "credential" => {
+                    println!("模式：凭据诊断");
+                    run_auth_credential(&cfg).await
+                }
+                _ => {
+                    println!("用法: cargo run -- auth [health|session|credential]");
+                    Ok(())
+                }
+            }
+        }
+        "wallet" => {
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("health");
+            match sub {
+                "health" => {
+                    println!("模式：钱包健康检查");
+                    run_wallet_health(&cfg)
+                }
+                "balance" => {
+                    println!("模式：余额查询");
+                    run_wallet_balance(&cfg)
+                }
+                "account" => {
+                    println!("模式：账户列表");
+                    run_wallet_accounts(&cfg)
+                }
+                _ => {
+                    println!("用法: cargo run -- wallet [health|balance|account]");
+                    Ok(())
+                }
+            }
+        }
+        // ---- P2-06 Settlement Engine CLI ----
+        "settlement" => {
+            println!("模式：结算引擎");
+            run_settlement(&cfg).await
+        }
+        "ledger" => {
+            println!("模式：资金流水");
+            run_ledger(&cfg)
+        }
+        "fees" => {
+            println!("模式：手续费");
+            run_fees(&cfg)
+        }
+        // ---- P3.0 多市场统一框架 CLI ----
+        "markets" => {
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("list");
+            match sub {
+                "health" => {
+                    println!("模式：多市场健康检查");
+                    run_market_health().await
+                }
+                "list" | _ => {
+                    println!("模式：多市场列表");
+                    run_markets().await
+                }
+            }
+        }
         // "orders" 已存在（V1.06），但 V1.08 增强为经 Gateway 查询
         other => {
             println!("未知模式: {}", other);
@@ -291,7 +379,9 @@ async fn run_market(cfg: &pm_models::Config) -> Result<()> {
 
     if !manager.capability().supports_markets {
         println!("当前 Provider 不支持市场列表。");
-        println!("提示：使用 Gamma Provider (provider=\"gamma\") 或 Mock Provider (provider=\"mock\")。");
+        println!(
+            "提示：使用 Gamma Provider (provider=\"gamma\") 或 Mock Provider (provider=\"mock\")。"
+        );
         return Ok(());
     }
 
@@ -318,8 +408,14 @@ async fn run_market(cfg: &pm_models::Config) -> Result<()> {
     println!("{}", "-".repeat(90));
 
     for m in markets.iter().take(display_count) {
-        let yes_str = m.yes_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "  -   ".into());
-        let no_str = m.no_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "  -   ".into());
+        let yes_str = m
+            .yes_price
+            .map(|p| format!("{:.4}", p))
+            .unwrap_or_else(|| "  -   ".into());
+        let no_str = m
+            .no_price
+            .map(|p| format!("{:.4}", p))
+            .unwrap_or_else(|| "  -   ".into());
         let vol_str = if m.volume >= 1000.0 {
             format!("{:.1}k", m.volume / 1000.0)
         } else {
@@ -359,7 +455,9 @@ async fn run_orderbook(cfg: &pm_models::Config) -> Result<()> {
 
     if !manager.capability().supports_orderbook {
         println!("当前 Provider 不支持订单簿。");
-        println!("提示：使用 CLOB Provider (provider=\"clob\") 或 Mock Provider (provider=\"mock\")。");
+        println!(
+            "提示：使用 CLOB Provider (provider=\"clob\") 或 Mock Provider (provider=\"mock\")。"
+        );
         return Ok(());
     }
 
@@ -396,16 +494,31 @@ async fn run_orderbook(cfg: &pm_models::Config) -> Result<()> {
         println!();
 
         if let Some(bid) = ob.best_bid {
-            println!("  Best Bid : {:.4}  |  买盘深度: {:.2}", bid, ob.bid_depth.unwrap_or(0.0));
+            println!(
+                "  Best Bid : {:.4}  |  买盘深度: {:.2}",
+                bid,
+                ob.bid_depth.unwrap_or(0.0)
+            );
         }
         if let Some(ask) = ob.best_ask {
-            println!("  Best Ask : {:.4}  |  卖盘深度: {:.2}", ask, ob.ask_depth.unwrap_or(0.0));
+            println!(
+                "  Best Ask : {:.4}  |  卖盘深度: {:.2}",
+                ask,
+                ob.ask_depth.unwrap_or(0.0)
+            );
         }
         if let Some(spread) = ob.spread {
             println!("  Spread   : {:.4}", spread);
         }
-        println!("  买盘档位: {}  |  卖盘档位: {}", ob.bid_levels.len(), ob.ask_levels.len());
-        println!("  累计买量: {:.2}  |  累计卖量: {:.2}", ob.bid_volume, ob.ask_volume);
+        println!(
+            "  买盘档位: {}  |  卖盘档位: {}",
+            ob.bid_levels.len(),
+            ob.ask_levels.len()
+        );
+        println!(
+            "  累计买量: {:.2}  |  累计卖量: {:.2}",
+            ob.bid_volume, ob.ask_volume
+        );
         println!();
 
         // ASCII 可视化
@@ -503,7 +616,9 @@ async fn run_liquidity(cfg: &pm_models::Config) -> Result<()> {
     println!("深度分析（附带）：");
     println!();
     let depth_reports = DepthAnalyzer::analyze_all(&orderbooks);
-    let depth_has_data = depth_reports.iter().any(|r| r.bid_top10 > 0.0 || r.ask_top10 > 0.0);
+    let depth_has_data = depth_reports
+        .iter()
+        .any(|r| r.bid_top10 > 0.0 || r.ask_top10 > 0.0);
     if depth_has_data {
         let depth_summary = DepthAnalyzer::summarize(&depth_reports);
         DepthAnalyzer::print_summary(&depth_summary);
@@ -544,11 +659,19 @@ fn run_report(cfg: &pm_models::Config) -> Result<()> {
     println!();
     println!("机会（生命周期）        : {}", opps);
     println!("影子交易（已平仓）      : {}", shadow.stats.total);
-    println!("  盈利 / 亏损           : {} / {}", shadow.stats.winners, shadow.stats.losers);
-    println!("  平均收益率            : {}", pm_utils::fmt_roi(shadow.stats.average_roi()));
-    println!("  最佳 / 最差收益率     : {} / {}",
-             pm_utils::fmt_roi(shadow.stats.best_roi()),
-             pm_utils::fmt_roi(shadow.stats.worst_roi()));
+    println!(
+        "  盈利 / 亏损           : {} / {}",
+        shadow.stats.winners, shadow.stats.losers
+    );
+    println!(
+        "  平均收益率            : {}",
+        pm_utils::fmt_roi(shadow.stats.average_roi())
+    );
+    println!(
+        "  最佳 / 最差收益率     : {} / {}",
+        pm_utils::fmt_roi(shadow.stats.best_roi()),
+        pm_utils::fmt_roi(shadow.stats.worst_roi())
+    );
     println!("纸面订单                : {}", paper_orders);
     println!("纸面持仓（已平仓）      : {}", paper_positions);
     println!("纸面组合快照            : {}", paper_portfolio);
@@ -600,8 +723,13 @@ async fn run_opportunities(cfg: &pm_models::Config) -> Result<()> {
     );
 
     println!("机会总数: {}", output.opportunities.len());
-    println!("新增: {}  更新: {}  过滤: {}  过期: {}",
-        output.new_count, output.updated_count, output.filtered_count, output.expired.len());
+    println!(
+        "新增: {}  更新: {}  过滤: {}  过期: {}",
+        output.new_count,
+        output.updated_count,
+        output.filtered_count,
+        output.expired.len()
+    );
     println!();
     println!("{}", "=".repeat(100));
     println!();
@@ -725,9 +853,10 @@ async fn run_explain(cfg: &pm_models::Config, target_id: &str) -> Result<()> {
     );
 
     // 按 ID 或 market_id 匹配
-    let found = output.opportunities.iter().find(|opp| {
-        opp.id.starts_with(target_id) || opp.market_id.starts_with(target_id)
-    });
+    let found = output
+        .opportunities
+        .iter()
+        .find(|opp| opp.id.starts_with(target_id) || opp.market_id.starts_with(target_id));
 
     match found {
         Some(opp) => {
@@ -739,7 +868,11 @@ async fn run_explain(cfg: &pm_models::Config, target_id: &str) -> Result<()> {
             println!();
             println!("可用的机会 ID：");
             for opp in &output.opportunities {
-                println!("  {} ({})", opp.id, opp.question.chars().take(50).collect::<String>());
+                println!(
+                    "  {} ({})",
+                    opp.id,
+                    opp.question.chars().take(50).collect::<String>()
+                );
             }
             if output.opportunities.is_empty() {
                 println!("  （无机会）");
@@ -761,7 +894,11 @@ async fn run_risk(cfg: &pm_models::Config) -> Result<()> {
 
     // 构建 RiskContext（从 Paper + Execution 当前状态）
     let now = chrono::Local::now();
-    let ctx = RiskContext::minimal(cfg.portfolio.initial_capital, cfg.portfolio.initial_capital, now);
+    let ctx = RiskContext::minimal(
+        cfg.portfolio.initial_capital,
+        cfg.portfolio.initial_capital,
+        now,
+    );
 
     let exposure = pm_risk::ExposureReport::new(cfg.portfolio.initial_capital);
 
@@ -785,27 +922,66 @@ async fn run_explain_risk(cfg: &pm_models::Config) -> Result<()> {
     println!("所有交易必须经过 Risk Engine 审核，禁止绕过。");
     println!();
     println!("决策类型：");
-    println!("  ✅ 接受（Accept）  — 风险评分 ≥ {}", risk_config.accept_threshold);
-    println!("  ⚠️ 需审核（Review） — 风险评分 {:.0}~{:.0} 或存在警告", risk_config.review_threshold, risk_config.accept_threshold);
-    println!("  ❌ 拒绝（Reject）  — 风险评分 < {:.0} 或触发硬限制", risk_config.review_threshold);
+    println!(
+        "  ✅ 接受（Accept）  — 风险评分 ≥ {}",
+        risk_config.accept_threshold
+    );
+    println!(
+        "  ⚠️ 需审核（Review） — 风险评分 {:.0}~{:.0} 或存在警告",
+        risk_config.review_threshold, risk_config.accept_threshold
+    );
+    println!(
+        "  ❌ 拒绝（Reject）  — 风险评分 < {:.0} 或触发硬限制",
+        risk_config.review_threshold
+    );
     println!();
     println!("── 风险规则 ──");
     println!();
     println!("  最大持仓数量：    {} 个", risk_config.max_positions);
-    println!("  单笔最大资金：    {:.0} USDC", risk_config.max_position_size);
+    println!(
+        "  单笔最大资金：    {:.0} USDC",
+        risk_config.max_position_size
+    );
     println!("  最大待处理订单：  {} 个", risk_config.max_open_orders);
-    println!("  最大单笔占用：    {:.0} USDC", risk_config.max_single_capital);
-    println!("  最大资金利用率：  {:.0}%", risk_config.max_capital_usage * 100.0);
+    println!(
+        "  最大单笔占用：    {:.0} USDC",
+        risk_config.max_single_capital
+    );
+    println!(
+        "  最大资金利用率：  {:.0}%",
+        risk_config.max_capital_usage * 100.0
+    );
     println!("  每日最大亏损：    {:.0} USDC", risk_config.max_daily_loss);
-    println!("  连续亏损上限：    {} 次", risk_config.max_consecutive_losses);
-    println!("  最大回撤：        {:.0}%", risk_config.max_drawdown * 100.0);
-    println!("  最大市场暴露：    {:.0}%", risk_config.max_market_exposure * 100.0);
-    println!("  最大类别暴露：    {:.0}%", risk_config.max_category_exposure * 100.0);
-    println!("  最大方向暴露：    {:.0}%", risk_config.max_side_exposure * 100.0);
+    println!(
+        "  连续亏损上限：    {} 次",
+        risk_config.max_consecutive_losses
+    );
+    println!(
+        "  最大回撤：        {:.0}%",
+        risk_config.max_drawdown * 100.0
+    );
+    println!(
+        "  最大市场暴露：    {:.0}%",
+        risk_config.max_market_exposure * 100.0
+    );
+    println!(
+        "  最大类别暴露：    {:.0}%",
+        risk_config.max_category_exposure * 100.0
+    );
+    println!(
+        "  最大方向暴露：    {:.0}%",
+        risk_config.max_side_exposure * 100.0
+    );
     println!("  最低流动性：      {:.0} USDC", risk_config.min_liquidity);
     println!("  最低深度：        {:.0} USDC", risk_config.min_depth);
-    println!("  最大滑点：        {:.1}%", risk_config.max_slippage * 100.0);
-    println!("  最高波动率：      {:.0}%", risk_config.max_volatility * 100.0);
+    println!(
+        "  最大滑点：        {:.1}%",
+        risk_config.max_slippage * 100.0
+    );
+    println!(
+        "  最高波动率：      {:.0}%",
+        risk_config.max_volatility * 100.0
+    );
     println!();
     println!("── 仓位策略 ──");
     println!();
@@ -849,7 +1025,14 @@ async fn run_risk_replay(cfg: &pm_models::Config) -> Result<()> {
     let scenarios = vec![
         (
             "正常场景",
-            TradeSuggestion::new("mkt-normal", "正常市场机会", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            TradeSuggestion::new(
+                "mkt-normal",
+                "正常市场机会",
+                pm_core::Side::Buy,
+                0.45,
+                100.0,
+                "DefaultStrategy",
+            ),
             {
                 let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
                 ctx.market_liquidity = 50000.0;
@@ -860,7 +1043,14 @@ async fn run_risk_replay(cfg: &pm_models::Config) -> Result<()> {
         ),
         (
             "亏损场景",
-            TradeSuggestion::new("mkt-loss", "亏损场景机会", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            TradeSuggestion::new(
+                "mkt-loss",
+                "亏损场景机会",
+                pm_core::Side::Buy,
+                0.45,
+                100.0,
+                "DefaultStrategy",
+            ),
             {
                 let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
                 ctx.daily_realized_pnl = -1200.0;
@@ -872,7 +1062,14 @@ async fn run_risk_replay(cfg: &pm_models::Config) -> Result<()> {
         ),
         (
             "满仓场景",
-            TradeSuggestion::new("mkt-full", "满仓场景机会", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            TradeSuggestion::new(
+                "mkt-full",
+                "满仓场景机会",
+                pm_core::Side::Buy,
+                0.45,
+                100.0,
+                "DefaultStrategy",
+            ),
             {
                 let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
                 ctx.open_position_count = 10;
@@ -884,7 +1081,14 @@ async fn run_risk_replay(cfg: &pm_models::Config) -> Result<()> {
         ),
         (
             "连续亏损场景",
-            TradeSuggestion::new("mkt-streak", "连续亏损场景", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            TradeSuggestion::new(
+                "mkt-streak",
+                "连续亏损场景",
+                pm_core::Side::Buy,
+                0.45,
+                100.0,
+                "DefaultStrategy",
+            ),
             {
                 let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
                 ctx.consecutive_losses = 5;
@@ -896,7 +1100,14 @@ async fn run_risk_replay(cfg: &pm_models::Config) -> Result<()> {
         ),
         (
             "低流动性场景",
-            TradeSuggestion::new("mkt-illiq", "低流动性场景", pm_core::Side::Buy, 0.45, 100.0, "DefaultStrategy"),
+            TradeSuggestion::new(
+                "mkt-illiq",
+                "低流动性场景",
+                pm_core::Side::Buy,
+                0.45,
+                100.0,
+                "DefaultStrategy",
+            ),
             {
                 let mut ctx = RiskContext::minimal(10000.0, 9000.0, now);
                 ctx.market_liquidity = 50.0;
@@ -940,8 +1151,19 @@ async fn run_orders(cfg: &pm_models::Config) -> Result<()> {
     let gateway = create_gateway(&gw_cfg);
     println!("【订单列表】");
     println!();
-    println!("  Gateway      : {} ({})", gateway.name(), gateway.gateway_type());
-    println!("  模式         : {}", if gateway.live_enabled() { "⚠️ 真实交易" } else { "🔒 模拟交易" });
+    println!(
+        "  Gateway      : {} ({})",
+        gateway.name(),
+        gateway.gateway_type()
+    );
+    println!(
+        "  模式         : {}",
+        if gateway.live_enabled() {
+            "⚠️ 真实交易"
+        } else {
+            "🔒 模拟交易"
+        }
+    );
     println!();
 
     let info = gateway.info();
@@ -1212,8 +1434,19 @@ async fn run_oms_orders(cfg: &pm_models::Config) -> Result<()> {
     println!();
     println!("【OMS 订单列表】");
     println!();
-    println!("  Gateway : {} ({})", oms.gateway().name(), oms.gateway().gateway_type());
-    println!("  模式    : {}", if oms.gateway().live_enabled() { "⚠️ 真实交易" } else { "🔒 模拟交易" });
+    println!(
+        "  Gateway : {} ({})",
+        oms.gateway().name(),
+        oms.gateway().gateway_type()
+    );
+    println!(
+        "  模式    : {}",
+        if oms.gateway().live_enabled() {
+            "⚠️ 真实交易"
+        } else {
+            "🔒 模拟交易"
+        }
+    );
     println!("  仓库    : {:?}", oms.repository().name());
     println!();
 
@@ -1381,6 +1614,153 @@ async fn run_oms_demo(cfg: &pm_models::Config) -> Result<()> {
 }
 
 // ============================================================================
+// P2-05 PMS CLI 命令
+// ============================================================================
+
+/// 构建 PMS 实例（Memory 仓库 + 模拟数据）。
+fn build_cli_pms(cfg: &pm_models::Config) -> anyhow::Result<pm_pms::Pms> {
+    let config = pm_pms::PmsConfig {
+        repository_type: pm_pms::prelude::RepositoryType::Memory,
+        portfolio_csv: None,
+        positions_csv: None,
+        pnl_csv: None,
+        initial_capital: cfg.portfolio.initial_capital,
+        subscribe_to_oms: false, // CLI 独立运行，不订阅 OMS
+    };
+    let repo = pm_pms::prelude::create_repository(
+        config.repository_type,
+        config.portfolio_csv.clone(),
+        config.positions_csv.clone(),
+        config.pnl_csv.clone(),
+    )?;
+    pm_pms::Pms::new(config, repo)
+}
+
+/// `cargo run -- portfolio`：查看投资组合。
+fn run_portfolio(cfg: &pm_models::Config) -> anyhow::Result<()> {
+    let mut pms = build_cli_pms(cfg)?;
+    // 添加一些示例数据
+    let now = chrono::Local::now();
+    let _ = pms.handle_order_filled(
+        "OMS-DEMO-001",
+        "mkt-btc-2024",
+        pm_pms::prelude::Direction::Yes,
+        pm_core::Side::Buy,
+        0.55,
+        100.0,
+    );
+    let _ = pms.handle_order_filled(
+        "OMS-DEMO-002",
+        "mkt-eth-2024",
+        pm_pms::prelude::Direction::No,
+        pm_core::Side::Buy,
+        0.45,
+        200.0,
+    );
+    // mark-to-market
+    pms.position_mgr
+        .mark_position("mkt-btc-2024", pm_pms::prelude::Direction::Yes, 0.60, now);
+    pms.revalue_all(now);
+    pms.print_dashboard();
+    Ok(())
+}
+
+/// `cargo run -- positions`：查看全部持仓。
+fn run_positions(cfg: &pm_models::Config) -> anyhow::Result<()> {
+    let mut pms = build_cli_pms(cfg)?;
+    let now = chrono::Local::now();
+    let _ = pms.handle_order_filled(
+        "OMS-001",
+        "mkt-btc-2024",
+        pm_pms::prelude::Direction::Yes,
+        pm_core::Side::Buy,
+        0.55,
+        100.0,
+    );
+    let _ = pms.handle_order_filled(
+        "OMS-002",
+        "mkt-eth-2024",
+        pm_pms::prelude::Direction::No,
+        pm_core::Side::Buy,
+        0.45,
+        200.0,
+    );
+    let _ = pms.handle_order_filled(
+        "OMS-003",
+        "mkt-sol-2024",
+        pm_pms::prelude::Direction::Yes,
+        pm_core::Side::Buy,
+        0.65,
+        50.0,
+    );
+    pms.position_mgr
+        .mark_position("mkt-btc-2024", pm_pms::prelude::Direction::Yes, 0.60, now);
+    pms.revalue_all(now);
+    pms.print_positions();
+    Ok(())
+}
+
+/// `cargo run -- pnl`：查看盈亏报告。
+fn run_pnl(cfg: &pm_models::Config) -> anyhow::Result<()> {
+    let mut pms = build_cli_pms(cfg)?;
+    let now = chrono::Local::now();
+    // 创建几个模拟持仓并平仓以展示盈亏
+    let _ = pms.handle_order_filled(
+        "OMS-001",
+        "mkt-btc",
+        pm_pms::prelude::Direction::Yes,
+        pm_core::Side::Buy,
+        0.50,
+        100.0,
+    );
+    let _ = pms.handle_order_filled(
+        "OMS-002",
+        "mkt-eth",
+        pm_pms::prelude::Direction::No,
+        pm_core::Side::Buy,
+        0.40,
+        100.0,
+    );
+    // 模拟平仓
+    let _ = pms
+        .position_mgr
+        .close_position("mkt-btc", pm_pms::prelude::Direction::Yes, 0.55, now);
+    let _ = pms
+        .position_mgr
+        .close_position("mkt-eth", pm_pms::prelude::Direction::No, 0.35, now);
+    pms.revalue_all(now);
+    pms.print_pnl();
+    Ok(())
+}
+
+/// `cargo run -- exposure`：查看风险敞口。
+fn run_exposure(cfg: &pm_models::Config) -> anyhow::Result<()> {
+    let mut pms = build_cli_pms(cfg)?;
+    let now = chrono::Local::now();
+    let _ = pms.handle_order_filled(
+        "OMS-001",
+        "mkt-btc",
+        pm_pms::prelude::Direction::Yes,
+        pm_core::Side::Buy,
+        0.55,
+        100.0,
+    );
+    let _ = pms.handle_order_filled(
+        "OMS-002",
+        "mkt-eth",
+        pm_pms::prelude::Direction::No,
+        pm_core::Side::Buy,
+        0.45,
+        200.0,
+    );
+    pms.position_mgr
+        .mark_position("mkt-btc", pm_pms::prelude::Direction::Yes, 0.60, now);
+    pms.revalue_all(now);
+    pms.print_exposure();
+    Ok(())
+}
+
+// ============================================================================
 // P2-02 API Workflow CLI 命令
 // ============================================================================
 
@@ -1413,7 +1793,9 @@ async fn run_workflow(sub: &str) -> Result<()> {
             println!();
             println!("可用命令:");
             println!("  cargo run -- workflow          显示当前 Workflow（本视图）");
-            println!("  cargo run -- workflow dryrun   执行 DryRun Workflow（默认，无网络/无下单）");
+            println!(
+                "  cargo run -- workflow dryrun   执行 DryRun Workflow（默认，无网络/无下单）"
+            );
             println!("  cargo run -- workflow replay   执行 Replay Workflow（从 fixtures 回放）");
             println!("  cargo run -- workflow live     执行 Live ReadOnly Workflow（真实只读）");
             println!();
@@ -1467,18 +1849,423 @@ async fn run_workflow(sub: &str) -> Result<()> {
     Ok(())
 }
 
+// ============================================================================
+// P2-06 Auth & Wallet Infrastructure CLI 命令
+// ============================================================================
+
+/// `cargo run -- auth health`：认证健康检查（P2-06）。
+async fn run_auth_health(_cfg: &pm_models::Config) -> Result<()> {
+    let auth = pm_auth::create_default_auth()?;
+    let output = diagnose_auth_health(&auth).await;
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- auth session`：会话诊断（P2-06）。
+async fn run_auth_session(_cfg: &pm_models::Config) -> Result<()> {
+    let auth = pm_auth::create_default_auth()?;
+    let output = diagnose_auth_session(&auth).await;
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- auth credential`：凭据诊断（P2-06）。
+async fn run_auth_credential(_cfg: &pm_models::Config) -> Result<()> {
+    let auth = pm_auth::create_default_auth()?;
+    let cred_mgr = auth.credential_manager();
+    let output = diagnose_auth_credential(cred_mgr);
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- wallet health`：钱包健康检查（P2-06）。
+fn run_wallet_health(_cfg: &pm_models::Config) -> Result<()> {
+    let (wallet, account_mgr, balance_mgr, allowance_mgr) = pm_wallet::create_default_wallet()?;
+    let output = diagnose_wallet_health(&wallet, &account_mgr, &balance_mgr, &allowance_mgr);
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- wallet balance`：余额查询（P2-06）。
+fn run_wallet_balance(_cfg: &pm_models::Config) -> Result<()> {
+    let (_wallet, _account_mgr, balance_mgr, _allowance_mgr) = pm_wallet::create_default_wallet()?;
+    let output = diagnose_wallet_balance(&balance_mgr);
+    println!("{}", output);
+    Ok(())
+}
+
+/// `cargo run -- wallet account`：账户列表（P2-06）。
+fn run_wallet_accounts(_cfg: &pm_models::Config) -> Result<()> {
+    let (wallet, account_mgr, _balance_mgr, _allowance_mgr) = pm_wallet::create_default_wallet()?;
+    let output = diagnose_wallet_accounts(&wallet, &account_mgr);
+    println!("{}", output);
+    Ok(())
+}
+
+// ============================================================================
+// P2-06 Settlement Engine CLI 命令
+// ============================================================================
+
+/// 构建 Settlement Engine（Memory 仓库 + 模拟数据）。
+fn build_cli_settlement(cfg: &pm_models::Config) -> anyhow::Result<SettlementEngine> {
+    use pm_settlement::prelude::*;
+    let config = SettlementConfig {
+        initial_capital: cfg.portfolio.initial_capital,
+        default_account_id: "ACCT-MAIN-001".to_string(),
+        fee_rule: FeeRule::zero_fee(),
+        enable_event_bus: true,
+    };
+    let repo = pm_settlement::prelude::create_repository(
+        pm_settlement::prelude::RepositoryType::Memory,
+        None,
+        None,
+        None,
+    )?;
+    SettlementEngine::new(config, repo)
+}
+
+/// `cargo run -- settlement`：查看最近结算。
+async fn run_settlement(cfg: &pm_models::Config) -> anyhow::Result<()> {
+    let mut engine = build_cli_settlement(cfg)?;
+
+    // 注入模拟数据
+    let now = chrono::Local::now();
+    let demo_fills = vec![
+        (
+            "T-DEMO-001",
+            "OMS-DEMO-001",
+            "mkt-btc",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Buy,
+            0.55,
+            100.0,
+        ),
+        (
+            "T-DEMO-002",
+            "OMS-DEMO-002",
+            "mkt-eth",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Buy,
+            0.45,
+            200.0,
+        ),
+        (
+            "T-DEMO-003",
+            "OMS-DEMO-003",
+            "mkt-btc",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Sell,
+            0.60,
+            50.0,
+        ),
+        (
+            "T-DEMO-004",
+            "OMS-DEMO-004",
+            "mkt-sol",
+            pm_execution::order::Direction::No,
+            pm_core::Side::Buy,
+            0.30,
+            150.0,
+        ),
+        (
+            "T-DEMO-005",
+            "OMS-DEMO-005",
+            "mkt-eth",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Buy,
+            0.48,
+            100.0,
+        ),
+    ];
+
+    for (tid, oid, mid, dir, side, price, qty) in &demo_fills {
+        let fill = TradeFillEvent {
+            trade_id: tid.to_string(),
+            order_id: oid.to_string(),
+            client_order_id: format!("CLI-{}", oid),
+            exchange_order_id: None,
+            market_id: mid.to_string(),
+            account_id: "ACCT-MAIN-001".to_string(),
+            direction: *dir,
+            side: *side,
+            fill_price: *price,
+            fill_quantity: *qty,
+            filled_at: now,
+            is_taker: true,
+            gateway_name: "MockGateway".to_string(),
+        };
+        let result = engine.process_fill(&fill);
+        println!(
+            "  {} {} → {} | 余额: {:.2} → {:.2} | {}",
+            if result.status.is_success() {
+                "✓"
+            } else {
+                "✗"
+            },
+            result.trade_id,
+            result.status.as_zh(),
+            result.balance_before,
+            result.balance_after,
+            result.position_summary.as_deref().unwrap_or("-"),
+        );
+    }
+    println!();
+
+    engine.print_dashboard();
+    Ok(())
+}
+
+/// `cargo run -- ledger`：查看资金流水。
+fn run_ledger(cfg: &pm_models::Config) -> anyhow::Result<()> {
+    let mut engine = build_cli_settlement(cfg)?;
+    let now = chrono::Local::now();
+
+    // 注入模拟数据
+    let fills = vec![
+        (
+            "T-001",
+            "OMS-001",
+            "mkt-btc",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Buy,
+            0.55,
+            100.0,
+        ),
+        (
+            "T-002",
+            "OMS-002",
+            "mkt-eth",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Buy,
+            0.45,
+            200.0,
+        ),
+        (
+            "T-003",
+            "OMS-003",
+            "mkt-btc",
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Sell,
+            0.60,
+            100.0,
+        ),
+    ];
+
+    for (tid, oid, mid, dir, side, price, qty) in &fills {
+        let fill = TradeFillEvent {
+            trade_id: tid.to_string(),
+            order_id: oid.to_string(),
+            client_order_id: format!("CLI-{}", oid),
+            exchange_order_id: None,
+            market_id: mid.to_string(),
+            account_id: "ACCT-MAIN-001".to_string(),
+            direction: *dir,
+            side: *side,
+            fill_price: *price,
+            fill_quantity: *qty,
+            filled_at: now,
+            is_taker: true,
+            gateway_name: "MockGateway".to_string(),
+        };
+        engine.process_fill(&fill);
+    }
+
+    engine.ledger.print_zh(20);
+    Ok(())
+}
+
+/// `cargo run -- fees`：查看手续费规则。
+fn run_fees(_cfg: &pm_models::Config) -> anyhow::Result<()> {
+    use pm_settlement::prelude::*;
+
+    println!();
+    println!("═══════════════════════════════════════════════════════════");
+    println!("  手续费系统");
+    println!("═══════════════════════════════════════════════════════════");
+    println!();
+
+    let standard = FeeRule::default();
+    println!("── 标准费率 ──");
+    println!("{}", standard.display_zh());
+    println!();
+
+    let zero = FeeRule::zero_fee();
+    println!("── 零费率（模拟环境）──");
+    println!("{}", zero.display_zh());
+    println!();
+
+    // 模拟几次成交的手续费
+    let engine = FeeEngine::default();
+    println!("── 手续费示例 ──");
+    println!();
+
+    let examples = vec![
+        ("小额定单 (Taker)", 0.50, 100.0, true),
+        ("小额定单 (Maker)", 0.50, 100.0, false),
+        ("中额定单 (Taker)", 0.55, 1000.0, true),
+        ("大额定单 (Taker)", 0.60, 10000.0, true),
+    ];
+
+    for (label, price, qty, is_taker) in &examples {
+        let notional = price * qty;
+        let rate = if *is_taker {
+            engine.active_rule.taker_rate
+        } else {
+            engine.active_rule.maker_rate
+        };
+        let fee = notional * rate;
+        let role = if *is_taker { "Taker" } else { "Maker" };
+        println!(
+            "  {}: {:.4} × {:.0} = {:.2} USDC | 费率 {:.2}% | 手续费 {:.4} USDC | {}",
+            label,
+            price,
+            qty,
+            notional,
+            rate * 100.0,
+            fee,
+            role
+        );
+    }
+    println!();
+
+    println!("═══════════════════════════════════════════════════════════");
+    println!();
+    Ok(())
+}
+
+// ============================================================================
+// P3.0 多市场统一框架 CLI 命令
+// ============================================================================
+
+/// 创建一个带有示例注册插件的 MarketFramework 实例（演示用）。
+fn create_demo_framework() -> MarketFramework {
+    let fw = MarketFramework::new();
+    tracing::info!("创建多市场框架演示实例");
+
+    // 未来在这里注册真实的市场插件（PolymarketPlugin、BinancePlugin 等）
+    // 当前为框架演示，展示注册表和发现功能
+
+    fw
+}
+
+/// `cargo run -- markets`：列出所有已安装市场（P3.0）。
+async fn run_markets() -> Result<()> {
+    let fw = create_demo_framework();
+
+    println!("══════ 多市场统一框架（P3.0）══════");
+    println!();
+    println!("{}", fw.registry().render_table_zh());
+    println!();
+    println!("{}", Discovery::discover_and_report(fw.registry()));
+
+    // 能力矩阵
+    println!();
+    println!("── 能力说明 ──");
+    println!();
+    println!("每个市场声明自己的能力，系统根据能力自动启用功能。");
+    println!("当前支持的能力类别：");
+    println!("  📊 数据能力：ReadMarket / ReadOrderBook / ReadTrades / HistoricalData");
+    println!(
+        "  💹 交易能力：PaperTrading / LiveTrading / CancelOrder / ReplaceOrder / BatchOrders"
+    );
+    println!("  💰 账户能力：Wallet / Balance / Settlement");
+    println!("  📡 传输能力：Rest / WebSocket / Streaming / FIX");
+    println!("  🏷️  市场类型：Spot / Margin / Perpetual / Futures / Options / Prediction");
+    println!("  🔧 扩展能力：MultiAsset / MultiChain / CrossMargin / IsolatedMargin");
+    println!("  ⭐ 高级能力：Leverage / Staking / Launchpad");
+    println!();
+    println!("── 预定义能力模板 ──");
+    println!();
+    println!("  🎲 预测市场（Polymarket风格）：{}", {
+        let caps = CapabilitySet::prediction_market_full();
+        let names: Vec<String> = caps
+            .list_all()
+            .iter()
+            .map(|c| c.as_zh().to_string())
+            .collect();
+        names.join(" / ")
+    });
+    println!();
+    println!("  📈 现货交易所（Binance风格）：{}", {
+        let caps = CapabilitySet::spot_exchange_full();
+        let names: Vec<String> = caps
+            .list_all()
+            .iter()
+            .map(|c| c.as_zh().to_string())
+            .collect();
+        names.join(" / ")
+    });
+    println!();
+    println!("── 未来市场 ──");
+    println!();
+    println!(
+        "  计划支持：Polymarket / Kalshi / Binance / OKX / Bybit / Hyperliquid / Uniswap / Raydium"
+    );
+    println!("  新增市场仅需：新增 provider + adapter + gateway + 实现 MarketPlugin");
+    println!("  不得修改：Strategy / Risk / OMS / Settlement / PMS / Infrastructure");
+    println!();
+
+    Ok(())
+}
+
+/// `cargo run -- markets health`：多市场健康检查（P3.0 第七节）。
+async fn run_market_health() -> Result<()> {
+    let fw = create_demo_framework();
+
+    println!("══════ 多市场健康检查（P3.0）══════");
+    println!();
+
+    // 健康检查报告
+    let health_report = MarketHealthReport::healthy("多市场框架");
+
+    println!("{}", health_report.report_zh());
+    println!();
+
+    // 各维度说明
+    println!("── 健康检查维度 ──");
+    println!();
+    println!("  ✅ REST API       — HTTP/HTTPS 连接状态");
+    println!("  ✅ WebSocket      — 实时推送连接状态");
+    println!("  ✅ 网关           — 交易所网关状态");
+    println!("  ✅ 认证           — API Key / Token 有效性");
+    println!("  ✅ 延迟           — 请求响应时间");
+    println!("  ✅ 流数据         — gRPC stream / SSE 状态");
+    println!();
+    println!("  未来每个市场插件实现健康检查后，`markets health`");
+    println!("  将汇总所有已注册市场的健康状态。");
+    println!();
+
+    // 诊断报告
+    let diag = fw.generate_report();
+    println!("── 诊断概览 ──");
+    println!();
+    println!("  已安装市场: {} 个", fw.registry().count());
+    println!("  注册表状态: 正常");
+    println!("  已知限制: {} 项", diag.known_limitations.len());
+    println!("  优化建议: {} 项", diag.optimization_suggestions.len());
+    println!();
+
+    Ok(())
+}
+
 fn print_usage() {
     println!();
     println!("用法:");
     println!();
     println!("  cargo run -- scan            正常扫描 + 纸面交易 + 执行模拟器");
     println!("  cargo run -- diagnose        诊断模式（单次扫描 + 完整诊断报告，不进入循环）");
-    println!("  cargo run -- datasource      数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照）");
+    println!(
+        "  cargo run -- datasource      数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照）"
+    );
     println!("  cargo run -- replay          历史回放");
     println!("  cargo run -- paper           基于历史机会的纸面交易");
     println!("  cargo run -- backtest        完整回测");
     println!("  cargo run -- execution-test  执行模拟器压测");
     println!("  cargo run -- report          汇总报告");
+    println!();
+    println!("  多市场框架（P3.0）：");
+    println!("  cargo run -- markets          列出所有已安装市场");
+    println!("  cargo run -- markets health   多市场健康检查");
     println!();
     println!("  市场微观结构（V1.03）：");
     println!("  cargo run -- market          市场列表");
@@ -1526,4 +2313,23 @@ fn print_usage() {
     println!("  cargo run -- oms-order <id>   OMS 订单详情（含状态历史）");
     println!("  cargo run -- oms-events       OMS 事件流");
     println!("  cargo run -- oms-demo         创建 5 个示例订单");
+    println!();
+    println!("  PMS（P2-05）：");
+    println!("  cargo run -- portfolio       投资组合仪表盘");
+    println!("  cargo run -- positions       全部持仓列表");
+    println!("  cargo run -- pnl             盈亏报告");
+    println!("  cargo run -- exposure        风险敞口报告");
+    println!();
+    println!("  认证与钱包（P2-06）：");
+    println!("  cargo run -- auth health     认证健康诊断（凭据/会话/Token/认证）");
+    println!("  cargo run -- auth session    会话诊断");
+    println!("  cargo run -- auth credential 凭据诊断（脱敏）");
+    println!("  cargo run -- wallet health   钱包健康诊断（钱包/余额/授权/Nonce）");
+    println!("  cargo run -- wallet balance  余额查询");
+    println!("  cargo run -- wallet account  账户列表（脱敏）");
+    println!();
+    println!("  结算引擎（P2-06）：");
+    println!("  cargo run -- settlement      查看最近结算（含模拟数据）");
+    println!("  cargo run -- ledger          查看资金流水");
+    println!("  cargo run -- fees            查看手续费规则与示例");
 }

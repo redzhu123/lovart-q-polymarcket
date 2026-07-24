@@ -92,13 +92,13 @@ mod tests {
     #[test]
     fn counts_price_and_liquidity() {
         let markets = vec![
-            um("a", Some(0.4), Some(0.5), 100.0),  // 有价 + 有流动性
-            um("b", Some(0.4), Some(0.5), 0.0),    // 有价 + 无流动性
-            um("c", None, None, 50.0),             // 无价 + 有流动性
+            um("a", Some(0.4), Some(0.5), 100.0), // 有价 + 有流动性
+            um("b", Some(0.4), Some(0.5), 0.0),   // 有价 + 无流动性
+            um("c", None, None, 50.0),            // 无价 + 有流动性
         ];
         let s = DataStatistics::build(&markets, "gamma", 1, 0, Local::now());
         assert_eq!(s.market_count, 3);
-        assert_eq!(s.price_count, 2);     // a, b
+        assert_eq!(s.price_count, 2); // a, b
         assert_eq!(s.liquidity_count, 2); // a, c
         assert_eq!(s.invalid_count, 1);
         assert_eq!(s.cached_count, 0);

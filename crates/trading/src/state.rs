@@ -77,11 +77,7 @@ impl TradingState {
             return;
         }
         *self = new_state;
-        info!(
-            "Trading 状态变更: {} → {}",
-            old.as_zh(),
-            new_state.as_zh()
-        );
+        info!("Trading 状态变更: {} → {}", old.as_zh(), new_state.as_zh());
     }
 }
 

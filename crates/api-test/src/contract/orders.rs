@@ -9,31 +9,19 @@ use crate::validator::response::{ResponseValidator, ValidationResult};
 use serde_json::Value;
 
 /// 订单列表合约测试。
-pub async fn test_orders(
-    client: &ApiClient,
-    validator: &ResponseValidator,
-) -> ValidationResult {
-    let contract = ContractTest::new(
-        "订单列表",
-        HttpMethod::Get,
-        "/orders",
-        true,
-        200,
-        "orders",
-    );
+pub async fn test_orders(client: &ApiClient, validator: &ResponseValidator) -> ValidationResult {
+    let contract = ContractTest::new("订单列表", HttpMethod::Get, "/orders", true, 200, "orders");
 
     let response = client.get(&contract.path).await;
 
     match response {
-        Ok(resp) => {
-            validator.validate(
-                &contract.name,
-                &resp,
-                &contract.schema_name,
-                contract.expected_status,
-                Some(|body: &Value| validate_orders_fields(body)),
-            )
-        }
+        Ok(resp) => validator.validate(
+            &contract.name,
+            &resp,
+            &contract.schema_name,
+            contract.expected_status,
+            Some(|body: &Value| validate_orders_fields(body)),
+        ),
         Err(e) => {
             let mut result = ValidationResult::new(&contract.name);
             result.add_error(&format!("请求失败: {}", e));
@@ -99,6 +87,10 @@ mod tests {
         let validator = ResponseValidator::new();
 
         let result = test_orders(&client, &validator).await;
-        assert!(result.passed, "Orders contract test failed: {:?}", result.errors);
+        assert!(
+            result.passed,
+            "Orders contract test failed: {:?}",
+            result.errors
+        );
     }
 }

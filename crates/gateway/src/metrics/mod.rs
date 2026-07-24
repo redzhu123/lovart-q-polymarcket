@@ -326,7 +326,11 @@ impl GatewayMetrics {
              ══════════════════════════════════════════════════",
             self.total_api_calls,
             self.avg_api_latency_ms(),
-            if self.min_api_latency_ms == u64::MAX { 0 } else { self.min_api_latency_ms },
+            if self.min_api_latency_ms == u64::MAX {
+                0
+            } else {
+                self.min_api_latency_ms
+            },
             self.max_api_latency_ms,
             self.last_api_latency_ms,
             self.total_http_requests,
@@ -345,9 +349,17 @@ impl GatewayMetrics {
             self.sync_count,
             self.avg_sync_latency_ms(),
             self.balance_sync_count,
-            if self.balance_sync_count > 0 { self.total_balance_sync_latency_ms as f64 / self.balance_sync_count as f64 } else { 0.0 },
+            if self.balance_sync_count > 0 {
+                self.total_balance_sync_latency_ms as f64 / self.balance_sync_count as f64
+            } else {
+                0.0
+            },
             self.position_sync_count,
-            if self.position_sync_count > 0 { self.total_position_sync_latency_ms as f64 / self.position_sync_count as f64 } else { 0.0 },
+            if self.position_sync_count > 0 {
+                self.total_position_sync_latency_ms as f64 / self.position_sync_count as f64
+            } else {
+                0.0
+            },
             self.total_retries,
             self.circuit_trips,
             self.format_uptime(),
