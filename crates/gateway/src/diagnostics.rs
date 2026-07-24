@@ -197,6 +197,76 @@ pub fn diagnose_metrics(metrics: &GatewayMetrics) -> String {
     metrics.report_zh()
 }
 
+/// Prometheus 指标诊断（P2-03）。
+///
+/// 显示 Prometheus 风格的指标输出（文本格式）。
+pub fn diagnose_prometheus(metrics: &crate::metrics::prometheus::GatewayPrometheusMetrics) -> String {
+    metrics.to_prometheus_text()
+}
+
+/// 扩展健康诊断（P2-03）。
+///
+/// 显示完整的 Gateway 健康状态，包括：
+/// - 综合状态
+/// - REST 状态
+/// - WebSocket 状态
+/// - API 延迟（平均/最小/最大/最近）
+/// - Rate Limit 状态
+pub async fn diagnose_health_extended(gateway: &dyn crate::traits::ExchangeGateway) -> String {
+    let info = gateway.health().await;
+
+    let live_status = if info.live_enabled {
+        "⚠️ 真实交易已启用"
+    } else {
+        "🔒 DryRun 模式（禁止真实下单）"
+    };
+
+    let health_status = if info.healthy { "✅ 健康" } else { "❌ 异常" };
+
+    let ws_status = if info.ws_connected {
+        "✅ 已连接"
+    } else {
+        "❌ 未连接（占位实现）"
+    };
+
+    format!(
+        "═══════════════════════════════════════════════════════════════\n\
+          【Gateway 健康状态】{} ({})\n\
+         ═══════════════════════════════════════════════════════════════\n\
+         \n\
+          综合状态       : {}\n\
+          模式           : {}\n\
+         \n\
+          ── REST 状态 ──\n\
+            延迟         : {} ms\n\
+            HTTP 成功率  : {:.1}%\n\
+         \n\
+          ── WebSocket 状态 ──\n\
+            状态         : {}\n\
+         \n\
+          ── 速率限制 ──\n\
+            剩余比例     : {:.0}%\n\
+         \n\
+          ── 累计统计 ──\n\
+            订单总数     : {}（提交 / {} 成交）\n\
+         \n\
+          ── 连接状态 ──\n\
+            {}\n\
+         ═══════════════════════════════════════════════════════════════",
+        info.name,
+        info.gateway_type,
+        health_status,
+        live_status,
+        info.api_latency_ms,
+        info.http_success_rate * 100.0,
+        ws_status,
+        info.rate_limit_remaining,
+        info.total_orders,
+        info.total_fills,
+        info.connection_status,
+    )
+}
+
 /// 断路器诊断（中文）。
 pub fn diagnose_circuit_breaker(breaker: &CircuitBreaker) -> String {
     format!(

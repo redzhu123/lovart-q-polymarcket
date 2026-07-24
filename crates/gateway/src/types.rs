@@ -436,6 +436,111 @@ impl GatewayInfo {
 }
 
 // ============================================================================
+// Market（市场信息）
+// ============================================================================
+
+/// 市场信息（P2-03）。
+#[derive(Debug, Clone)]
+pub struct Market {
+    /// 市场 ID（condition_id）。
+    pub market_id: String,
+    /// 问题文本。
+    pub question: String,
+    /// 是否已关闭。
+    pub closed: bool,
+    /// YES 价格。
+    pub yes_price: Option<f64>,
+    /// NO 价格。
+    pub no_price: Option<f64>,
+    /// 成交量。
+    pub volume: f64,
+    /// 流动性。
+    pub liquidity: f64,
+    /// 市场状态（中文）。
+    pub status: String,
+}
+
+impl Market {
+    /// 中文摘要。
+    pub fn summary_zh(&self) -> String {
+        let yes = self.yes_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
+        let no = self.no_price.map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
+        format!(
+            "{} | YES: {} | NO: {} | 成交量: {:.0} | 状态: {}",
+            self.question,
+            yes,
+            no,
+            self.volume,
+            self.status,
+        )
+    }
+}
+
+// ============================================================================
+// OrderBook（订单簿）
+// ============================================================================
+
+/// 订单簿信息（P2-03）。
+#[derive(Debug, Clone)]
+pub struct OrderBook {
+    /// 市场 ID。
+    pub market_id: String,
+    /// 买盘（价格、数量）- 按价格从高到低排序。
+    pub bids: Vec<BookLevel>,
+    /// 卖盘（价格、数量）- 按价格从低到高排序。
+    pub asks: Vec<BookLevel>,
+    /// 最小报价单位。
+    pub tick_size: f64,
+    /// 更新时间。
+    pub updated_at: Option<chrono::DateTime<chrono::Local>>,
+}
+
+/// 订单簿档位。
+#[derive(Debug, Clone)]
+pub struct BookLevel {
+    /// 价格（0.0 ~ 1.0）。
+    pub price: f64,
+    /// 数量（份额）。
+    pub size: f64,
+}
+
+impl OrderBook {
+    /// 最佳买价。
+    pub fn best_bid(&self) -> Option<f64> {
+        self.bids.first().map(|b| b.price)
+    }
+
+    /// 最佳卖价。
+    pub fn best_ask(&self) -> Option<f64> {
+        self.asks.first().map(|a| a.price)
+    }
+
+    /// 价差。
+    pub fn spread(&self) -> Option<f64> {
+        match (self.best_bid(), self.best_ask()) {
+            (Some(bid), Some(ask)) => Some(ask - bid),
+            _ => None,
+        }
+    }
+
+    /// 中文摘要。
+    pub fn summary_zh(&self) -> String {
+        let bid = self.best_bid().map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
+        let ask = self.best_ask().map(|p| format!("{:.4}", p)).unwrap_or_else(|| "-".into());
+        let spread = self.spread().map(|s| format!("{:.4}", s)).unwrap_or_else(|| "-".into());
+        format!(
+            "市场: {} | Best Bid: {} | Best Ask: {} | 价差: {} | 买盘: {}档 | 卖盘: {}档",
+            self.market_id,
+            bid,
+            ask,
+            spread,
+            self.bids.len(),
+            self.asks.len(),
+        )
+    }
+}
+
+// ============================================================================
 // 测试
 // ============================================================================
 

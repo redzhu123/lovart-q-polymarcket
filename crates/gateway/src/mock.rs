@@ -10,8 +10,11 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use crate::config::GatewayConfig;
+use crate::error::GatewayError;
 use crate::traits::ExchangeGateway;
-use crate::types::{Balance, GatewayInfo, GatewayResult, OrderRequest, Position};
+use crate::types::{
+    Balance, BookLevel, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, Position,
+};
 
 // ============================================================================
 // 模拟参数
@@ -126,6 +129,20 @@ impl MockGateway {
 
 #[async_trait]
 impl ExchangeGateway for MockGateway {
+    // ---- 生命周期 ----
+
+    async fn connect(&self) -> Result<(), GatewayError> {
+        tracing::info!("MockGateway 已连接（模拟）");
+        Ok(())
+    }
+
+    async fn disconnect(&self) -> Result<(), GatewayError> {
+        tracing::info!("MockGateway 已断开（模拟）");
+        Ok(())
+    }
+
+    // ---- 元信息 ----
+
     fn name(&self) -> &str {
         &self.name
     }
@@ -135,9 +152,79 @@ impl ExchangeGateway for MockGateway {
     }
 
     fn live_enabled(&self) -> bool {
-        // Mock 永远不是真实交易
         false
     }
+
+    // ---- 市场数据 ----
+
+    async fn get_markets(&self) -> Result<Vec<Market>, GatewayError> {
+        tracing::info!("MockGateway 返回模拟市场数据");
+        Ok(vec![
+            Market {
+                market_id: "0xmock_market_001".into(),
+                question: "BTC 2026 年底能超过 $200k 吗？".into(),
+                closed: false,
+                yes_price: Some(0.45),
+                no_price: Some(0.55),
+                volume: 1500000.0,
+                liquidity: 50000.0,
+                status: "开放".into(),
+            },
+            Market {
+                market_id: "0xmock_market_002".into(),
+                question: "ETH 2026 年底能超过 $10k 吗？".into(),
+                closed: false,
+                yes_price: Some(0.38),
+                no_price: Some(0.62),
+                volume: 1200000.0,
+                liquidity: 40000.0,
+                status: "开放".into(),
+            },
+            Market {
+                market_id: "0xmock_market_003".into(),
+                question: "美联储 2026 年会降息吗？".into(),
+                closed: false,
+                yes_price: Some(0.72),
+                no_price: Some(0.28),
+                volume: 800000.0,
+                liquidity: 30000.0,
+                status: "开放".into(),
+            },
+        ])
+    }
+
+    async fn get_orderbook(&self, market_id: &str) -> Result<OrderBook, GatewayError> {
+        tracing::info!(market_id, "MockGateway 返回模拟订单簿");
+        Ok(OrderBook {
+            market_id: market_id.to_string(),
+            bids: vec![
+                BookLevel { price: 0.44, size: 1000.0 },
+                BookLevel { price: 0.43, size: 2000.0 },
+                BookLevel { price: 0.42, size: 3000.0 },
+            ],
+            asks: vec![
+                BookLevel { price: 0.46, size: 1000.0 },
+                BookLevel { price: 0.47, size: 2000.0 },
+                BookLevel { price: 0.48, size: 3000.0 },
+            ],
+            tick_size: 0.01,
+            updated_at: Some(Local::now()),
+        })
+    }
+
+    // ---- WebSocket 订阅 ----
+
+    async fn subscribe(&self, channel: &str) -> Result<(), GatewayError> {
+        tracing::info!(channel, "MockGateway 订阅频道（无操作）");
+        Ok(())
+    }
+
+    async fn unsubscribe(&self, channel: &str) -> Result<(), GatewayError> {
+        tracing::info!(channel, "MockGateway 取消订阅（无操作）");
+        Ok(())
+    }
+
+    // ---- 订单操作 ----
 
     async fn submit_order(&self, request: &OrderRequest, now: DateTime<Local>) -> GatewayResult {
         let latency = self.simulate_latency();

@@ -202,6 +202,27 @@ impl GatewayConfig {
         !self.enable_live
     }
 
+    /// 转换为 pm-api-test 的 ApiTestConfig（P2-03 bridge）。
+    ///
+    /// 使得 PolymarketGateway 可以复用 P2-01 已验证的 ApiClient。
+    pub fn to_api_test_config(&self) -> pm_api_test::client::config::ApiTestConfig {
+        use pm_api_test::client::config::ClientMode;
+
+        pm_api_test::client::config::ApiTestConfig {
+            clob_url: self.polymarket_api_url.clone(),
+            ws_url: self.polymarket_ws_url.clone(),
+            timeout_ms: self.api_timeout_ms,
+            max_retries: self.max_retries,
+            retry_base_ms: self.retry_base_ms,
+            retry_max_ms: self.retry_max_ms,
+            backoff_multiplier: self.backoff_multiplier,
+            rate_limit_per_sec: self.rate_limit_per_sec,
+            mode: ClientMode::Mock, // 默认 Mock，live 时切换
+            enable_live: self.enable_live,
+            ..pm_api_test::client::config::ApiTestConfig::default()
+        }
+    }
+
     /// 安全摘要（中文）。
     pub fn safety_summary_zh(&self) -> String {
         if self.enable_live {

@@ -1,7 +1,14 @@
-//! Gateway Metrics（V1.08 第八节）。
+//! Gateway Metrics（V1.08 第八节 / P2-03 扩展）。
 //!
 //! 统计：API 延迟 / HTTP 成功率 / WS 重连次数 / 订单成功率 / 同步耗时。
 //! 全部中文。
+//!
+//! # 模块
+//!
+//! - `mod`：基础指标收集器。
+//! - [`prometheus`]：Prometheus 风格指标（Counter / Gauge / Histogram）。
+
+pub mod prometheus;
 
 use chrono::{DateTime, Local};
 use serde::Serialize;

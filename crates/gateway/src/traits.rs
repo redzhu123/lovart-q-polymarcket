@@ -1,4 +1,4 @@
-//! ExchangeGateway Trait（V1.08 第一节）。
+//! ExchangeGateway Trait（P2-03 扩展版）。
 //!
 //! 统一所有交易所的接口。
 //! Execution 只能通过此 Trait 调用，禁止直接 HTTP / Provider。
@@ -8,15 +8,16 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Local};
 
-use crate::types::{Balance, GatewayInfo, GatewayResult, OrderRequest, Position};
+use crate::error::GatewayError;
+use crate::types::{Balance, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, Position};
 
 // ============================================================================
 // ExchangeGateway Trait
 // ============================================================================
 
-/// 交易所网关 Trait（V1.08 第一节）。
+/// 交易所网关 Trait（P2-03 扩展版）。
 ///
-/// 统一所有交易所（Polymarket / Kalshi / DEX / CEX）的订单/余额/持仓接口。
+/// 统一所有交易所（Polymarket / Kalshi / DEX / CEX）的订单/余额/持仓/市场/订单簿接口。
 /// Execution 只能通过此 Trait 调用，禁止直接 HTTP / Provider。
 ///
 /// # 安全
@@ -31,6 +32,22 @@ use crate::types::{Balance, GatewayInfo, GatewayResult, OrderRequest, Position};
 /// - 未来：KalshiGateway / DexGateway / CexGateway。
 #[async_trait]
 pub trait ExchangeGateway: Send + Sync {
+    // ---- 生命周期 ----
+
+    /// 连接 Gateway（初始化传输层、认证等）。
+    ///
+    /// 默认实现为空操作，子类型可覆写。
+    async fn connect(&self) -> Result<(), GatewayError> {
+        Ok(())
+    }
+
+    /// 断开 Gateway 连接（清理资源）。
+    ///
+    /// 默认实现为空操作，子类型可覆写。
+    async fn disconnect(&self) -> Result<(), GatewayError> {
+        Ok(())
+    }
+
     // ---- 元信息 ----
 
     /// Gateway 名称（如 "PolymarketGateway"）。
@@ -41,6 +58,22 @@ pub trait ExchangeGateway: Send + Sync {
 
     /// 是否启用真实交易。
     fn live_enabled(&self) -> bool;
+
+    // ---- 市场数据 ----
+
+    /// 获取市场列表。
+    ///
+    /// 默认返回空列表，子类型可覆写。
+    async fn get_markets(&self) -> Result<Vec<Market>, GatewayError> {
+        Ok(Vec::new())
+    }
+
+    /// 获取订单簿。
+    ///
+    /// 默认返回错误，子类型可覆写。
+    async fn get_orderbook(&self, _market_id: &str) -> Result<OrderBook, GatewayError> {
+        Err(GatewayError::exchange("此 Gateway 不支持查询订单簿"))
+    }
 
     // ---- 订单操作 ----
 
@@ -67,6 +100,22 @@ pub trait ExchangeGateway: Send + Sync {
 
     /// 查询所有活跃订单。
     async fn list_orders(&self) -> Vec<GatewayResult>;
+
+    // ---- WebSocket 订阅 ----
+
+    /// 订阅频道（如 `book:<market_id>`、`trades:<market_id>`）。
+    ///
+    /// 默认实现为空操作，子类型可覆写。
+    async fn subscribe(&self, _channel: &str) -> Result<(), GatewayError> {
+        Ok(())
+    }
+
+    /// 取消订阅频道。
+    ///
+    /// 默认实现为空操作，子类型可覆写。
+    async fn unsubscribe(&self, _channel: &str) -> Result<(), GatewayError> {
+        Ok(())
+    }
 
     // ---- 账户 ----
 

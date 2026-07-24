@@ -1,0 +1,33 @@
+# Polymarket API Workflow 配置（P2-02）
+#
+# 独立配置文件，由 pm-api-workflow::WorkflowConfig::load_or_default("workflow.toml") 读取。
+# 不侵入 config.toml / pm-models（仿 V1.07 provider.toml 范式）。
+#
+# Simulation Only -- 默认 DryRun，禁止真实下单。
+
+[workflow]
+# 运行模式：dryrun | replay | live
+mode = "dryrun"
+
+# fixtures 目录（Mock 数据源，与 pm-api-test 共享，禁止重复）。
+# 相对于工作区根目录（cargo run 的执行目录）。
+fixtures_dir = "fixtures"
+
+# 报告输出目录（生成 workflow-report.md / .json / workflow-trace.json）。
+report_dir = "reports/workflow"
+
+# 目标市场 condition_id（Mock 数据中的市场）。
+target_market_id = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+# 目标 token_id（订单簿 / 下单标的）。
+target_token_id = "1111111111111111111111111111111111111111111111111111111111111111"
+
+# 订单参数（DryRun 仅构建请求并校验，不发送）。
+order_side = "BUY"
+order_price = 0.45
+order_size = 100.0
+
+# 是否允许真实读取（LiveReadOnly 用）。
+# false（默认）= 使用 Mock 客户端离线校验只读约束；
+# true = 使用真实网络（需 HTTPS_PROXY + 可选 POLYMARKET_API_KEY），仅 GET。
+enable_live_reads = false

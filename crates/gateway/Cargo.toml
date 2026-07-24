@@ -13,6 +13,8 @@ pm-core = { workspace = true }
 pm-models = { workspace = true }
 pm-utils = { workspace = true }
 pm-execution = { workspace = true }
+pm-api-test = { workspace = true }
+pm-api-workflow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
@@ -21,6 +23,9 @@ chrono = { workspace = true }
 rand = { workspace = true }
 tracing = { workspace = true }
 async-trait = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time"] }
 reqwest = { workspace = true, features = ["json"] }
 csv = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }

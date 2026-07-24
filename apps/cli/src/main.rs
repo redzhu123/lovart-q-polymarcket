@@ -27,6 +27,7 @@ use pm_gateway::{
     self, create_gateway, diagnose_account, diagnose_balance, diagnose_gateway,
     GatewayConfig,
 };
+use pm_oms::prelude::*;
 
 const CONFIG_PATH: &str = "config.toml";
 
@@ -201,6 +202,38 @@ async fn main() -> Result<()> {
         "balance" => {
             println!("模式：余额查询");
             run_balance(&cfg).await
+        }
+        // ---- P2-02 API Workflow CLI ----
+        "workflow" => {
+            println!("模式：API Workflow");
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            run_workflow(sub).await
+        }
+        // ---- P2-04 OMS CLI ----
+        "oms" => {
+            println!("模式：OMS 概览");
+            run_oms_overview(&cfg).await
+        }
+        "oms-orders" => {
+            println!("模式：OMS 订单列表");
+            run_oms_orders(&cfg).await
+        }
+        "oms-order" => {
+            let id = args.get(2).cloned().unwrap_or_default();
+            if id.is_empty() {
+                println!("用法: cargo run -- oms-order <order_id>");
+                return Ok(());
+            }
+            println!("模式：OMS 订单详情");
+            run_oms_order(&cfg, &id).await
+        }
+        "oms-events" => {
+            println!("模式：OMS 事件流");
+            run_oms_events(&cfg).await
+        }
+        "oms-demo" => {
+            println!("模式：OMS 演示（创建 5 个订单 + 推进到终态）");
+            run_oms_demo(&cfg).await
         }
         // "orders" 已存在（V1.06），但 V1.08 增强为经 Gateway 查询
         other => {
@@ -1128,6 +1161,312 @@ async fn run_balance(cfg: &pm_models::Config) -> Result<()> {
     Ok(())
 }
 
+// ============================================================================
+// P2-04 OMS CLI 命令
+// ============================================================================
+
+/// 构建带 CSV 持久化的 OMS 实例（共享 orders.csv / events.csv）。
+fn build_cli_oms(cfg: &pm_models::Config) -> anyhow::Result<Oms> {
+    use std::sync::Arc;
+    let gw_cfg = GatewayConfig::from_raw(&cfg.gateway);
+    let gateway: Arc<dyn pm_gateway::ExchangeGateway> = Arc::from(create_gateway(&gw_cfg));
+    let orders_csv = std::path::PathBuf::from(format!("{}/oms_orders.csv", cfg.paths.data_dir));
+    let events_csv = std::path::PathBuf::from(format!("{}/oms_events.csv", cfg.paths.data_dir));
+    let oms_cfg = OmsConfig {
+        repository_type: pm_oms::prelude::RepositoryType::Csv,
+        orders_csv: Some(orders_csv),
+        events_csv: Some(events_csv),
+        sqlite_path: None,
+        auto_recover: false,
+        subscribe_metrics: true,
+    };
+    Oms::new(oms_cfg, gateway)
+}
+
+/// `cargo run -- oms`：OMS 健康概览（中文）。
+async fn run_oms_overview(cfg: &pm_models::Config) -> Result<()> {
+    let oms = build_cli_oms(cfg)?;
+    println!();
+    println!("{}", oms.health().await);
+    println!();
+    println!("═══════════════════════════════════════════════════════════");
+    println!("  状态机（11 态 + 1 聚合）");
+    println!("═══════════════════════════════════════════════════════════");
+    for line in pm_oms::prelude::StateMachine::diagram_zh().lines() {
+        println!("  {}", line);
+    }
+    println!();
+    println!("提示：");
+    println!("  cargo run -- oms-orders      查看所有 OMS 订单");
+    println!("  cargo run -- oms-order <id>  查看单个订单详情");
+    println!("  cargo run -- oms-events      查看订单事件流");
+    println!("  cargo run -- oms-demo        创建 5 个示例订单（演示用）");
+    println!();
+    Ok(())
+}
+
+/// `cargo run -- oms-orders`：OMS 订单列表（中文）。
+async fn run_oms_orders(cfg: &pm_models::Config) -> Result<()> {
+    let oms = build_cli_oms(cfg)?;
+    let orders = oms.list_orders()?;
+    println!();
+    println!("【OMS 订单列表】");
+    println!();
+    println!("  Gateway : {} ({})", oms.gateway().name(), oms.gateway().gateway_type());
+    println!("  模式    : {}", if oms.gateway().live_enabled() { "⚠️ 真实交易" } else { "🔒 模拟交易" });
+    println!("  仓库    : {:?}", oms.repository().name());
+    println!();
+
+    if orders.is_empty() {
+        println!("（暂无 OMS 订单）");
+        println!();
+        println!("提示：运行 `cargo run -- oms-demo` 创建示例订单。");
+        println!();
+        return Ok(());
+    }
+
+    // 表头
+    println!(
+        "  {:<18} {:<14} {:<10} {:<8} {:<10} {:<10} {:<10}",
+        "OMS ID", "客户端 ID", "状态", "方向", "价格", "数量", "成交率"
+    );
+    println!("  {}", "─".repeat(98));
+
+    for o in &orders {
+        let filled_pct = o.fill_rate() * 100.0;
+        println!(
+            "  {:<18} {:<14} {:<10} {:<8} {:<10.4} {:<10.2} {:<10.1}",
+            o.order_id,
+            o.client_order_id,
+            o.status.as_zh(),
+            format!("{} {}", o.direction.as_zh(), o.side.as_str()),
+            o.price,
+            o.quantity,
+            filled_pct,
+        );
+    }
+    println!();
+
+    // 状态汇总
+    let counts = oms.repository().count_by_status()?;
+    println!("  ── 状态分布 ──");
+    for (s, c) in counts {
+        println!("    {} : {}", s.as_zh(), c);
+    }
+    println!();
+
+    // Metrics
+    let m = oms.metrics_snapshot();
+    println!("  ── Metrics ──");
+    println!("{}", m.summary_zh());
+    println!();
+
+    Ok(())
+}
+
+/// `cargo run -- oms-order <id>`：单个 OMS 订单详情。
+async fn run_oms_order(cfg: &pm_models::Config, target: &str) -> Result<()> {
+    let oms = build_cli_oms(cfg)?;
+    let order = oms.get_order(target)?;
+    let Some(o) = order else {
+        // 尝试 client_order_id
+        if let Some(o2) = oms.get_order_by_client_id(target)? {
+            o2.print_timeline();
+            return Ok(());
+        }
+        println!();
+        println!("未找到订单: {}", target);
+        println!();
+        println!("提示：");
+        println!("  - 运行 `cargo run -- oms-orders` 查看所有订单 ID");
+        println!("  - 支持 OMS ID 或客户端订单 ID 模糊匹配（仅 client_order_id 完全匹配）");
+        println!();
+        return Ok(());
+    };
+    println!();
+    o.print_timeline();
+    Ok(())
+}
+
+/// `cargo run -- oms-events`：OMS 事件流（从 CSV 读取最近 50 条）。
+async fn run_oms_events(cfg: &pm_models::Config) -> Result<()> {
+    let oms = build_cli_oms(cfg)?;
+    let events = oms.repository().list_events()?;
+    println!();
+    println!("【OMS 事件流】");
+    println!();
+    println!("  总事件数: {}", events.len());
+    println!();
+
+    if events.is_empty() {
+        println!("（暂无事件）");
+        println!();
+        println!("提示：运行 `cargo run -- oms-demo` 生成示例事件。");
+        println!();
+        return Ok(());
+    }
+
+    // 取最近 50 条
+    let start = events.len().saturating_sub(50);
+    println!(
+        "  {:<22} {:<20} {:<22} {}",
+        "时间戳", "事件类型", "订单 ID", "extra"
+    );
+    println!("  {}", "─".repeat(98));
+    for e in &events[start..] {
+        let ts = e.timestamp().format("%Y-%m-%d %H:%M:%S").to_string();
+        let oid = e.order_id();
+        let oid_short = if oid.len() > 20 { &oid[..20] } else { oid };
+        let extra = serde_json::to_string(e).unwrap_or_default();
+        let extra_short = if extra.len() > 40 {
+            format!("{}...", &extra[..40])
+        } else {
+            extra
+        };
+        println!(
+            "  {:<22} {:<20} {:<22} {}",
+            ts,
+            e.event_name_zh(),
+            oid_short,
+            extra_short,
+        );
+    }
+    println!();
+    Ok(())
+}
+
+/// `cargo run -- oms-demo`：创建 5 个示例订单用于演示。
+async fn run_oms_demo(cfg: &pm_models::Config) -> Result<()> {
+    use chrono::Local;
+    let oms = build_cli_oms(cfg)?;
+    println!();
+    println!("正在创建 5 个示例 OMS 订单...");
+    println!();
+
+    let scenarios: Vec<(&str, &str, f64, f64)> = vec![
+        ("CLI-DEMO-001", "mkt-btc-2024", 0.55, 100.0),
+        ("CLI-DEMO-002", "mkt-eth-2024", 0.45, 200.0),
+        ("CLI-DEMO-003", "mkt-btc-2024", 0.50, 150.0),
+        ("CLI-DEMO-004", "mkt-sol-2024", 0.65, 50.0),
+        ("CLI-DEMO-005", "mkt-eth-2024", 0.40, 80.0),
+    ];
+
+    let now = Local::now();
+    for (cid, mid, price, qty) in scenarios {
+        let input = CreateOrderInput::limit(
+            cid,
+            mid,
+            pm_execution::order::Direction::Yes,
+            pm_core::Side::Buy,
+            price,
+            qty,
+            "DefaultStrategy",
+            "RISK-001",
+            "OPP-DEMO",
+        );
+        match oms.create_order(&input, now) {
+            Ok(o) => println!(
+                "  ✓ 创建订单 {} ({} @ {:.4} × {:.2})",
+                o.order_id, mid, price, qty
+            ),
+            Err(e) => println!("  ✗ 创建失败 {}：{}", cid, e),
+        }
+    }
+    println!();
+    println!("提示：");
+    println!("  cargo run -- oms-orders    查看刚创建的订单");
+    println!("  cargo run -- oms-events    查看事件流");
+    println!();
+    Ok(())
+}
+
+// ============================================================================
+// P2-02 API Workflow CLI 命令
+// ============================================================================
+
+/// `cargo run -- workflow [dryrun|replay|live]`：API Workflow 引擎。
+///
+/// - 无子参：显示当前 Workflow 配置 + 状态机 + 最近报告。
+/// - `dryrun`：执行 DryRun Workflow（默认，无网络、无真实下单）。
+/// - `replay`：执行 Replay Workflow（从 fixtures/ 回放）。
+/// - `live`：执行 Live ReadOnly Workflow（真实只读，禁止下单/撤单）。
+async fn run_workflow(sub: &str) -> Result<()> {
+    use pm_api_workflow::config::{WorkflowConfig, WorkflowMode};
+    use pm_api_workflow::report::ReportGenerator;
+    use pm_api_workflow::state_machine::StateMachine;
+
+    let mut cfg = WorkflowConfig::load_or_default("workflow.toml");
+
+    println!("═══════════════════════════════════════════════════════════");
+    println!("{}", cfg.safety_summary_zh());
+    println!("═══════════════════════════════════════════════════════════");
+    println!();
+    println!("【状态机】");
+    for line in StateMachine::diagram_zh().lines() {
+        println!("  {}", line);
+    }
+    println!();
+
+    match sub {
+        "" => {
+            println!("【当前 Workflow】{}", cfg.mode.as_zh());
+            println!();
+            println!("可用命令:");
+            println!("  cargo run -- workflow          显示当前 Workflow（本视图）");
+            println!("  cargo run -- workflow dryrun   执行 DryRun Workflow（默认，无网络/无下单）");
+            println!("  cargo run -- workflow replay   执行 Replay Workflow（从 fixtures 回放）");
+            println!("  cargo run -- workflow live     执行 Live ReadOnly Workflow（真实只读）");
+            println!();
+            let generator = ReportGenerator::new(&cfg.report_dir);
+            if generator.report_exists() {
+                let paths = generator.latest_paths();
+                println!("最近报告: {}", paths.md_path);
+            } else {
+                println!("（暂无报告，运行 dryrun/replay/live 生成）");
+            }
+        }
+        "dryrun" => {
+            cfg.mode = WorkflowMode::DryRun;
+            println!("执行 DryRun Workflow...");
+            println!();
+            let report = pm_api_workflow::run_dryrun(&cfg).await?;
+            println!();
+            println!("{}", report.summary_zh());
+            println!("{}", report.validation.summary_zh());
+            println!();
+            println!("提示：报告已输出至 {}", cfg.report_dir);
+        }
+        "replay" => {
+            cfg.mode = WorkflowMode::Replay;
+            println!("执行 Replay Workflow（从 fixtures 回放）...");
+            println!();
+            let report = pm_api_workflow::run_replay(&cfg).await?;
+            println!();
+            println!("{}", report.summary_zh());
+            println!("{}", report.validation.summary_zh());
+            println!();
+            println!("提示：报告已输出至 {}", cfg.report_dir);
+        }
+        "live" => {
+            cfg.mode = WorkflowMode::LiveReadOnly;
+            println!("执行 Live ReadOnly Workflow（真实只读，禁止下单/撤单）...");
+            println!();
+            let report = pm_api_workflow::run_live_readonly(&cfg).await?;
+            println!();
+            println!("{}", report.summary_zh());
+            println!("{}", report.validation.summary_zh());
+            println!();
+            println!("提示：报告已输出至 {}", cfg.report_dir);
+        }
+        other => {
+            println!("未知 Workflow 子命令: {}", other);
+            println!("可用: dryrun | replay | live");
+        }
+    }
+
+    Ok(())
+}
+
 fn print_usage() {
     println!();
     println!("用法:");
@@ -1174,4 +1513,17 @@ fn print_usage() {
     println!("  cargo run -- account        账户详情（余额+持仓）");
     println!("  cargo run -- balance        余额查询");
     println!("  cargo run -- orders         订单列表（经 Gateway）");
+    println!();
+    println!("  API Workflow（P2-02）：");
+    println!("  cargo run -- workflow       显示当前 Workflow（配置+状态机+最近报告）");
+    println!("  cargo run -- workflow dryrun   执行 DryRun Workflow（默认，无网络/无下单）");
+    println!("  cargo run -- workflow replay   执行 Replay Workflow（从 fixtures 回放）");
+    println!("  cargo run -- workflow live     执行 Live ReadOnly Workflow（真实只读）");
+    println!();
+    println!("  OMS（P2-04）：");
+    println!("  cargo run -- oms              OMS 健康概览 + 状态机图");
+    println!("  cargo run -- oms-orders       OMS 订单列表（CSV 持久化）");
+    println!("  cargo run -- oms-order <id>   OMS 订单详情（含状态历史）");
+    println!("  cargo run -- oms-events       OMS 事件流");
+    println!("  cargo run -- oms-demo         创建 5 个示例订单");
 }

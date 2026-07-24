@@ -36,6 +36,8 @@ members = [
     "crates/trading",
     "crates/gateway",
     "crates/api-test",
+    "crates/api-workflow",
+    "crates/oms",
 ]
 
 [workspace.package]
@@ -84,6 +86,8 @@ pm-risk = { path = "crates/risk" }
 pm-trading = { path = "crates/trading" }
 pm-gateway = { path = "crates/gateway" }
 pm-api-test = { path = "crates/api-test" }
+pm-api-workflow = { path = "crates/api-workflow" }
+pm-oms = { path = "crates/oms" }
 
 # 测试/构建优化 profile（保持默认即可，显式声明便于后续调优）
 [profile.dev]

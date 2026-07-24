@@ -18,5 +18,8 @@ Thumbs.db
 # === Runtime Data (generated CSV output) ===
 data/*.csv
 
+# === Generated Reports (workflow / api-test 报告为生成产物) ===
+reports/
+
 # === Local Config (may contain API keys) ===
 # config.toml  # uncomment if config contains secrets; otherwise commit it

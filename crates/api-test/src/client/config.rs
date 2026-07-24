@@ -132,7 +132,10 @@ fn default_mode() -> ClientMode {
 }
 
 fn default_mock_dir() -> String {
-    concat!(env!("CARGO_MANIFEST_DIR"), "/mock").to_string()
+    // 工作区顶层共享 fixtures/ 目录（单一 Mock 数据源，跨 crate 复用，禁止重复）。
+    // env!("CARGO_MANIFEST_DIR") 在编译期固定为本 crate 目录（crates/api-test），
+    // 上溯两级即工作区根。
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures").to_string()
 }
 
 impl Default for ApiTestConfig {

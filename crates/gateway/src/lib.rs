@@ -1,4 +1,4 @@
-//! pm-gateway：Exchange Gateway 统一交易所网关（V1.08）。
+//! pm-gateway：Exchange Gateway 统一交易所网关（P2-03）。
 //!
 //! 统一所有交易所（Polymarket / Kalshi / DEX / CEX）的订单/余额/持仓接口。
 //! Execution 只能通过此 crate 调用，禁止直接 HTTP / Provider。
@@ -10,8 +10,13 @@
 //! # 模块
 //!
 //! - [`traits`]：ExchangeGateway trait — 统一所有交易所接口。
-//! - [`types`]：共享类型 — GatewayResult / OrderRequest / Balance / Position / GatewayInfo。
+//! - [`error`]：GatewayError — 统一错误类型（P2-03）。
+//! - [`types`]：共享类型 — GatewayResult / OrderRequest / Balance / Position / GatewayInfo / Market。
 //! - [`config`]：GatewayConfig — 全部可配置，禁止写死。
+//! - [`transport`]：Transport 抽象层 — REST / WebSocket（P2-03）。
+//! - [`middleware`]：Middleware 中间件链（P2-03）。
+//! - [`auth`]：认证模块 — PolymarketAuth / NoopAuth（P2-03）。
+//! - [`ratelimit`]：速率限制 — TokenBucket（P2-03）。
 //! - [`mock`]：MockGateway — Paper / Replay / Test 使用。
 //! - [`polymarket`]：PolymarketGateway — 真实 Polymarket API。
 //! - [`adapter`]：JSON ↔ Order 统一转换。
@@ -22,15 +27,20 @@
 //! - [`diagnostics`]：诊断函数 — gateway / account / balance / orders。
 
 pub mod adapter;
+pub mod auth;
 pub mod config;
 pub mod diagnostics;
+pub mod error;
 pub mod health;
 pub mod metrics;
+pub mod middleware;
 pub mod mock;
 pub mod polymarket;
+pub mod ratelimit;
 pub mod retry;
 pub mod sync;
 pub mod traits;
+pub mod transport;
 pub mod types;
 
 // ---- 核心导出 ----
@@ -41,17 +51,26 @@ pub use adapter::{
 pub use config::GatewayConfig;
 pub use diagnostics::{
     diagnose_account, diagnose_balance, diagnose_circuit_breaker, diagnose_config,
-    diagnose_gateway, diagnose_metrics, diagnose_orders,
+    diagnose_gateway, diagnose_health_extended, diagnose_metrics, diagnose_orders,
+    diagnose_prometheus,
 };
+pub use error::GatewayError;
 pub use health::{HealthChecker, HealthRecord, HealthReport};
+pub use metrics::prometheus::{
+    Counter, Gauge, GatewayPrometheusMetrics, Histogram,
+};
 pub use metrics::{GatewayMetrics, GatewayMetricsRecord};
 pub use mock::MockGateway;
 pub use polymarket::PolymarketGateway;
+pub use ratelimit::RateLimiter;
 pub use retry::{Backoff, CircuitBreaker, CircuitState, RetryError, RetryExecutor};
 pub use sync::{SyncManager, SyncReport};
 pub use traits::ExchangeGateway;
+pub use transport::rest::{HttpRequest, HttpMethod, HttpResponse, HttpTransport};
+pub use transport::websocket::{WsMessage, WsTransport};
 pub use types::{
-    Balance, GatewayInfo, GatewayResult, OrderRequest, OrderType, Position, TimeInForce,
+    Balance, GatewayInfo, GatewayResult, Market, OrderBook, OrderRequest, OrderType,
+    Position, TimeInForce,
 };
 
 // ============================================================================
