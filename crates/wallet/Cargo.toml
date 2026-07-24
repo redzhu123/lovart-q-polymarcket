@@ -1,0 +1,43 @@
+[package]
+name = "pm-wallet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "P2-06 Wallet Infrastructure — 企业级钱包基础设施（账户/余额/授权/签名/仓库/诊断）"
+
+[dependencies]
+# 内部依赖（仅依赖基础类型，禁止依赖 Strategy/Risk/Scanner/Execution/OMS/PMS）
+pm-core = { workspace = true }
+pm-trading = { workspace = true }
+
+# 序列化
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# 错误处理
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# 时间
+chrono = { workspace = true }
+
+# CSV 持久化
+csv = { workspace = true }
+
+# 日志（中文）
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# 异步
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# 随机数（ID 生成）
+rand = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true }
