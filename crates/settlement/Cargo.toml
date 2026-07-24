@@ -1,0 +1,65 @@
+[package]
+name = "pm-settlement"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Polymarket Settlement Engine -- 企业级成交结算引擎（唯一成交处理中心）"
+
+[dependencies]
+# 内部业务依赖
+pm-core = { workspace = true }
+pm-models = { workspace = true }
+pm-execution = { workspace = true }
+
+# 序列化
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 错误处理
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+# 时间
+chrono = { workspace = true }
+# CSV 持久化
+csv = { workspace = true }
+# 日志（中文）
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# 异步
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+rand = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "settlement_test"
+path = "tests/settlement_test.rs"
+
+[[test]]
+name = "ledger_test"
+path = "tests/ledger_test.rs"
+
+[[test]]
+name = "fee_test"
+path = "tests/fee_test.rs"
+
+[[test]]
+name = "balance_test"
+path = "tests/balance_test.rs"
+
+[[test]]
+name = "position_test"
+path = "tests/position_test.rs"
+
+[[test]]
+name = "pnl_test"
+path = "tests/pnl_test.rs"
+
+[[test]]
+name = "integration_test"
+path = "tests/integration_test.rs"
