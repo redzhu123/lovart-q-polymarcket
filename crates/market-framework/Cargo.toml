@@ -1,0 +1,27 @@
+[package]
+name = "pm-market-framework"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "P3.0 多市场统一框架：MarketPlugin / Registry / Capability / Discovery / Metadata / Health"
+
+[dependencies]
+# 工作区依赖
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+
+# 内部依赖
+pm-core = { workspace = true }
+pm-infrastructure = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
