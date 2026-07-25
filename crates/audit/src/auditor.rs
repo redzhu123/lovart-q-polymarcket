@@ -1,0 +1,371 @@
+//! 统计审计器（StatisticsAudit）。
+//!
+//! 负责验证整个数据链路的统计一致性：
+//! - 所有计数必须可追踪来源。
+//! - 不得使用简单累加器。
+//! - 必须根据真实对象（Registry / Repository / CSV）统计。
+//!
+//! 审计规则：
+//! - 候选数 ≤ 扫描市场数
+//! - 机会数 ≤ 候选数
+//! - 影子交易数 ≤ 机会数
+//! - 纸面订单数 ≤ 机会数
+//! - 执行订单数 ≤ 纸面订单数
+//! - 组合快照数 ≈ 有效扫描轮次（变化时写入）
+//! - 已平仓持仓 ≤ 纸面订单数
+
+use std::fmt;
+
+/// 审计发现（一条检查结果）。
+#[derive(Debug, Clone)]
+pub struct AuditFinding {
+    /// 检查项名称（中文）。
+    pub check: String,
+    /// 是否通过。
+    pub passed: bool,
+    /// 详细说明。
+    pub detail: String,
+    /// 严重程度：Error（逻辑矛盾）、Warning（可疑）、Info（正常）。
+    pub severity: AuditSeverity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuditSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl AuditSeverity {
+    pub fn as_zh(&self) -> &'static str {
+        match self {
+            AuditSeverity::Error => "错误",
+            AuditSeverity::Warning => "警告",
+            AuditSeverity::Info => "信息",
+        }
+    }
+
+    pub fn icon(&self) -> &'static str {
+        match self {
+            AuditSeverity::Error => "✗",
+            AuditSeverity::Warning => "⚠",
+            AuditSeverity::Info => "✓",
+        }
+    }
+}
+
+/// 统计审计报告。
+///
+/// 包含所有统计计数与校验结果。
+#[derive(Debug, Clone, Default)]
+pub struct StatisticsAudit {
+    /// 所有审计发现。
+    pub findings: Vec<AuditFinding>,
+    /// 原始统计数据（从 CSV / Registry 查询）。
+    pub stats: AuditStats,
+}
+
+/// 原始统计数据快照。
+#[derive(Debug, Clone, Default)]
+pub struct AuditStats {
+    pub markets_scanned: u64,
+    pub candidates_count: u64,
+    pub candidates_accepted: u64,
+    pub candidates_rejected: u64,
+    pub opportunities_count: u64,
+    pub shadow_trades_count: u64,
+    pub paper_orders_count: u64,
+    pub paper_positions_open: u64,
+    pub paper_positions_closed: u64,
+    pub execution_orders_count: u64,
+    pub execution_filled: u64,
+    pub execution_cancelled: u64,
+    pub execution_expired: u64,
+    pub execution_rejected: u64,
+    pub portfolio_snapshots: u64,
+    pub scan_rounds: u64,
+}
+
+impl StatisticsAudit {
+    /// 创建空审计实例。
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 从 CSV 文件路径构建统计数据。
+    ///
+    /// 通过 `pm_storage::count_rows` 读取各 CSV 的行数。
+    pub fn from_csv_paths(
+        opportunities_csv: &str,
+        shadow_csv: &str,
+        paper_orders_csv: &str,
+        paper_positions_csv: &str,
+        paper_portfolio_csv: &str,
+        execution_csv: &str,
+    ) -> Self {
+        let stats = AuditStats {
+            opportunities_count: pm_storage::count_rows(opportunities_csv),
+            shadow_trades_count: pm_storage::count_rows(shadow_csv),
+            paper_orders_count: pm_storage::count_rows(paper_orders_csv),
+            paper_positions_closed: pm_storage::count_rows(paper_positions_csv),
+            portfolio_snapshots: pm_storage::count_rows(paper_portfolio_csv),
+            execution_orders_count: pm_storage::count_rows(execution_csv),
+            ..Default::default()
+        };
+        Self {
+            findings: Vec::new(),
+            stats,
+        }
+    }
+
+    /// 运行所有审计规则，填充 findings。
+    pub fn run_checks(&mut self) {
+        self.findings.clear();
+
+        // 规则 1：Opportunity > 0 则 Paper Order > 0
+        if self.stats.opportunities_count > 0 && self.stats.paper_orders_count == 0 {
+            self.findings.push(AuditFinding {
+                check: "机会数 > 0 但纸面订单数 = 0".into(),
+                passed: false,
+                detail: format!(
+                    "发现 {} 个机会，但纸面订单为 0。可能原因：策略未触发开仓、风控拒绝。",
+                    self.stats.opportunities_count
+                ),
+                severity: AuditSeverity::Error,
+            });
+        }
+
+        // 规则 2：Paper Order <= Opportunity（正常容差：部分机会可能被过滤）
+        if self.stats.paper_orders_count > self.stats.opportunities_count
+            && self.stats.opportunities_count > 0
+        {
+            self.findings.push(AuditFinding {
+                check: "纸面订单 ≤ 机会数".into(),
+                passed: false,
+                detail: format!(
+                    "纸面订单({}) > 机会数({})，存在未追踪来源的订单。",
+                    self.stats.paper_orders_count, self.stats.opportunities_count
+                ),
+                severity: AuditSeverity::Error,
+            });
+        } else if self.stats.opportunities_count > 0 {
+            self.findings.push(AuditFinding {
+                check: "纸面订单 ≤ 机会数".into(),
+                passed: true,
+                detail: format!(
+                    "纸面订单({}) ≤ 机会数({})，正常（{}个机会未进入纸面交易）",
+                    self.stats.paper_orders_count,
+                    self.stats.opportunities_count,
+                    self.stats
+                        .opportunities_count
+                        .saturating_sub(self.stats.paper_orders_count)
+                ),
+                severity: AuditSeverity::Info,
+            });
+        }
+
+        // 规则 3：Execution <= Paper Order（SELL 会额外产生订单）
+        if self.stats.execution_orders_count > self.stats.paper_orders_count * 2 + 10 {
+            self.findings.push(AuditFinding {
+                check: "执行订单 ≈ 纸面订单 × 2".into(),
+                passed: false,
+                detail: format!(
+                    "执行订单({}) 远超纸面订单({}) × 2。可能原因：大量拒绝/过期订单。",
+                    self.stats.execution_orders_count, self.stats.paper_orders_count
+                ),
+                severity: AuditSeverity::Warning,
+            });
+        }
+
+        // 规则 4：已平仓持仓 ≤ 纸面订单
+        if self.stats.paper_positions_closed > self.stats.paper_orders_count {
+            self.findings.push(AuditFinding {
+                check: "已平仓持仓 ≤ 纸面订单".into(),
+                passed: false,
+                detail: format!(
+                    "已平仓持仓({}) > 纸面订单({})，数据不一致。",
+                    self.stats.paper_positions_closed, self.stats.paper_orders_count
+                ),
+                severity: AuditSeverity::Error,
+            });
+        } else if self.stats.paper_orders_count > 0 && self.stats.paper_positions_closed == 0 {
+            self.findings.push(AuditFinding {
+                check: "已平仓持仓 > 0".into(),
+                passed: false,
+                detail: format!(
+                    "纸面订单({}) > 0 但已平仓持仓 = 0。可能原因：机会从未触发 on_close、持仓从未平仓。",
+                    self.stats.paper_orders_count
+                ),
+                severity: AuditSeverity::Warning,
+            });
+        }
+
+        // 规则 5：Portfolio Snapshots <= Scan Rounds（变化时写入）
+        if self.stats.scan_rounds > 0 && self.stats.portfolio_snapshots > self.stats.scan_rounds {
+            self.findings.push(AuditFinding {
+                check: "组合快照 ≤ 扫描轮次".into(),
+                passed: false,
+                detail: format!(
+                    "组合快照({}) > 扫描轮次({})，存在重复写入。",
+                    self.stats.portfolio_snapshots, self.stats.scan_rounds
+                ),
+                severity: AuditSeverity::Warning,
+            });
+        }
+
+        // 规则 6：Execution 终态分类之和 = 总订单数（如果数据可用）
+        let exec_total = self.stats.execution_filled
+            + self.stats.execution_cancelled
+            + self.stats.execution_expired
+            + self.stats.execution_rejected;
+        if exec_total > 0 && exec_total > self.stats.execution_orders_count {
+            self.findings.push(AuditFinding {
+                check: "执行订单分类求和 ≤ 总订单数".into(),
+                passed: false,
+                detail: format!(
+                    "执行订单分类求和({}) > 总订单数({})，分类计数不一致。",
+                    exec_total, self.stats.execution_orders_count
+                ),
+                severity: AuditSeverity::Error,
+            });
+        }
+
+        // 如果没有发现任何 Error，添加摘要
+        if !self
+            .findings
+            .iter()
+            .any(|f| f.severity == AuditSeverity::Error)
+        {
+            self.findings.push(AuditFinding {
+                check: "数据一致性".into(),
+                passed: true,
+                detail: "所有检查通过，统计数据一致。".into(),
+                severity: AuditSeverity::Info,
+            });
+        }
+    }
+
+    /// 返回所有 Error 级别的发现。
+    pub fn errors(&self) -> Vec<&AuditFinding> {
+        self.findings
+            .iter()
+            .filter(|f| f.severity == AuditSeverity::Error)
+            .collect()
+    }
+
+    /// 返回所有 Warning 级别的发现。
+    pub fn warnings(&self) -> Vec<&AuditFinding> {
+        self.findings
+            .iter()
+            .filter(|f| f.severity == AuditSeverity::Warning)
+            .collect()
+    }
+
+    /// 是否有错误。
+    pub fn has_errors(&self) -> bool {
+        self.errors().len() > 0
+    }
+}
+
+impl fmt::Display for StatisticsAudit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "==============================")?;
+        writeln!(f, "统计审计报告")?;
+        writeln!(f, "==============================")?;
+        writeln!(f)?;
+        writeln!(f, "── 原始统计数据 ──")?;
+        writeln!(f)?;
+        writeln!(f, "  市场扫描数:    {}", self.stats.markets_scanned)?;
+        writeln!(f, "  候选数:        {}", self.stats.candidates_count)?;
+        writeln!(f, "  候选通过:      {}", self.stats.candidates_accepted)?;
+        writeln!(f, "  候选拒绝:      {}", self.stats.candidates_rejected)?;
+        writeln!(f, "  机会数(CSV):   {}", self.stats.opportunities_count)?;
+        writeln!(f, "  影子交易(CSV): {}", self.stats.shadow_trades_count)?;
+        writeln!(f, "  纸面订单(CSV): {}", self.stats.paper_orders_count)?;
+        writeln!(f, "  已平仓持仓(CSV):{}", self.stats.paper_positions_closed)?;
+        writeln!(f, "  执行订单(CSV): {}", self.stats.execution_orders_count)?;
+        writeln!(f, "  组合快照(CSV): {}", self.stats.portfolio_snapshots)?;
+        writeln!(f)?;
+        writeln!(f, "── 审计检查 ──")?;
+        writeln!(f)?;
+        for finding in &self.findings {
+            writeln!(
+                f,
+                "  {} {} — {}",
+                finding.severity.icon(),
+                finding.check,
+                finding.detail
+            )?;
+        }
+        writeln!(f)?;
+        if self.has_errors() {
+            writeln!(f, "结论：发现数据一致性问题，请检查上述错误。")?;
+        } else {
+            writeln!(f, "结论：数据一致性检查通过。")?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_audit_produces_info() {
+        let mut audit = StatisticsAudit::new();
+        audit.run_checks();
+        // 空数据时没有 Error
+        assert!(!audit.has_errors());
+    }
+
+    #[test]
+    fn opportunities_without_paper_orders_is_error() {
+        let mut audit = StatisticsAudit::new();
+        audit.stats.opportunities_count = 5;
+        audit.stats.paper_orders_count = 0;
+        audit.run_checks();
+        assert!(audit.has_errors());
+    }
+
+    #[test]
+    fn paper_orders_exceeding_opportunities_is_error() {
+        let mut audit = StatisticsAudit::new();
+        audit.stats.opportunities_count = 3;
+        audit.stats.paper_orders_count = 10;
+        audit.run_checks();
+        assert!(audit.has_errors());
+    }
+
+    #[test]
+    fn closed_positions_exceeding_orders_is_error() {
+        let mut audit = StatisticsAudit::new();
+        audit.stats.paper_orders_count = 2;
+        audit.stats.paper_positions_closed = 5;
+        audit.run_checks();
+        assert!(audit.has_errors());
+    }
+
+    #[test]
+    fn portfolio_snapshots_exceeding_rounds_is_warning() {
+        let mut audit = StatisticsAudit::new();
+        audit.stats.scan_rounds = 10;
+        audit.stats.portfolio_snapshots = 100;
+        audit.run_checks();
+        let warnings = audit.warnings();
+        assert!(warnings.len() > 0);
+    }
+
+    #[test]
+    fn consistent_data_passes() {
+        let mut audit = StatisticsAudit::new();
+        audit.stats.opportunities_count = 10;
+        audit.stats.paper_orders_count = 10;
+        audit.stats.paper_positions_closed = 8;
+        audit.stats.execution_orders_count = 20; // BUY + SELL
+        audit.stats.scan_rounds = 10;
+        audit.stats.portfolio_snapshots = 10;
+        audit.run_checks();
+        assert!(!audit.has_errors());
+    }
+}

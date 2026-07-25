@@ -44,6 +44,7 @@ members = [
     "crates/settlement",
     "crates/infrastructure",
     "crates/market-framework",
+    "crates/audit",
 ]
 
 [workspace.package]
@@ -58,7 +59,7 @@ publish = false
 [workspace.dependencies]
 # ---- 外部依赖（统一版本，各 crate 按 need 引用）----
 tokio = { version = "1", features = ["macros", "rt", "time", "signal"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "system-proxy"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
@@ -100,6 +101,7 @@ pm-wallet = { path = "crates/wallet" }
 pm-settlement = { path = "crates/settlement" }
 pm-infrastructure = { path = "crates/infrastructure" }
 pm-market-framework = { path = "crates/market-framework" }
+pm-audit = { path = "crates/audit" }
 
 # 测试/构建优化 profile（保持默认即可，显式声明便于后续调优）
 [profile.dev]

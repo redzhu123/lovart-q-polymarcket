@@ -11,6 +11,7 @@
 //! Simulation Only -- 不连接钱包 / 不真实交易 / 不签名 / 不下单 / 无 Polygon / WebSocket / 数据库 / Redis。
 
 use anyhow::Result;
+use pm_audit::{AuditReport, ExplainReport};
 use pm_auth::{self, diagnose_auth_credential, diagnose_auth_health, diagnose_auth_session};
 use pm_gateway::{
     self, GatewayConfig, create_gateway, diagnose_account, diagnose_balance, diagnose_gateway,
@@ -130,15 +131,27 @@ async fn main() -> Result<()> {
             run_top(&cfg).await
         }
         "explain" => {
-            let id = args.get(2).cloned().unwrap_or_default();
-            if id.is_empty() {
-                println!("用法: cargo run -- explain <id>");
-                println!("  id 可以是 market_id 或机会 ID 前缀");
-                return Ok(());
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("pipeline");
+            match sub {
+                "pipeline" | "" => {
+                    println!("模式：数据链路解释");
+                    run_explain_pipeline(&cfg)
+                }
+                "rejections" => {
+                    println!("模式：拒绝原因分析");
+                    run_explain_rejections(&cfg)
+                }
+                id => {
+                    println!("模式：机会解释");
+                    run_explain(&cfg, id).await
+                }
             }
-            println!("模式：机会解释");
-            run_explain(&cfg, &id).await
         }
+        "audit" => {
+            println!("模式：数据审计");
+            run_audit(&cfg)
+        }
+        // ---- V1.09 End ----
         // ---- V1.05 风险引擎 CLI ----
         "risk" => {
             println!("模式：风险仪表盘");
@@ -643,14 +656,35 @@ async fn run_liquidity(cfg: &pm_models::Config) -> Result<()> {
 
 /// report 模式：读取各 CSV，打印平台级汇总。
 fn run_report(cfg: &pm_models::Config) -> Result<()> {
+    eprint!("[1/7] 读取机会记录... ");
     let opps = pm_storage::count_rows(&cfg.paths.opportunities_csv);
-    let shadow = pm_shadow::load_history(&cfg.paths.shadow_csv);
-    let paper_orders = pm_storage::count_rows(&cfg.paths.paper_orders_csv);
-    let paper_positions = pm_storage::count_rows(&cfg.paths.paper_positions_csv);
-    let paper_portfolio = pm_storage::count_rows(&cfg.paths.paper_portfolio_csv);
-    let exec_orders = pm_storage::count_rows(&cfg.paths.execution_csv);
-    let backtest_rows = pm_storage::count_rows(&cfg.paths.backtest_report_csv);
+    eprintln!("{} 行", opps);
 
+    eprint!("[2/7] 读取影子交易... ");
+    let shadow = pm_shadow::load_history(&cfg.paths.shadow_csv);
+    eprintln!("{} 笔（已平仓）", shadow.stats.total);
+
+    eprint!("[3/7] 读取纸面订单... ");
+    let paper_orders = pm_storage::count_rows(&cfg.paths.paper_orders_csv);
+    eprintln!("{} 行", paper_orders);
+
+    eprint!("[4/7] 读取纸面持仓... ");
+    let paper_positions = pm_storage::count_rows(&cfg.paths.paper_positions_csv);
+    eprintln!("{} 行", paper_positions);
+
+    eprint!("[5/7] 读取纸面组合快照... ");
+    let paper_portfolio = pm_storage::count_rows(&cfg.paths.paper_portfolio_csv);
+    eprintln!("{} 行", paper_portfolio);
+
+    eprint!("[6/7] 读取执行订单... ");
+    let exec_orders = pm_storage::count_rows(&cfg.paths.execution_csv);
+    eprintln!("{} 行", exec_orders);
+
+    eprint!("[7/7] 读取回测报告... ");
+    let backtest_rows = pm_storage::count_rows(&cfg.paths.backtest_report_csv);
+    eprintln!("{} 行", backtest_rows);
+
+    println!();
     println!("======================================");
     println!();
     println!("平台报告 -- 仅模拟");
@@ -878,6 +912,158 @@ async fn run_explain(cfg: &pm_models::Config, target_id: &str) -> Result<()> {
                 println!("  （无机会）");
             }
         }
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// V1.09 数据审计 CLI 命令
+// ============================================================================
+
+/// `cargo run -- explain pipeline`：完整数据链路分析报告。
+fn run_explain_pipeline(cfg: &pm_models::Config) -> Result<()> {
+    println!();
+    let mut report = ExplainReport::from_csv_paths(
+        &cfg.paths.opportunities_csv,
+        &cfg.paths.shadow_csv,
+        &cfg.paths.paper_orders_csv,
+        &cfg.paths.paper_positions_csv,
+        &cfg.paths.paper_portfolio_csv,
+        &cfg.paths.execution_csv,
+    );
+
+    // 添加市场扫描数统计
+    let snapshots_csv = format!("{}/market_snapshots.csv", cfg.paths.data_dir);
+    report.stats.markets_scanned = pm_storage::count_rows(&snapshots_csv);
+
+    // 添加分析说明
+    let provider = &cfg.datasource.provider;
+    let threshold = cfg.scanner.opportunity_threshold;
+    report.add_note(format!(
+        "数据源: {} | 机会阈值: {} | 扫描间隔: {}s",
+        provider, threshold, cfg.scanner.scan_interval_secs
+    ));
+
+    if report.stats.opportunities_count == 0 {
+        report.add_note(
+            "机会数 = 0：可能原因：(1) Gamma API 返回归一化价格 (YES+NO=1.0)，常态下无套利机会。\
+             (2) 当前 provider 不支持真实订单簿价格。建议将 provider 切换为 \"clob\" 获取真实买卖价。"
+                .into(),
+        );
+    }
+    if report.stats.portfolio_snapshots > 1000 {
+        report.add_note(format!(
+            "组合快照数 ({}) 异常偏高。V1.09 已修复：仅组合变化时写入，避免每轮重复。\
+             重置数据目录可清理旧快照。",
+            report.stats.portfolio_snapshots
+        ));
+    }
+    if report.stats.paper_orders_count > 0 && report.stats.opportunities_count == 0 {
+        report.add_note(
+            "纸面订单 > 0 但机会 = 0：订单可能来自历史运行（Mock Provider 模拟数据）。\
+             重置 data/*.csv 可清除。"
+                .into(),
+        );
+    }
+    if report.stats.execution_orders_count > report.stats.paper_orders_count * 2 + 10 {
+        report.add_note(format!(
+            "执行订单 ({}) 远超纸面订单 ({}) × 2。执行订单包含 BUY + SELL + 拒绝/过期/取消，\
+             数量偏高可能因快速连续扫描积压所致。V1.09 已限制组合快照写入，其他 CSV 保留完整审计轨迹。",
+            report.stats.execution_orders_count,
+            report.stats.paper_orders_count
+        ));
+    }
+
+    println!("{}", report.render_zh());
+
+    // 保存报告
+    let report_dir = "reports/audit";
+    let _ = std::fs::create_dir_all(report_dir);
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let path = format!("{}/pipeline_explain_{}.txt", report_dir, ts);
+    if let Err(e) = std::fs::write(&path, report.render_zh()) {
+        tracing::warn!("报告保存失败: {} — {}", path, e);
+    } else {
+        println!("报告已保存至: {}", path);
+    }
+
+    Ok(())
+}
+
+/// `cargo run -- explain rejections`：拒绝原因详细分析。
+fn run_explain_rejections(cfg: &pm_models::Config) -> Result<()> {
+    println!();
+    println!("=========================");
+    println!("拒绝原因分析");
+    println!("=========================");
+    println!();
+    println!("当前数据源: {}", cfg.datasource.provider);
+    println!("机会阈值: {}", cfg.scanner.opportunity_threshold);
+    println!();
+
+    let opps_count = pm_storage::count_rows(&cfg.paths.opportunities_csv);
+    println!("机会数(CSV): {}", opps_count);
+
+    if opps_count == 0 {
+        println!();
+        println!("── 分析 ──");
+        println!();
+        println!("  无机会记录。可能原因：");
+        println!();
+        if cfg.datasource.provider == "gamma" {
+            println!("  1. Gamma API 归一化价格 (YES+NO 恒为 1.0)");
+            println!(
+                "     所有市场的 sum 都 >= 阈值 ({}),",
+                cfg.scanner.opportunity_threshold
+            );
+            println!("     被归类为'价差过小'(SpreadTooSmall)。");
+            println!();
+            println!("  2. 建议：");
+            println!("     - 使用 CLOB Provider 获取真实订单簿价格");
+            println!("       修改 config.toml: [datasource] provider = \"clob\"");
+            println!("     - 或提高阈值: [scanner] opportunity_threshold = 1.01");
+        } else if cfg.datasource.provider == "mock" {
+            println!("  1. Mock Provider 可能未生成足够低 SUM 的数据。");
+            println!();
+            println!("  2. 建议切换到 Gamma 或 CLOB 获取真实数据。");
+        } else {
+            println!(
+                "  1. 当前 Provider \"{}\" 可能无满足阈值条件的市场。",
+                cfg.datasource.provider
+            );
+            println!();
+            println!("  2. 检查 config.toml 中的 opportunity_threshold 设置。");
+        }
+    }
+
+    println!();
+    println!("=========================");
+    Ok(())
+}
+
+/// `cargo run -- audit`：自动数据一致性审计。
+fn run_audit(cfg: &pm_models::Config) -> Result<()> {
+    println!();
+    let report = AuditReport::run(
+        &cfg.paths.opportunities_csv,
+        &cfg.paths.shadow_csv,
+        &cfg.paths.paper_orders_csv,
+        &cfg.paths.paper_positions_csv,
+        &cfg.paths.paper_portfolio_csv,
+        &cfg.paths.execution_csv,
+    );
+    println!("{}", report.render_zh());
+
+    // 保存报告
+    let report_dir = "reports/audit";
+    let _ = std::fs::create_dir_all(report_dir);
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let path = format!("{}/audit_{}.txt", report_dir, ts);
+    if let Err(e) = std::fs::write(&path, report.render_zh()) {
+        tracing::warn!("审计报告保存失败: {} — {}", path, e);
+    } else {
+        println!("审计报告已保存至: {}", path);
     }
 
     Ok(())
@@ -2273,10 +2459,16 @@ fn print_usage() {
     println!("  cargo run -- spread          价差分析");
     println!("  cargo run -- liquidity       流动性分析");
     println!();
+    println!("  数据审计（V1.09）：");
+    println!("  cargo run -- explain           完整数据链路分析报告");
+    println!("  cargo run -- explain pipeline  同上");
+    println!("  cargo run -- explain rejections  拒绝原因分析");
+    println!("  cargo run -- explain <id>      解释某个机会的评分");
+    println!("  cargo run -- audit             自动数据一致性审计");
+    println!();
     println!("  机会引擎（V1.04）：");
     println!("  cargo run -- opportunities   列出全部机会");
     println!("  cargo run -- top             Top 10 机会");
-    println!("  cargo run -- explain <id>   解释某个机会的评分");
     println!();
     println!("  风险引擎（V1.05）：");
     println!("  cargo run -- risk           风险仪表盘");

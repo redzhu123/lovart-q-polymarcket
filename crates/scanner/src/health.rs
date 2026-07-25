@@ -112,9 +112,7 @@ pub async fn run_health_check(provider: &dyn MarketDataProvider, cfg: &Config) -
 }
 
 async fn check_config(cfg: &Config) -> (CheckStatus, String) {
-    if cfg.scanner.scan_interval_secs == 0 {
-        return (CheckStatus::Fail, "scanner.scan_interval_secs == 0".into());
-    }
+    // 0 表示不等待，直接进入下一轮扫描
     if cfg.scanner.opportunity_threshold <= 0.0 || cfg.scanner.opportunity_threshold > 2.0 {
         return (
             CheckStatus::Fail,

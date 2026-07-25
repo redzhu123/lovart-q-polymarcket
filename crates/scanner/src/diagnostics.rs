@@ -525,7 +525,7 @@ fn print_strategy_explain(a: &RoundAnalysis) {
         ("数据无效", RejectionReason::InvalidData),
         ("不活跃", RejectionReason::Inactive),
         ("已关闭", RejectionReason::Closed),
-        ("YES+NO >= 阈值", RejectionReason::SumAboveThreshold),
+        ("价差过小", RejectionReason::SpreadTooSmall),
     ];
     const CAP: usize = 20;
     for (name, reason) in groups {

@@ -47,6 +47,8 @@ pub struct Portfolio {
     pub total_pnl: f64,
     pub open_positions: Vec<Position>,
     pub closed_positions: Vec<Position>,
+    /// 自上次快照保存后是否发生变化（V1.09：控制组合快照写入频率）。
+    dirty: bool,
 }
 
 impl Portfolio {
@@ -61,6 +63,7 @@ impl Portfolio {
             total_pnl: 0.0,
             open_positions: Vec::new(),
             closed_positions: Vec::new(),
+            dirty: true, // 初始状态需要一次快照
         }
     }
 
@@ -98,6 +101,7 @@ impl Portfolio {
         let unreal = self.unrealized_pnl();
         self.total_pnl = self.realized_pnl() + unreal;
         self.total_value = self.cash + self.locked_cash + unreal;
+        self.dirty = true;
     }
 
     /// ROI = total_pnl / initial_capital。
@@ -114,6 +118,7 @@ impl Portfolio {
         let cost = pos.cost_basis();
         self.debit(cost);
         self.open_positions.push(pos);
+        self.dirty = true;
     }
 
     /// mark-to-market：按 question 更新某持仓的 current_price / pnl。找不到则无操作。
@@ -124,6 +129,7 @@ impl Portfolio {
             .find(|p| p.question == question)
         {
             pos.mark(current_price);
+            self.dirty = true;
         }
     }
 
@@ -146,6 +152,7 @@ impl Portfolio {
         self.credit(cost_basis, proceeds);
         let snapshot = pos.clone();
         self.closed_positions.push(pos);
+        self.dirty = true;
         Some(snapshot)
     }
 
@@ -157,6 +164,16 @@ impl Portfolio {
     /// 已平仓数。
     pub fn closed_count(&self) -> usize {
         self.closed_positions.len()
+    }
+
+    /// 自上次 `mark_saved()` 以来是否有变化（V1.09）。
+    pub fn has_changed(&self) -> bool {
+        self.dirty
+    }
+
+    /// 标记已保存快照（V1.09：控制组合快照写入频率）。
+    pub fn mark_saved(&mut self) {
+        self.dirty = false;
     }
 }
 

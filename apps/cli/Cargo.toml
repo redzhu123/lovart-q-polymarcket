@@ -36,6 +36,7 @@ pm-auth = { workspace = true }
 pm-wallet = { workspace = true }
 pm-settlement = { workspace = true }
 pm-market-framework = { workspace = true }
+pm-audit = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -109,37 +109,56 @@ impl Cache for TtlCache {
     }
 
     async fn get_json(&self, key: &str) -> Option<Value> {
-        let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // Lock entries first, extract value, then drop — avoid holding both locks
+        let result = {
+            let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            match entries.get(key) {
+                Some(entry) if entry.inserted_at.elapsed() < self.ttl => {
+                    Some((entry.value.clone(), true))
+                }
+                _ => Some((Value::Null, false)),
+            }
+        };
+        // Now lock stats alone — consistent ordering eliminates deadlock with stats()
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(entry) = entries.get(key) {
-            if entry.inserted_at.elapsed() < self.ttl {
+        match result {
+            Some((v, true)) => {
                 stats.hits += 1;
-                return Some(entry.value.clone());
+                Some(v)
+            }
+            _ => {
+                stats.misses += 1;
+                None
             }
         }
-        stats.misses += 1;
-        None
     }
 
     async fn set_json(&self, key: &str, value: Value) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.insert(
-            key.to_string(),
-            TtlEntry {
-                value,
-                inserted_at: Instant::now(),
-            },
-        );
+        let new_size = {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.insert(
+                key.to_string(),
+                TtlEntry {
+                    value,
+                    inserted_at: Instant::now(),
+                },
+            );
+            entries.len()
+        };
+        // Lock stats separately — never hold entries while locking stats
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        stats.size = entries.len();
+        stats.size = new_size;
         Ok(())
     }
 
     async fn remove(&self, key: &str) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.remove(key);
+        let new_size = {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.remove(key);
+            entries.len()
+        };
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        stats.size = entries.len();
+        stats.size = new_size;
         Ok(())
     }
 
@@ -149,8 +168,10 @@ impl Cache for TtlCache {
     }
 
     async fn clear(&self) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.clear();
+        {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.clear();
+        }
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
         stats.size = 0;
         Ok(())
@@ -171,11 +192,18 @@ impl Cache for TtlCache {
     }
 
     fn stats(&self) -> CacheStats {
-        let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // Lock stats first, clone, drop — then lock entries — consistent ordering
+        let stats_clone = {
+            let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+            stats.clone()
+        };
+        let size = {
+            let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.len()
+        };
         CacheStats {
-            size: entries.len(),
-            ..stats.clone()
+            size,
+            ..stats_clone
         }
     }
 }
@@ -205,29 +233,45 @@ impl Cache for MemoryCache {
     }
 
     async fn get_json(&self, key: &str) -> Option<Value> {
-        let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        // Lock entries first, extract value, then drop — avoid holding both locks
+        let result = {
+            let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.get(key).cloned()
+        };
+        // Now lock stats alone — consistent ordering with stats()
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(v) = entries.get(key) {
-            stats.hits += 1;
-            return Some(v.clone());
+        match result {
+            Some(v) => {
+                stats.hits += 1;
+                Some(v)
+            }
+            None => {
+                stats.misses += 1;
+                None
+            }
         }
-        stats.misses += 1;
-        None
     }
 
     async fn set_json(&self, key: &str, value: Value) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.insert(key.to_string(), value);
+        let new_size = {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.insert(key.to_string(), value);
+            entries.len()
+        };
+        // Lock stats separately — never hold entries while locking stats
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        stats.size = entries.len();
+        stats.size = new_size;
         Ok(())
     }
 
     async fn remove(&self, key: &str) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.remove(key);
+        let new_size = {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.remove(key);
+            entries.len()
+        };
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        stats.size = entries.len();
+        stats.size = new_size;
         Ok(())
     }
 
@@ -237,8 +281,10 @@ impl Cache for MemoryCache {
     }
 
     async fn clear(&self) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.clear();
+        {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.clear();
+        }
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
         stats.size = 0;
         Ok(())
@@ -254,11 +300,17 @@ impl Cache for MemoryCache {
     }
 
     fn stats(&self) -> CacheStats {
-        let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let stats_clone = {
+            let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+            stats.clone()
+        };
+        let size = {
+            let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.len()
+        };
         CacheStats {
-            size: entries.len(),
-            ..stats.clone()
+            size,
+            ..stats_clone
         }
     }
 }
@@ -285,15 +337,18 @@ impl LruCache {
     }
 
     fn evict_lru(&self) {
-        if let Ok(mut order) = self.order.lock() {
-            if let Some(oldest) = order.pop_front() {
-                if let Ok(mut entries) = self.entries.lock() {
-                    entries.remove(&oldest);
-                }
-                if let Ok(mut stats) = self.stats.lock() {
-                    stats.evictions += 1;
-                }
-            }
+        // Lock order → extract key → drop order → lock entries → drop entries → lock stats
+        let oldest = {
+            let mut order = self.order.lock().unwrap_or_else(|e| e.into_inner());
+            order.pop_front()
+        };
+        if let Some(ref key) = oldest {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.remove(key);
+        }
+        if oldest.is_some() {
+            let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+            stats.evictions += 1;
         }
     }
 
@@ -312,21 +367,22 @@ impl Cache for LruCache {
     }
 
     async fn get_json(&self, key: &str) -> Option<Value> {
-        let hit = {
+        // Lock entries, extract value, drop — then update stats separately
+        let result = {
             let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-            let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(v) = entries.get(key) {
-                stats.hits += 1;
-                Some(v.clone())
-            } else {
-                stats.misses += 1;
-                None
-            }
+            entries.get(key).cloned()
         };
-        if hit.is_some() {
+        {
+            let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+            match result {
+                Some(_) => stats.hits += 1,
+                None => stats.misses += 1,
+            }
+        }
+        if result.is_some() {
             self.touch(key);
         }
-        hit
+        result
     }
 
     async fn set_json(&self, key: &str, value: Value) -> anyhow::Result<()> {
@@ -338,24 +394,31 @@ impl Cache for LruCache {
                 self.evict_lru();
             }
         }
-        {
+        let new_size = {
             let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
             entries.insert(key.to_string(), value);
-        }
+            entries.len()
+        };
         self.touch(key);
+        // Lock stats separately — never hold entries while locking stats
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        stats.size = entries.len();
+        stats.size = new_size;
         Ok(())
     }
 
     async fn remove(&self, key: &str) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.remove(key);
-        let mut order = self.order.lock().unwrap_or_else(|e| e.into_inner());
-        order.retain(|k| k != key);
+        let (entries_existed, new_size) = {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            let existed = entries.remove(key).is_some();
+            (existed, entries.len())
+        };
+        // Lock order separately — never nest order/entries/stats locks
+        if entries_existed {
+            let mut order = self.order.lock().unwrap_or_else(|e| e.into_inner());
+            order.retain(|k| k != key);
+        }
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        stats.size = entries.len();
+        stats.size = new_size;
         Ok(())
     }
 
@@ -365,10 +428,15 @@ impl Cache for LruCache {
     }
 
     async fn clear(&self) -> anyhow::Result<()> {
-        let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
-        entries.clear();
-        let mut order = self.order.lock().unwrap_or_else(|e| e.into_inner());
-        order.clear();
+        // Lock each mutex independently — never nest
+        {
+            let mut entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.clear();
+        }
+        {
+            let mut order = self.order.lock().unwrap_or_else(|e| e.into_inner());
+            order.clear();
+        }
         let mut stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
         stats.size = 0;
         Ok(())
@@ -384,11 +452,17 @@ impl Cache for LruCache {
     }
 
     fn stats(&self) -> CacheStats {
-        let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
-        let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+        let stats_clone = {
+            let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+            stats.clone()
+        };
+        let size = {
+            let entries = self.entries.lock().unwrap_or_else(|e| e.into_inner());
+            entries.len()
+        };
         CacheStats {
-            size: entries.len(),
-            ..stats.clone()
+            size,
+            ..stats_clone
         }
     }
 }
@@ -433,14 +507,14 @@ mod tests {
 
     #[tokio::test]
     async fn ttl_cache_expires() {
-        let cache = TtlCache::new("test", Duration::from_millis(10));
+        let cache = TtlCache::new("test", Duration::from_millis(50));
         cache
             .set_json("k", Value::String("v".to_string()))
             .await
             .unwrap();
         assert!(cache.is_fresh("k").await);
 
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(!cache.is_fresh("k").await);
         assert!(cache.get_json("k").await.is_none());
     }

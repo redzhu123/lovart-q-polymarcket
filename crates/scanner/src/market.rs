@@ -40,7 +40,7 @@ pub fn analyze_markets(markets: &[UnifiedMarket], threshold: f64) -> RoundAnalys
 /// `detail=false` 时跳过明细收集（无额外开销，保持 debug=false 的性能与 V1.0 一致）。
 ///
 /// 过滤优先级（每个市场恰好落入一类）：
-/// `Closed` > `Inactive` > `MissingPrice`/`InvalidData` > `SumAboveThreshold` > 机会。
+/// `Closed` > `Inactive` > `MissingPrice`/`InvalidData` > `SpreadTooSmall` > 机会。
 /// 与 `find_opportunities` 的 `active && !closed && yes_no_prices().is_some() && sum < threshold`
 /// 完全等价。
 fn analyze_markets_inner(markets: &[UnifiedMarket], threshold: f64, detail: bool) -> RoundAnalysis {
@@ -117,7 +117,7 @@ fn analyze_markets_inner(markets: &[UnifiedMarket], threshold: f64, detail: bool
                         None
                     } else {
                         a.filtered_strategy += 1;
-                        Some(RejectionReason::SumAboveThreshold)
+                        Some(RejectionReason::SpreadTooSmall)
                     }
                 }
             }
@@ -315,9 +315,9 @@ mod tests {
             assert!(!r.reason.as_str().is_empty());
         }
         let reasons: Vec<&str> = a.rejections.iter().map(|r| r.reason.as_str()).collect();
-        assert!(reasons.contains(&"已关闭"));
-        assert!(reasons.contains(&"缺价"));
-        assert!(reasons.contains(&"YES+NO >= 阈值"));
+        assert!(reasons.contains(&"市场已关闭"));
+        assert!(reasons.contains(&"缺失价格"));
+        assert!(reasons.contains(&"价差过小"));
     }
 
     #[test]

@@ -57,8 +57,7 @@ impl DataSourceManager {
                     .user_agent("polymarket-scanner/1.0")
                     .timeout(Duration::from_secs(60))
                     .build()?;
-                let debug = cfg.effective_log_level() >= LogLevel::Debug;
-                Box::new(GammaProvider::new(client, debug))
+                Box::new(GammaProvider::new(client))
             }
             "mock" => Box::new(MockProvider::default()),
             "clob" => {

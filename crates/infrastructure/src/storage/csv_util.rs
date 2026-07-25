@@ -3,6 +3,7 @@
 //! 从 `pm-storage::lib.rs` 提取并统一。
 
 use serde::Serialize;
+use std::io::BufRead;
 use std::path::Path;
 
 /// 确保 CSV 文件存在且有正确的表头。
@@ -71,39 +72,57 @@ pub fn append_records<T: Serialize>(
     Ok(records.len())
 }
 
-/// 统计 CSV 文件行数（不含表头）
+/// 统计 CSV 文件行数（不含表头）。
+///
+/// 使用 chunked byte scanning：只计数 `\n` 字节，不分配 String、不做 UTF-8 校验，
+/// 大文件（数百 MB / 百万行）也能在数十毫秒内完成。
 pub fn count_rows(path: impl AsRef<Path>) -> u64 {
     let path = path.as_ref();
     if !path.exists() {
         return 0;
     }
 
-    match std::fs::read_to_string(path) {
-        Ok(content) => {
-            let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
-            if lines.len() <= 1 {
-                0
-            } else {
-                (lines.len() - 1) as u64
+    let Ok(file) = std::fs::File::open(path) else {
+        return 0;
+    };
+    let mut reader = std::io::BufReader::with_capacity(256 * 1024, file);
+    let mut newlines = 0u64;
+    let mut buf = [0u8; 256 * 1024];
+    loop {
+        use std::io::Read;
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                newlines += buf[..n].iter().filter(|&&b| b == b'\n').count() as u64;
             }
+            Err(_) => return 0,
         }
-        Err(_) => 0,
     }
+    newlines.saturating_sub(1) // 去掉表头行
 }
 
-/// 读取 CSV 文件的第一行非空内容
+/// 读取 CSV 文件的第一行非空内容。
+///
+/// 使用 streaming read：只读取到第一个非空行即停止，不加载整个文件。
 pub fn read_first_nonempty_line(path: impl AsRef<Path>) -> Option<String> {
     let path = path.as_ref();
     if !path.exists() {
         return None;
     }
 
-    std::fs::read_to_string(path).ok().and_then(|content| {
-        content
-            .lines()
-            .find(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_string())
-    })
+    let Ok(file) = std::fs::File::open(path) else {
+        return None;
+    };
+    let reader = std::io::BufReader::with_capacity(64 * 1024, file);
+    for line in reader.lines() {
+        if let Ok(s) = line {
+            let trimmed = s.trim().to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]

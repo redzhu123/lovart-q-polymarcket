@@ -62,6 +62,49 @@ pub struct FetchStats {
     pub pages: Vec<PageStats>,
 }
 
+impl FetchStats {
+    /// 从单页结果累积统计（并发翻页用，V1.09）。
+    ///
+    /// `first_url` 由调用方在 offset=0 页面单独设置；
+    /// `rate_limit` 仅在 self 中尚为 None 时写入（取首个非空值）。
+    pub fn accumulate_page(
+        &mut self,
+        url: String,
+        status: u16,
+        bytes: usize,
+        elapsed_ms: u128,
+        ok: bool,
+        error: Option<String>,
+        deserialize_ms: u128,
+        rate_limit: Option<String>,
+    ) {
+        self.request_count += 1;
+        if ok {
+            self.success_count += 1;
+        } else {
+            self.failed_count += 1;
+        }
+        self.total_bytes += bytes as u64;
+        self.total_ms += elapsed_ms;
+        self.deserialize_ms += deserialize_ms;
+        self.last_status = status;
+        if error.is_some() {
+            self.last_error = error.clone();
+        }
+        if self.rate_limit.is_none() {
+            self.rate_limit = rate_limit;
+        }
+        self.pages.push(PageStats {
+            url,
+            status,
+            bytes,
+            elapsed_ms,
+            ok,
+            error,
+        });
+    }
+}
+
 /// `fetch_active_markets` 的返回：市场列表 + 拉取统计。
 ///
 /// V1.02：`markets` 类型由 Gamma 专用 `Market` 改为统一 `UnifiedMarket`。
@@ -74,35 +117,57 @@ pub struct FetchResult {
 // 市场分析统计（单轮）
 // ============================================================================
 
-/// 单个市场被过滤的拒绝原因。
+/// 单个市场被过滤的拒绝原因（V1.09 扩展版）。
 ///
-/// 与 `find_opportunities` 的过滤条件一一对应：
-/// - `active && !closed` 不成立 -> [`RejectionReason::Closed`] / [`RejectionReason::Inactive`]
-/// - `yes_no_prices()` 为 None -> [`RejectionReason::MissingPrice`] / [`RejectionReason::InvalidData`]
-/// - `sum >= threshold` -> [`RejectionReason::SumAboveThreshold`]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// 与 `find_opportunities` / `analyze_markets_inner` 的过滤条件一一对应。
+/// V1.09 新增：SpreadTooSmall / LiquidityTooLow / VolumeTooLow / MarketClosed / PriceInvalid / BookEmpty。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RejectionReason {
+    // ---- 市场状态 ----
     /// `closed == true`（被 `!closed` 过滤）。
     Closed,
     /// `active == false`（被 `active` 过滤）。
     Inactive,
+
+    // ---- 数据质量 ----
     /// `outcome_prices` 缺失（None）。
     MissingPrice,
     /// `outcome_prices` 存在但无法解析 / 非二元（len != 2）。
     InvalidData,
-    /// 通过校验但 `YES+NO >= threshold`（无套利空间）。
-    SumAboveThreshold,
+
+    // ---- 策略过滤 ----
+    /// 通过校验但 `YES+NO >= threshold`（无套利空间，价差过小）。
+    SpreadTooSmall,
+    /// 流动性低于最低阈值。
+    LiquidityTooLow,
+    /// 成交量低于最低阈值。
+    VolumeTooLow,
+
+    // ---- V1.09 新增 ----
+    /// 价格缺失或无效（等同 MissingPrice，更明确）。
+    PriceInvalid,
+    /// 订单簿为空（无买卖盘）。
+    BookEmpty,
 }
 
 impl RejectionReason {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_zh(&self) -> &'static str {
         match self {
-            RejectionReason::Closed => "已关闭",
+            RejectionReason::Closed => "市场已关闭",
             RejectionReason::Inactive => "不活跃",
-            RejectionReason::MissingPrice => "缺价",
+            RejectionReason::MissingPrice => "缺失价格",
             RejectionReason::InvalidData => "数据无效",
-            RejectionReason::SumAboveThreshold => "YES+NO >= 阈值",
+            RejectionReason::SpreadTooSmall => "价差过小",
+            RejectionReason::LiquidityTooLow => "流动性过低",
+            RejectionReason::VolumeTooLow => "成交量过低",
+            RejectionReason::PriceInvalid => "价格无效",
+            RejectionReason::BookEmpty => "订单簿为空",
         }
+    }
+
+    /// 兼容旧 API。
+    pub fn as_str(&self) -> &'static str {
+        self.as_zh()
     }
 }
 
@@ -345,14 +410,11 @@ mod tests {
 
     #[test]
     fn rejection_reason_strings() {
-        assert_eq!(RejectionReason::Closed.as_str(), "已关闭");
-        assert_eq!(RejectionReason::Inactive.as_str(), "不活跃");
-        assert_eq!(RejectionReason::MissingPrice.as_str(), "缺价");
-        assert_eq!(RejectionReason::InvalidData.as_str(), "数据无效");
-        assert_eq!(
-            RejectionReason::SumAboveThreshold.as_str(),
-            "YES+NO >= 阈值"
-        );
+        assert_eq!(RejectionReason::Closed.as_zh(), "市场已关闭");
+        assert_eq!(RejectionReason::Inactive.as_zh(), "不活跃");
+        assert_eq!(RejectionReason::MissingPrice.as_zh(), "缺失价格");
+        assert_eq!(RejectionReason::InvalidData.as_zh(), "数据无效");
+        assert_eq!(RejectionReason::SpreadTooSmall.as_zh(), "价差过小");
     }
 
     #[test]

@@ -80,17 +80,7 @@ pub fn print_scan_header(now: &str) {
 pub fn print_new_opportunities(events: &[TrackUpdate]) {
     for ev in events {
         println!("{}", DASH);
-        println!();
-        println!("新机会");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", ev.question);
-        println!();
-        println!("总和");
-        println!();
-        println!("{}", fmt_sum(ev.sum));
-        println!();
+        println!("新机会 | 问题: {} | 总和: {}", ev.question, fmt_sum(ev.sum));
     }
 }
 
@@ -98,21 +88,12 @@ pub fn print_new_opportunities(events: &[TrackUpdate]) {
 pub fn print_shadow_opened(trades: &[ShadowTrade]) {
     for t in trades {
         println!("{}", DASH);
-        println!();
-        println!("影子交易开仓");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", t.question);
-        println!();
-        println!("本金");
-        println!();
-        println!("{}", fmt_money(t.capital));
-        println!();
-        println!("入场");
-        println!();
-        println!("{}", fmt_sum(t.entry_sum()));
-        println!();
+        println!(
+            "影子交易开仓 | 问题: {} | 本金: {} | 入场: {}",
+            t.question,
+            fmt_money(t.capital),
+            fmt_sum(t.entry_sum())
+        );
     }
 }
 
@@ -120,29 +101,14 @@ pub fn print_shadow_opened(trades: &[ShadowTrade]) {
 pub fn print_paper_opens(orders: &[Order]) {
     for o in orders {
         println!("{}", DASH);
-        println!();
-        println!("纸面交易开仓 -- 仅模拟");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", o.question);
-        println!();
-        println!("方向");
-        println!();
-        println!("{}", side_zh(o.side));
-        println!();
-        println!("数量");
-        println!();
-        println!("{}", fmt_qty(o.quantity));
-        println!();
-        println!("价格");
-        println!();
-        println!("{}", fmt_sum(o.price));
-        println!();
-        println!("成本");
-        println!();
-        println!("{}", fmt_money(o.notional()));
-        println!();
+        println!(
+            "纸面交易开仓 | 问题: {} | 方向: {} | 数量: {} | 价格: {} | 成本: {}",
+            o.question,
+            side_zh(o.side),
+            fmt_qty(o.quantity),
+            fmt_sum(o.price),
+            fmt_money(o.notional())
+        );
     }
 }
 
@@ -150,17 +116,11 @@ pub fn print_paper_opens(orders: &[Order]) {
 pub fn print_paper_rejections(rejections: &[(String, RiskRejection)]) {
     for (q, r) in rejections {
         println!("{}", DASH);
-        println!();
-        println!("纸面交易拒绝 -- 仅模拟");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", q);
-        println!();
-        println!("原因");
-        println!();
-        println!("{}", risk_rejection_zh(*r));
-        println!();
+        println!(
+            "纸面交易拒绝 | 问题: {} | 原因: {}",
+            q,
+            risk_rejection_zh(*r)
+        );
     }
 }
 
@@ -168,25 +128,13 @@ pub fn print_paper_rejections(rejections: &[(String, RiskRejection)]) {
 pub fn print_updated_opportunities(events: &[TrackUpdate]) {
     for ev in events {
         println!("{}", DASH);
-        println!();
-        println!("机会更新");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", ev.question);
-        println!();
-        println!("持续时间");
-        println!();
-        println!("{} 秒", ev.duration_sec);
-        println!();
-        println!("最优");
-        println!();
-        println!("{}", fmt_sum(ev.best_sum));
-        println!();
-        println!("观测");
-        println!();
-        println!("{} 次扫描", ev.scan_count);
-        println!();
+        println!(
+            "机会更新 | 问题: {} | 持续: {}s | 最优: {} | 观测: {} 次",
+            ev.question,
+            ev.duration_sec,
+            fmt_sum(ev.best_sum),
+            ev.scan_count
+        );
     }
 }
 
@@ -194,25 +142,13 @@ pub fn print_updated_opportunities(events: &[TrackUpdate]) {
 pub fn print_finished(finished: &[FinishedOpportunity]) {
     for f in finished {
         println!("{}", DASH);
-        println!();
-        println!("机会结束");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", f.question);
-        println!();
-        println!("持续时间");
-        println!();
-        println!("{} 秒", f.duration_sec);
-        println!();
-        println!("最优");
-        println!();
-        println!("{}", fmt_sum(f.best_sum));
-        println!();
-        println!("观测");
-        println!();
-        println!("{} 次扫描", f.scan_count);
-        println!();
+        println!(
+            "机会结束 | 问题: {} | 持续: {}s | 最优: {} | 观测: {} 次",
+            f.question,
+            f.duration_sec,
+            fmt_sum(f.best_sum),
+            f.scan_count
+        );
     }
 }
 
@@ -223,25 +159,13 @@ pub fn print_shadow_closed(trades: &[ShadowTrade]) {
         let roi = t.estimated_roi.unwrap_or(0.0);
         let dur = t.duration_sec.unwrap_or(0);
         println!("{}", DASH);
-        println!();
-        println!("影子交易平仓");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", t.question);
-        println!();
-        println!("持续时间");
-        println!();
-        println!("{} 秒", dur);
-        println!();
-        println!("盈亏");
-        println!();
-        println!("{}", fmt_pnl(pnl));
-        println!();
-        println!("收益率");
-        println!();
-        println!("{}", fmt_roi(roi));
-        println!();
+        println!(
+            "影子交易平仓 | 问题: {} | 持续: {}s | 盈亏: {} | 收益率: {}",
+            t.question,
+            dur,
+            fmt_pnl(pnl),
+            fmt_roi(roi)
+        );
     }
 }
 
@@ -249,33 +173,15 @@ pub fn print_shadow_closed(trades: &[ShadowTrade]) {
 pub fn print_paper_closes(closes: &[CloseOutcome]) {
     for c in closes {
         println!("{}", DASH);
-        println!();
-        println!("纸面交易平仓 -- 仅模拟");
-        println!();
-        println!("问题");
-        println!();
-        println!("{}", c.position.question);
-        println!();
-        println!("方向");
-        println!();
-        println!("{}", side_zh(c.order.side));
-        println!();
-        println!("数量");
-        println!();
-        println!("{}", fmt_qty(c.position.quantity));
-        println!();
-        println!("出场价");
-        println!();
-        println!("{}", fmt_sum(c.position.current_price));
-        println!();
-        println!("已实现盈亏");
-        println!();
-        println!("{}", fmt_pnl(c.position.realized_pnl));
-        println!();
-        println!("收益率");
-        println!();
-        println!("{}", fmt_roi(c.position.roi));
-        println!();
+        println!(
+            "纸面交易平仓 | 问题: {} | 方向: {} | 数量: {} | 出场价: {} | 盈亏: {} | 收益率: {}",
+            c.position.question,
+            side_zh(c.order.side),
+            fmt_qty(c.position.quantity),
+            fmt_sum(c.position.current_price),
+            fmt_pnl(c.position.realized_pnl),
+            fmt_roi(c.position.roi)
+        );
     }
 }
 
@@ -283,55 +189,24 @@ pub fn print_paper_closes(closes: &[CloseOutcome]) {
 pub fn print_paper_dashboard(paper: &PaperTradingEngine) {
     let pf = paper.portfolio();
     println!("{}", SEP);
-    println!();
-    println!("纸面交易 -- 仅模拟");
-    println!();
-    println!("{}", DASH);
-    println!();
-    println!("组合");
-    println!();
-    println!("现金");
-    println!();
-    println!("{}", fmt_money(pf.cash));
-    println!();
-    println!("总价值");
-    println!();
-    println!("{}", fmt_money(pf.total_value));
-    println!();
-    println!("盈亏");
-    println!();
-    println!("{}", fmt_pnl(pf.total_pnl));
-    println!();
-    println!("收益率");
-    println!();
-    println!("{}", fmt_roi(pf.roi()));
-    println!();
-    println!("{}", DASH);
-    println!();
-    println!("持仓数");
-    println!();
-    println!("{}", pf.open_positions.len());
-    println!();
+    println!(
+        "纸面交易 | 现金: {} | 总价值: {} | 盈亏: {} | 收益率: {} | 持仓: {}",
+        fmt_money(pf.cash),
+        fmt_money(pf.total_value),
+        fmt_pnl(pf.total_pnl),
+        fmt_roi(pf.roi()),
+        pf.open_positions.len()
+    );
 
     for p in &pf.open_positions {
         println!("{}", DASH);
-        println!();
-        println!("{}", p.question);
-        println!();
-        println!("买入");
-        println!();
-        println!("入场价");
-        println!();
-        println!("{}", fmt_sum(p.average_price));
-        println!();
-        println!("当前价");
-        println!();
-        println!("{}", fmt_sum(p.current_price));
-        println!();
-        println!("盈亏");
-        println!();
-        println!("{}", fmt_pnl(p.unrealized_pnl));
-        println!();
+        println!(
+            "持仓 | {} | 入场: {} | 当前: {} | 盈亏: {}",
+            p.question,
+            fmt_sum(p.average_price),
+            fmt_sum(p.current_price),
+            fmt_pnl(p.unrealized_pnl)
+        );
     }
 }
 
@@ -666,12 +541,9 @@ pub fn print_shadow_stats(stats: &ShadowStats) {
 // V1.0.1 Scanner Debug & Observability
 // ============================================================================
 
-/// 一行 label + 空行 + value + 空行（与既有仪表盘风格一致）。
+/// 紧凑单行 label: value。
 fn kv(label: &str, value: &str) {
-    println!("{}", label);
-    println!();
-    println!("{}", value);
-    println!();
+    println!("{}: {}", label, value);
 }
 
 /// 单页明细压缩打印（用于逐页 HTTP 调试，避免 21 页全展开刷屏）。
@@ -825,11 +697,12 @@ fn print_rejections(rejections: &[MarketRejection]) {
         ("缺价", crate::stats::RejectionReason::MissingPrice),
         ("数据无效", crate::stats::RejectionReason::InvalidData),
         ("不活跃", crate::stats::RejectionReason::Inactive),
-        ("已关闭", crate::stats::RejectionReason::Closed),
-        (
-            "YES+NO >= 阈值",
-            crate::stats::RejectionReason::SumAboveThreshold,
-        ),
+        ("市场已关闭", crate::stats::RejectionReason::Closed),
+        ("价差过小", crate::stats::RejectionReason::SpreadTooSmall),
+        ("流动性过低", crate::stats::RejectionReason::LiquidityTooLow),
+        ("成交量过低", crate::stats::RejectionReason::VolumeTooLow),
+        ("价格无效", crate::stats::RejectionReason::PriceInvalid),
+        ("订单簿为空", crate::stats::RejectionReason::BookEmpty),
     ];
     for (name, reason) in groups {
         let members: Vec<&MarketRejection> =
@@ -847,7 +720,7 @@ fn print_rejections(rejections: &[MarketRejection]) {
             _ => 10,
         };
         for r in members.iter().take(cap) {
-            println!("- {} （{}）", r.question, r.reason.as_str());
+            println!("- {} （{}）", r.question, r.reason.as_zh());
         }
         if members.len() > cap {
             println!("... 及其他 {} 个", members.len() - cap);

@@ -138,7 +138,7 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
     println!();
     println!("已就绪 -- 评分 / 分类 / 过滤 / 排序");
 
-    let scan_interval = Duration::from_secs(cfg.scanner.scan_interval_secs.max(1));
+    let scan_interval = Duration::from_secs(cfg.scanner.scan_interval_secs);
     let level = cfg.effective_log_level();
     println!();
     println!("{}", display::SEP);
@@ -179,23 +179,26 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
             tracing::warn!(error = %e, "scan round failed");
         }
 
-        println!();
-        println!("{}", display::SEP);
-        println!();
-        println!(
-            "⏳ 等待 {} 秒后开始下一轮扫描……",
-            cfg.scanner.scan_interval_secs
-        );
-        println!();
+        // 间隔为 0 时不等待，直接进入下一轮
+        if cfg.scanner.scan_interval_secs > 0 {
+            println!();
+            println!("{}", display::SEP);
+            println!();
+            println!(
+                "⏳ 等待 {} 秒后开始下一轮扫描……",
+                cfg.scanner.scan_interval_secs
+            );
+            println!();
 
-        // 等待后再次扫描；期间可被 Ctrl+C 中断
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                println!();
-                println!("扫描器已停止");
-                return Ok(());
+            // 等待后再次扫描；期间可被 Ctrl+C 中断
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    println!();
+                    println!("扫描器已停止");
+                    return Ok(());
+                }
+                _ = tokio::time::sleep(scan_interval) => {}
             }
-            _ = tokio::time::sleep(scan_interval) => {}
         }
     }
 }
@@ -536,9 +539,12 @@ async fn scan_once(
         display::print_paper_dashboard(paper);
     }
 
-    // 写入组合快照到 paper_portfolio.csv（每轮一行，始终执行）
-    let pf_rec = PortfolioRecord::from_portfolio(paper.portfolio(), now_dt);
-    let _pf = pm_paper::append_portfolio(&[pf_rec], &cfg.paths.paper_portfolio_csv);
+    // 写入组合快照到 paper_portfolio.csv（V1.09：仅组合变化时写入，避免每轮重复）
+    if paper.portfolio().has_changed() {
+        let pf_rec = PortfolioRecord::from_portfolio(paper.portfolio(), now_dt);
+        let _pf = pm_paper::append_portfolio(&[pf_rec], &cfg.paths.paper_portfolio_csv);
+        paper.portfolio_mut().mark_saved();
+    }
 
     // Execution 仪表盘（INFO+）
     if level >= LogLevel::Info {
