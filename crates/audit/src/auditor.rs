@@ -9,7 +9,11 @@
 //! - 候选数 ≤ 扫描市场数
 //! - 机会数 ≤ 候选数
 //! - 影子交易数 ≤ 机会数
-//! - 纸面订单数 ≤ 机会数
+//! - **纸面订单数 与 机会数 不可直接比较**：
+//!   - `opportunities.csv` 只记录 **生命周期已结束** 的机会（被 tracker.reap 回收时写盘）
+//!   - `paper_orders.csv` 在 **开仓/平仓当下立即写盘**
+//!   - 二者衡量同一生命周期的不同时间点，正常情况下 `paper_orders ≥ opportunities`，
+//!     反向（orders < opps）只在历史 CSV 残留或机会被风控全部拒绝时出现。
 //! - 执行订单数 ≤ 纸面订单数
 //! - 组合快照数 ≈ 有效扫描轮次（变化时写入）
 //! - 已平仓持仓 ≤ 纸面订单数
@@ -73,6 +77,8 @@ pub struct AuditStats {
     pub candidates_accepted: u64,
     pub candidates_rejected: u64,
     pub opportunities_count: u64,
+    /// B3: 检测即落盘机会（用于与纸面订单对账，区别于 lifecycle-only opportunities_count）。
+    pub detected_opportunities_count: u64,
     pub shadow_trades_count: u64,
     pub paper_orders_count: u64,
     pub paper_positions_open: u64,
@@ -95,8 +101,10 @@ impl StatisticsAudit {
     /// 从 CSV 文件路径构建统计数据。
     ///
     /// 通过 `pm_storage::count_rows` 读取各 CSV 的行数。
+    /// `detected_opportunities_csv` 为 B3 新增：检测即落盘，与纸面订单对账用。
     pub fn from_csv_paths(
         opportunities_csv: &str,
+        detected_opportunities_csv: &str,
         shadow_csv: &str,
         paper_orders_csv: &str,
         paper_positions_csv: &str,
@@ -105,6 +113,7 @@ impl StatisticsAudit {
     ) -> Self {
         let stats = AuditStats {
             opportunities_count: pm_storage::count_rows(opportunities_csv),
+            detected_opportunities_count: pm_storage::count_rows(detected_opportunities_csv),
             shadow_trades_count: pm_storage::count_rows(shadow_csv),
             paper_orders_count: pm_storage::count_rows(paper_orders_csv),
             paper_positions_closed: pm_storage::count_rows(paper_positions_csv),
@@ -122,43 +131,41 @@ impl StatisticsAudit {
     pub fn run_checks(&mut self) {
         self.findings.clear();
 
-        // 规则 1：Opportunity > 0 则 Paper Order > 0
-        if self.stats.opportunities_count > 0 && self.stats.paper_orders_count == 0 {
+        // 规则 1（修订 B1）：检测机会存在但无纸面订单 —— Warning 而非 Error。
+        // 背景：detected_opportunities.csv 记录检测即落盘的机会，paper_orders.csv 开仓即写。
+        //      正常模型下 detected >= paper_orders。
+        if self.stats.detected_opportunities_count > 0 && self.stats.paper_orders_count == 0 {
             self.findings.push(AuditFinding {
-                check: "机会数 > 0 但纸面订单数 = 0".into(),
+                check: "检测机会 > 0 但纸面订单 = 0".into(),
                 passed: false,
                 detail: format!(
-                    "发现 {} 个机会，但纸面订单为 0。可能原因：策略未触发开仓、风控拒绝。",
-                    self.stats.opportunities_count
+                    "检测到 {} 个机会但纸面订单为 0。\
+                     可能原因：开仓被风控全部拒绝。",
+                    self.stats.detected_opportunities_count
                 ),
-                severity: AuditSeverity::Error,
+                severity: AuditSeverity::Warning,
             });
         }
 
-        // 规则 2：Paper Order <= Opportunity（正常容差：部分机会可能被过滤）
-        if self.stats.paper_orders_count > self.stats.opportunities_count
-            && self.stats.opportunities_count > 0
-        {
+        // 规则 2（B3 修订）：纸面订单 vs 检测机会 —— 对账信息。
+        //
+        // 背景：detected_opportunities.csv（检测即落盘）与 paper_orders.csv（开仓即写）
+        //       的写入时点对齐。正常情况下 detected >= paper_orders（部分机会可能被风控拒绝）。
+        //
+        //       ！区分机会（检测即落盘）与 机会（已结束）：
+        //       前者（detected_opportunities_count）反映的是当前运行检测到的机会数，
+        //       后者（opportunities_count）反映的是已结束的机会数（生命周期类）。
+        if self.stats.paper_orders_count > 0 || self.stats.detected_opportunities_count > 0 {
             self.findings.push(AuditFinding {
-                check: "纸面订单 ≤ 机会数".into(),
-                passed: false,
-                detail: format!(
-                    "纸面订单({}) > 机会数({})，存在未追踪来源的订单。",
-                    self.stats.paper_orders_count, self.stats.opportunities_count
-                ),
-                severity: AuditSeverity::Error,
-            });
-        } else if self.stats.opportunities_count > 0 {
-            self.findings.push(AuditFinding {
-                check: "纸面订单 ≤ 机会数".into(),
+                check: "纸面订单 vs 检测机会(对账)".into(),
                 passed: true,
                 detail: format!(
-                    "纸面订单({}) ≤ 机会数({})，正常（{}个机会未进入纸面交易）",
+                    "纸面订单 {} | 检测机会 {} | 已结束机会 {} —— \
+                     检测机会与纸面订单写入时点对齐，\
+                     正常模型下检测机会 ≥ 纸面订单（多于部分为被风控拒绝）。",
                     self.stats.paper_orders_count,
-                    self.stats.opportunities_count,
-                    self.stats
-                        .opportunities_count
-                        .saturating_sub(self.stats.paper_orders_count)
+                    self.stats.detected_opportunities_count,
+                    self.stats.opportunities_count
                 ),
                 severity: AuditSeverity::Info,
             });
@@ -283,6 +290,7 @@ impl fmt::Display for StatisticsAudit {
         writeln!(f, "  影子交易(CSV): {}", self.stats.shadow_trades_count)?;
         writeln!(f, "  纸面订单(CSV): {}", self.stats.paper_orders_count)?;
         writeln!(f, "  已平仓持仓(CSV):{}", self.stats.paper_positions_closed)?;
+        writeln!(f, "  检测机会(CSV): {}", self.stats.detected_opportunities_count)?;
         writeln!(f, "  执行订单(CSV): {}", self.stats.execution_orders_count)?;
         writeln!(f, "  组合快照(CSV): {}", self.stats.portfolio_snapshots)?;
         writeln!(f)?;
@@ -320,21 +328,24 @@ mod tests {
     }
 
     #[test]
-    fn opportunities_without_paper_orders_is_error() {
-        let mut audit = StatisticsAudit::new();
-        audit.stats.opportunities_count = 5;
-        audit.stats.paper_orders_count = 0;
-        audit.run_checks();
-        assert!(audit.has_errors());
-    }
-
-    #[test]
-    fn paper_orders_exceeding_opportunities_is_error() {
+    fn paper_orders_exceeding_opportunities_is_not_error() {
+        // B1 修订：orders > opps 是预期（orders 立即写盘，opps 仅 reap 时写盘）。
         let mut audit = StatisticsAudit::new();
         audit.stats.opportunities_count = 3;
         audit.stats.paper_orders_count = 10;
         audit.run_checks();
-        assert!(audit.has_errors());
+        assert!(!audit.has_errors());
+    }
+
+    #[test]
+    fn opportunities_without_paper_orders_is_warning() {
+        // B1 修订：反向（opps > 0 且 orders == 0）下调为 Warning 而非 Error。
+        let mut audit = StatisticsAudit::new();
+        audit.stats.detected_opportunities_count = 5;
+        audit.stats.paper_orders_count = 0;
+        audit.run_checks();
+        assert!(!audit.has_errors());
+        assert!(!audit.warnings().is_empty());
     }
 
     #[test]

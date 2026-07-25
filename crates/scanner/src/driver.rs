@@ -133,12 +133,18 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
     // V1.04：机会引擎（Market → Opportunity）
     let mut opp_engine = OpportunityEngine::from_pm_config(cfg);
     let mut opp_stats = OpportunityStatistics::new();
+
+    // B3: 初始化检测机会 CSV（检测时即落盘，与纸面订单对账用）
+    if let Err(e) = pm_opportunity::ensure_opportunity_csv(&cfg.paths.detected_opportunities_csv) {
+        eprintln!("[警告] 检测机会 CSV 初始化失败: {}", e);
+    }
+
     println!();
     println!("机会引擎 V1.04");
     println!();
     println!("已就绪 -- 评分 / 分类 / 过滤 / 排序");
 
-    let scan_interval = Duration::from_secs(cfg.scanner.scan_interval_secs);
+    let scan_interval = Duration::from_secs(cfg.scanner.scan_interval_secs.max(1)); // B4: 1s 下限防无界空转
     let level = cfg.effective_log_level();
     println!();
     println!("{}", display::SEP);
@@ -179,26 +185,31 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
             tracing::warn!(error = %e, "scan round failed");
         }
 
-        // 间隔为 0 时不等待，直接进入下一轮
-        if cfg.scanner.scan_interval_secs > 0 {
-            println!();
-            println!("{}", display::SEP);
-            println!();
-            println!(
-                "⏳ 等待 {} 秒后开始下一轮扫描……",
-                cfg.scanner.scan_interval_secs
+        // B4: 间隔为 0 时不下发"无界空转"，而是按 1s 下限等待
+        // （scan_interval 已在构造时 .max(1)）
+        if cfg.scanner.scan_interval_secs == 0 {
+            eprintln!(
+                "[警告] scan_interval_secs = 0 已被下限保护为 1s（避免无界空转导致 CSV 疯长），\
+                 请在 config.toml 中显式设置合理值。"
             );
-            println!();
+        }
+        println!();
+        println!("{}", display::SEP);
+        println!();
+        println!(
+            "⏳ 等待 {} 秒后开始下一轮扫描……",
+            scan_interval.as_secs()
+        );
+        println!();
 
-            // 等待后再次扫描；期间可被 Ctrl+C 中断
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    println!();
-                    println!("扫描器已停止");
-                    return Ok(());
-                }
-                _ = tokio::time::sleep(scan_interval) => {}
+        // 等待后再次扫描；期间可被 Ctrl+C 中断
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                println!();
+                println!("扫描器已停止");
+                return Ok(());
             }
+            _ = tokio::time::sleep(scan_interval) => {}
         }
     }
 }
@@ -288,11 +299,14 @@ async fn scan_once(
     // ---------------- V1.02 数据层：校验 + 快照 + 统计 ----------------
     // 数据校验（第七节）：统计非法市场，tracing 打印明细。
     let validator_report = Validator::validate_many(&markets);
-    // 市场快照（第九节）：每轮保存到 <data_dir>/market_snapshots.csv。
+    // 市场快照（第九节）：B8 — 每 10 轮保存一次（原每轮无条件写导致无界增长）。
+    const MARKET_SNAPSHOT_INTERVAL: u64 = 10;
     let snap_path = format!("{}/market_snapshots.csv", cfg.paths.data_dir);
-    let snapshot = MarketSnapshot::from_markets(&markets, manager.name(), now_dt);
-    if let Err(e) = snapshot.save_to_csv(&snap_path) {
-        tracing::warn!(error = %e, "市场快照保存失败");
+    if scanner_stats.round_count % MARKET_SNAPSHOT_INTERVAL == 0 {
+        let snapshot = MarketSnapshot::from_markets(&markets, manager.name(), now_dt);
+        if let Err(e) = snapshot.save_to_csv(&snap_path) {
+            tracing::warn!(error = %e, "市场快照保存失败");
+        }
     }
     // 市场数据统计（第十节）：缓存命中则全部计为 Cached，否则 0。
     let cached_count = if cached { markets.len() } else { 0 };
@@ -385,6 +399,8 @@ async fn scan_once(
     let mut events = ScanEvents::default();
 
     // V1.04：同时迭代 OppSnapshot（给 Tracker）和 Opportunity（给 Strategy）
+    // B3: 收集本轮新检测机会
+    let mut detected_opps: Vec<Opportunity> = Vec::new();
     for (snap, opp) in enriched_snaps
         .iter()
         .zip(engine_output.opportunities.iter())
@@ -392,6 +408,10 @@ async fn scan_once(
         seen_keys.insert(snap.question.clone());
         let ev = tracker.observe(snap, now_dt);
         let is_new = ev.is_new;
+        // B3: 新检测机会立即持久化（与纸面订单落盘时点对齐）
+        if is_new {
+            detected_opps.push(opp.clone());
+        }
         {
             let mut ctx = ScanContext {
                 now: now_dt,
@@ -432,6 +452,8 @@ async fn scan_once(
                 strategy.on_opportunity(&fallback_opp, is_new, &mut ctx);
             }
             if is_new {
+                // B3: 回退路径的检测机会也持久化
+                detected_opps.push(fallback_opp.clone());
                 new_events.push(ev);
             } else {
                 updated_events.push(ev);
@@ -439,8 +461,9 @@ async fn scan_once(
         }
     }
 
-    // 清理本轮未再出现的机会 -> 生命周期结束 -> 平仓对应交易
-    let finished = tracker.reap(&seen_keys, now_dt);
+    // 清理本轮未再出现的机会 -> 生命周期结束 -> 平仓对应交易（B6: 超时强制到期）
+    let max_age = cfg.scanner.max_opportunity_age_secs;
+    let finished = tracker.reap(&seen_keys, now_dt, max_age);
     for f in &finished {
         let mut ctx = ScanContext {
             now: now_dt,
@@ -476,6 +499,12 @@ async fn scan_once(
 
     // ---------------- CSV 写入（计时；写入始终执行，提示 INFO+）----------------
     let storage_start = Instant::now();
+
+    // B3: 写入本轮新检测机会到 detected_opportunities.csv
+    if !detected_opps.is_empty() {
+        pm_opportunity::append_opportunities(&cfg.paths.detected_opportunities_csv, &detected_opps);
+    }
+
     if !finished.is_empty() {
         if level >= LogLevel::Info {
             display::print_finished(&finished);

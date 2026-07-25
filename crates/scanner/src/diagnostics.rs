@@ -204,7 +204,7 @@ fn run_engine_pass(cfg: &Config, snaps: &[pm_models::OppSnapshot]) -> EnginePass
     // 平仓阶段：reap 全部（seen 为空 -> 全部生命周期结束）
     let seen: HashSet<String> = HashSet::new();
     let t2 = Instant::now();
-    let finished = tracker.reap(&seen, now);
+    let finished = tracker.reap(&seen, now, 0);
     tracker_ms += t2.elapsed().as_millis();
     for f in &finished {
         let t3 = Instant::now();

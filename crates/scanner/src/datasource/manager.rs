@@ -49,7 +49,8 @@ impl DataSourceManager {
     ///
     /// - `gamma`：GammaProvider（自建 reqwest::Client，debug 由 log_level 决定）。
     /// - `mock`：MockProvider（内置市场，离线/测试）。
-    /// - `clob`：尚未实现，返回明确错误（不静默回退）。
+    /// - `clob`：ClobProvider（B2：使用 Polymarket CLOB API `/markets` 获取真实价格，
+    ///           支持订单簿与套利检测）。
     pub fn from_config(cfg: &Config) -> Result<Self> {
         let provider: Box<dyn MarketDataProvider> = match cfg.datasource.provider.as_str() {
             "gamma" => {

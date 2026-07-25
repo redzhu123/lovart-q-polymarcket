@@ -4,12 +4,15 @@
 # 由 pm-models::Config::load("config.toml") 读取；不读环境变量。
 
 [scanner]
-# 每轮扫描间隔（秒）
-scan_interval_secs = 0
+# 每轮扫描间隔（秒）。driver.rs 设 1s 下限保护，0 会被视作 1s
+# （旧默认 0 = 无界空转，会导致 paper_portfolio.csv 疯长，已修 B4）
+scan_interval_secs = 30
 # 套利判定阈值：YES+NO 低于此值视为潜在机会
 opportunity_threshold = 0.99
 # 调试开关（旧版，已由 [logging].log_level 接管；保留以兼容旧配置解析）
 debug = true
+# B6: 机会最大跟踪时长（秒）；超过此时间仍未从市场消失则强制到期平仓。0=不限。
+max_opportunity_age_secs = 3600
 
 # 日志级别（V1.01 第九节）-- 控制控制台输出详尽程度。
 #   ERROR 仅错误 / WARN +警告 / INFO +统计仪表盘 / DEBUG +调试明细（默认）/ TRACE +全量市场转储
@@ -20,7 +23,7 @@ log_level = "DEBUG"
 #   provider  = gamma | clob | mock（clob 暂未实现，会返回明确错误）
 #   cache_ttl = 内存缓存存活秒数（仅内存，无 Redis / 无数据库）
 [datasource]
-provider = "mock"
+provider = "gamma"
 cache_ttl = 60
 
 [portfolio]
@@ -115,6 +118,8 @@ paper_positions_csv = "data/paper_positions.csv"
 paper_portfolio_csv = "data/paper_portfolio.csv"
 execution_csv = "data/execution_orders.csv"
 backtest_report_csv = "data/backtest_report.csv"
+# B3: 检测时即落盘（与纸面订单对账用），非仅生命周期结束写盘
+detected_opportunities_csv = "data/detected_opportunities.csv"
 
 [replay]
 # 回放速度倍率：1=真实速度，10=10 倍速

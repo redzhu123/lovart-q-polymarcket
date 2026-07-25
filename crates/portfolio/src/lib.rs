@@ -21,6 +21,31 @@ pub use risk::{RiskManager, RiskPolicy, RiskRejection};
 
 use chrono::{DateTime, Local};
 
+/// B7: 用于判脏的快照键值组。
+#[derive(Debug, Clone, PartialEq)]
+struct StateHash {
+    cash: u64,
+    total_value: u64,
+    total_pnl: i64,
+    locked_cash: u64,
+    open_count: usize,
+    closed_count: usize,
+}
+
+impl StateHash {
+    /// 从 Portfolio 当前状态构建哈希组（定点放大 1e6 避免浮点抖动）。
+    fn from_portfolio(pf: &Portfolio) -> Self {
+        Self {
+            cash: (pf.cash * 1_000_000.0) as u64,
+            total_value: (pf.total_value * 1_000_000.0) as u64,
+            total_pnl: (pf.total_pnl * 1_000_000.0) as i64,
+            locked_cash: (pf.locked_cash * 1_000_000.0) as u64,
+            open_count: pf.open_positions.len(),
+            closed_count: pf.closed_positions.len(),
+        }
+    }
+}
+
 // Position / PositionStatus 已由上方 `pub use` 引入作用域，供本模块内部直接使用。
 
 /// 默认初始资金（USDC）。仅当调用方未显式提供资金时使用；运行时应从 `Config.portfolio` 注入。
@@ -47,8 +72,9 @@ pub struct Portfolio {
     pub total_pnl: f64,
     pub open_positions: Vec<Position>,
     pub closed_positions: Vec<Position>,
-    /// 自上次快照保存后是否发生变化（V1.09：控制组合快照写入频率）。
-    dirty: bool,
+    /// B7: 上次写入时的状态哈希。`None` = 从未写入，需要一次初始快照。
+    /// 与 V1.09 `dirty: bool` 不同——使用**数值实质变化**而非单一大头针。
+    last_saved_hash: Option<StateHash>,
 }
 
 impl Portfolio {
@@ -63,7 +89,7 @@ impl Portfolio {
             total_pnl: 0.0,
             open_positions: Vec::new(),
             closed_positions: Vec::new(),
-            dirty: true, // 初始状态需要一次快照
+            last_saved_hash: None, // 初始状态需要一次快照
         }
     }
 
@@ -101,7 +127,7 @@ impl Portfolio {
         let unreal = self.unrealized_pnl();
         self.total_pnl = self.realized_pnl() + unreal;
         self.total_value = self.cash + self.locked_cash + unreal;
-        self.dirty = true;
+        // B7: dirty 不由 revalue 设置——has_changed 会通过数值比较检测变化
     }
 
     /// ROI = total_pnl / initial_capital。
@@ -118,10 +144,11 @@ impl Portfolio {
         let cost = pos.cost_basis();
         self.debit(cost);
         self.open_positions.push(pos);
-        self.dirty = true;
+        // B7: add_open 本身是状态变更，但 dirty 由 has_changed() 通过数值比较检测
     }
 
     /// mark-to-market：按 question 更新某持仓的 current_price / pnl。找不到则无操作。
+    /// B7: 不再无条件设 dirty——has_changed() 通过 `total_value` / `total_pnl` 数值检测变化。
     pub fn mark(&mut self, question: &str, current_price: f64) {
         if let Some(pos) = self
             .open_positions
@@ -129,7 +156,6 @@ impl Portfolio {
             .find(|p| p.question == question)
         {
             pos.mark(current_price);
-            self.dirty = true;
         }
     }
 
@@ -152,7 +178,7 @@ impl Portfolio {
         self.credit(cost_basis, proceeds);
         let snapshot = pos.clone();
         self.closed_positions.push(pos);
-        self.dirty = true;
+        // B7: close 本身是状态变更，dirty 由 has_changed() 通过数值比较检测
         Some(snapshot)
     }
 
@@ -166,14 +192,17 @@ impl Portfolio {
         self.closed_positions.len()
     }
 
-    /// 自上次 `mark_saved()` 以来是否有变化（V1.09）。
+    /// B7: 自上次 `mark_saved()` 以来组合关键数值是否实质变化（比较 cash / total_value / total_pnl / locked_cash / 开平仓数）。
     pub fn has_changed(&self) -> bool {
-        self.dirty
+        match &self.last_saved_hash {
+            Some(last) => &StateHash::from_portfolio(self) != last,
+            None => true, // 初始状态需要一次快照
+        }
     }
 
-    /// 标记已保存快照（V1.09：控制组合快照写入频率）。
+    /// B7: 标记已保存快照——记录当前状态哈希。
     pub fn mark_saved(&mut self) {
-        self.dirty = false;
+        self.last_saved_hash = Some(StateHash::from_portfolio(self));
     }
 }
 

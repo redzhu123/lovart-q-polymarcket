@@ -80,18 +80,29 @@ impl OpportunityTracker {
         }
     }
 
-    /// 清理本轮未再出现的机会：从 HashMap 移除并返回，视为生命周期结束。
+    /// 清理本轮未再出现的机会 + 到期强制平仓（B6）。
     /// `seen_keys` 为本轮实际观测到的机会 Key 集合。
+    /// `max_age_secs` > 0 时：跟踪时长超过此值的也视为生命周期结束。
+    /// 返回已结束的机会列表。
     pub fn reap(
         &mut self,
         seen_keys: &HashSet<String>,
         now: DateTime<Local>,
+        max_age_secs: u64,
     ) -> Vec<FinishedOpportunity> {
         let mut finished: Vec<FinishedOpportunity> = Vec::new();
         let mut remove_keys: Vec<String> = Vec::new();
 
         for (key, state) in self.map.iter() {
-            if !seen_keys.contains(key) {
+            let should_close = if !seen_keys.contains(key) {
+                true // 本轮未出现 → 自然结束
+            } else if max_age_secs > 0 {
+                (now - state.start_time).num_seconds() > max_age_secs as i64 // B6: 超时到期
+            } else {
+                false
+            };
+
+            if should_close {
                 let duration_sec = (now - state.start_time).num_seconds();
                 finished.push(FinishedOpportunity {
                     question: state.question.clone(),
@@ -162,7 +173,7 @@ mod tests {
         // 本轮只看到 A
         let mut seen = HashSet::new();
         seen.insert("A".to_string());
-        let finished = t.reap(&seen, now);
+        let finished = t.reap(&seen, now, 0);
         assert_eq!(finished.len(), 1);
         assert_eq!(finished[0].question, "B");
         assert_eq!(t.active_count(), 1);
@@ -175,7 +186,29 @@ mod tests {
         t.observe(&snap("A", 0.4, 0.5), now);
         let mut seen = HashSet::new();
         seen.insert("A".to_string());
-        assert!(t.reap(&seen, now).is_empty());
+        assert!(t.reap(&seen, now, 0).is_empty());
         assert_eq!(t.active_count(), 1);
+    }
+
+    #[test]
+    fn reap_stale_opportunity_by_age() {
+        let now = Local::now();
+        let mut t = OpportunityTracker::new();
+        // 插入一个旧机会（把 start_time 手工设为远早于 now）
+        t.observe(&snap("Old", 0.4, 0.5), now);
+        let stale_age_secs = 1i64; // 1 秒后即视为到期
+
+        let mut seen = HashSet::new();
+        seen.insert("Old".to_string());
+        // 先确认年龄小于阈值时不回收
+        assert!(t.reap(&seen, now, stale_age_secs as u64).is_empty());
+        assert_eq!(t.active_count(), 1);
+
+        // 假装过了很久再 reap → 强制到期
+        let later = now + chrono::Duration::seconds(2);
+        let finished = t.reap(&seen, later, stale_age_secs as u64);
+        assert_eq!(finished.len(), 1);
+        assert_eq!(finished[0].question, "Old");
+        assert_eq!(t.active_count(), 0);
     }
 }

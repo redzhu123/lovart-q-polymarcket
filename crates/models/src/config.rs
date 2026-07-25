@@ -133,6 +133,10 @@ pub struct ScannerConfig {
     /// false 恢复简洁输出（V1.0 行为）。不写死，由 config.toml 控制。
     #[serde(default)]
     pub debug: bool,
+    /// B6：机会最大跟踪时长（秒）。跟踪超过此时间仍未从市场消失的机会将被强制到期平仓。
+    /// 0 = 不限（保持原行为，永不强制到期）。
+    #[serde(default = "default_max_opportunity_age_secs")]
+    pub max_opportunity_age_secs: u64,
 }
 
 fn default_scan_interval() -> u64 {
@@ -141,6 +145,9 @@ fn default_scan_interval() -> u64 {
 fn default_opportunity_threshold() -> f64 {
     0.99
 }
+fn default_max_opportunity_age_secs() -> u64 {
+    3600 // 1 小时
+}
 
 impl Default for ScannerConfig {
     fn default() -> Self {
@@ -148,6 +155,7 @@ impl Default for ScannerConfig {
             scan_interval_secs: default_scan_interval(),
             opportunity_threshold: default_opportunity_threshold(),
             debug: false,
+            max_opportunity_age_secs: default_max_opportunity_age_secs(),
         }
     }
 }
@@ -463,6 +471,8 @@ pub struct PathsConfig {
     pub execution_csv: String,
     #[serde(default = "default_backtest_report_csv")]
     pub backtest_report_csv: String,
+    #[serde(default = "default_detected_opportunities_csv")]
+    pub detected_opportunities_csv: String,
 }
 
 fn default_data_dir() -> String {
@@ -489,6 +499,9 @@ fn default_execution_csv() -> String {
 fn default_backtest_report_csv() -> String {
     "data/backtest_report.csv".into()
 }
+fn default_detected_opportunities_csv() -> String {
+    "data/detected_opportunities.csv".into()
+}
 
 impl Default for PathsConfig {
     fn default() -> Self {
@@ -501,6 +514,7 @@ impl Default for PathsConfig {
             paper_portfolio_csv: default_paper_portfolio_csv(),
             execution_csv: default_execution_csv(),
             backtest_report_csv: default_backtest_report_csv(),
+            detected_opportunities_csv: default_detected_opportunities_csv(),
         }
     }
 }

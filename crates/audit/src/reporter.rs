@@ -36,6 +36,7 @@ impl ExplainReport {
     /// 从 CSV 路径构建报告。
     pub fn from_csv_paths(
         opportunities_csv: &str,
+        detected_opportunities_csv: &str,
         shadow_csv: &str,
         paper_orders_csv: &str,
         paper_positions_csv: &str,
@@ -44,6 +45,7 @@ impl ExplainReport {
     ) -> Self {
         let stats = AuditStats {
             opportunities_count: pm_storage::count_rows(opportunities_csv),
+            detected_opportunities_count: pm_storage::count_rows(detected_opportunities_csv),
             shadow_trades_count: pm_storage::count_rows(shadow_csv),
             paper_orders_count: pm_storage::count_rows(paper_orders_csv),
             paper_positions_closed: pm_storage::count_rows(paper_positions_csv),
@@ -226,6 +228,7 @@ impl AuditReport {
     /// 从 CSV 路径构建并运行审计。
     pub fn run(
         opportunities_csv: &str,
+        detected_opportunities_csv: &str,
         shadow_csv: &str,
         paper_orders_csv: &str,
         paper_positions_csv: &str,
@@ -234,6 +237,7 @@ impl AuditReport {
     ) -> Self {
         let mut audit = crate::auditor::StatisticsAudit::from_csv_paths(
             opportunities_csv,
+            detected_opportunities_csv,
             shadow_csv,
             paper_orders_csv,
             paper_positions_csv,

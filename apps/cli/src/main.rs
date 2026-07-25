@@ -2,6 +2,7 @@
 //!
 //! 分发模式（`cargo run -- <mode>`）：
 //!   scan / diagnose / datasource / replay / paper / backtest / execution-test / report
+//!   reset（B5：清空 data/*.csv，避免历史与本次运行混淆；需带 `--yes` 才真删）
 //!   market / orderbook / spread / liquidity（V1.03 市场微观结构）
 //!   opportunities / top / explain（V1.04 机会引擎）
 //!   risk / explain-risk / risk-replay（V1.05 风险引擎）
@@ -103,6 +104,11 @@ async fn main() -> Result<()> {
         "report" => {
             println!("模式：报告");
             run_report(&cfg)
+        }
+        "reset" => {
+            // B5：清空 data/*.csv。需带 --yes 才真删；否则只打印预览。
+            let yes = args.iter().any(|a| a == "--yes" || a == "-y");
+            run_reset(&cfg, yes)
         }
         // ---- V1.03 市场微观结构 CLI ----
         "market" => {
@@ -656,31 +662,35 @@ async fn run_liquidity(cfg: &pm_models::Config) -> Result<()> {
 
 /// report 模式：读取各 CSV，打印平台级汇总。
 fn run_report(cfg: &pm_models::Config) -> Result<()> {
-    eprint!("[1/7] 读取机会记录... ");
+    eprint!("[1/8] 读取机会（生命周期）... ");
     let opps = pm_storage::count_rows(&cfg.paths.opportunities_csv);
     eprintln!("{} 行", opps);
 
-    eprint!("[2/7] 读取影子交易... ");
+    eprint!("[2/8] 读取机会（检测即落盘）... ");
+    let detected = pm_storage::count_rows(&cfg.paths.detected_opportunities_csv);
+    eprintln!("{} 行", detected);
+
+    eprint!("[3/8] 读取影子交易... ");
     let shadow = pm_shadow::load_history(&cfg.paths.shadow_csv);
     eprintln!("{} 笔（已平仓）", shadow.stats.total);
 
-    eprint!("[3/7] 读取纸面订单... ");
+    eprint!("[4/8] 读取纸面订单... ");
     let paper_orders = pm_storage::count_rows(&cfg.paths.paper_orders_csv);
     eprintln!("{} 行", paper_orders);
 
-    eprint!("[4/7] 读取纸面持仓... ");
+    eprint!("[5/8] 读取纸面持仓... ");
     let paper_positions = pm_storage::count_rows(&cfg.paths.paper_positions_csv);
     eprintln!("{} 行", paper_positions);
 
-    eprint!("[5/7] 读取纸面组合快照... ");
+    eprint!("[6/8] 读取纸面组合快照... ");
     let paper_portfolio = pm_storage::count_rows(&cfg.paths.paper_portfolio_csv);
     eprintln!("{} 行", paper_portfolio);
 
-    eprint!("[6/7] 读取执行订单... ");
+    eprint!("[7/8] 读取执行订单... ");
     let exec_orders = pm_storage::count_rows(&cfg.paths.execution_csv);
     eprintln!("{} 行", exec_orders);
 
-    eprint!("[7/7] 读取回测报告... ");
+    eprint!("[8/8] 读取回测报告... ");
     let backtest_rows = pm_storage::count_rows(&cfg.paths.backtest_report_csv);
     eprintln!("{} 行", backtest_rows);
 
@@ -689,32 +699,125 @@ fn run_report(cfg: &pm_models::Config) -> Result<()> {
     println!();
     println!("平台报告 -- 仅模拟");
     println!();
+    println!("以下数字读取自 data/*.csv，**累计含历史**（跨多次运行未重置）。");
+    println!("如需干净基线，请运行: cargo run -- reset --yes");
+    println!();
     println!("--------------------------------------");
     println!();
-    println!("机会（生命周期）        : {}", opps);
-    println!("影子交易（已平仓）      : {}", shadow.stats.total);
+    println!("机会（生命周期，已结束）  : {}", opps);
+    println!("机会（检测即落盘）        : {}（B3: 与纸面订单对账用）", detected);
+    println!("影子交易（已平仓）        : {}", shadow.stats.total);
     println!(
-        "  盈利 / 亏损           : {} / {}",
+        "  盈利 / 亏损             : {} / {}",
         shadow.stats.winners, shadow.stats.losers
     );
     println!(
-        "  平均收益率            : {}",
+        "  平均收益率              : {}",
         pm_utils::fmt_roi(shadow.stats.average_roi())
     );
     println!(
-        "  最佳 / 最差收益率     : {} / {}",
+        "  最佳 / 最差收益率       : {} / {}",
         pm_utils::fmt_roi(shadow.stats.best_roi()),
         pm_utils::fmt_roi(shadow.stats.worst_roi())
     );
-    println!("纸面订单                : {}", paper_orders);
-    println!("纸面持仓（已平仓）      : {}", paper_positions);
-    println!("纸面组合快照            : {}", paper_portfolio);
-    println!("执行订单                : {}", exec_orders);
-    println!("回测报告行数            : {}", backtest_rows);
+    println!("纸面订单（开+平仓）       : {}", paper_orders);
+    println!("纸面持仓（已平仓）        : {}", paper_positions);
+    println!("纸面组合快照（每轮）      : {}", paper_portfolio);
+    println!("执行订单                  : {}", exec_orders);
+    println!("回测报告行数              : {}", backtest_rows);
     println!();
     println!("======================================");
     println!();
     println!("仅模拟 -- 理论估算，非真实收益");
+    Ok(())
+}
+
+// ============================================================================
+// B5：reset 命令 — 清空 data/*.csv，避免历史与本次运行混淆
+// ============================================================================
+
+/// 列出所有会受 reset 影响的 CSV / 日志文件。
+fn reset_target_files(cfg: &pm_models::Config) -> Vec<String> {
+    let mut files = vec![
+        cfg.paths.opportunities_csv.clone(),
+        cfg.paths.shadow_csv.clone(),
+        cfg.paths.paper_orders_csv.clone(),
+        cfg.paths.paper_positions_csv.clone(),
+        cfg.paths.paper_portfolio_csv.clone(),
+        cfg.paths.execution_csv.clone(),
+        cfg.paths.backtest_report_csv.clone(),
+        cfg.paths.detected_opportunities_csv.clone(),
+    ];
+    // V1.06/V1.08 额外 CSV
+    files.push("data/execution_events.csv".to_string());
+    files.push("data/execution_report.csv".to_string());
+    files.push("data/risk_events.csv".to_string());
+    files.push("data/risk_dashboard.csv".to_string());
+    files.push("data/market_snapshots.csv".to_string());
+    files.push("data/gateway_metrics.csv".to_string());
+    files.push("data/gateway_health.csv".to_string());
+    files.sort();
+    files.dedup();
+    files
+}
+
+/// reset 模式：清空所有 CSV。`yes=true` 时直接删；否则只打印预览。
+///
+/// 用法：
+///   cargo run -- reset          # 仅预览
+///   cargo run -- reset --yes    # 实际删除
+fn run_reset(cfg: &pm_models::Config, yes: bool) -> Result<()> {
+    let files = reset_target_files(cfg);
+
+    println!("======================================");
+    println!();
+    println!("reset 模式 -- 清空历史 CSV");
+    println!();
+    println!("将影响以下文件（仅模拟数据，可安全删除）：");
+    println!();
+    let mut existing = 0usize;
+    for f in &files {
+        let status = if std::path::Path::new(f).exists() {
+            existing += 1;
+            "存在"
+        } else {
+            "不存在"
+        };
+        println!("  [{:<6}] {}", status, f);
+    }
+    println!();
+    println!("共 {} 个文件，实际存在 {} 个", files.len(), existing);
+    println!();
+
+    if !yes {
+        println!("未传 --yes / -y，仅预览。如确认删除请运行：");
+        println!("    cargo run -- reset --yes");
+        println!();
+        return Ok(());
+    }
+
+    let mut deleted = 0usize;
+    let mut failed = Vec::new();
+    for f in &files {
+        let p = std::path::Path::new(f);
+        if !p.exists() {
+            continue;
+        }
+        match std::fs::remove_file(p) {
+            Ok(_) => deleted += 1,
+            Err(e) => failed.push(format!("{}: {}", f, e)),
+        }
+    }
+
+    println!("已删除 {} 个文件", deleted);
+    if !failed.is_empty() {
+        eprintln!("以下文件删除失败：");
+        for fe in &failed {
+            eprintln!("  {}", fe);
+        }
+        anyhow::bail!("reset 部分失败");
+    }
+    println!("reset 完成。下次扫描将重新生成 CSV。");
     Ok(())
 }
 
@@ -926,6 +1029,7 @@ fn run_explain_pipeline(cfg: &pm_models::Config) -> Result<()> {
     println!();
     let mut report = ExplainReport::from_csv_paths(
         &cfg.paths.opportunities_csv,
+        &cfg.paths.detected_opportunities_csv,
         &cfg.paths.shadow_csv,
         &cfg.paths.paper_orders_csv,
         &cfg.paths.paper_positions_csv,
@@ -1047,6 +1151,7 @@ fn run_audit(cfg: &pm_models::Config) -> Result<()> {
     println!();
     let report = AuditReport::run(
         &cfg.paths.opportunities_csv,
+        &cfg.paths.detected_opportunities_csv,
         &cfg.paths.shadow_csv,
         &cfg.paths.paper_orders_csv,
         &cfg.paths.paper_positions_csv,

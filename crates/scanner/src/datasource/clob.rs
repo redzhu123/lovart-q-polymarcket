@@ -1,10 +1,13 @@
-//! CLOB API Provider（V1.03 第一节）。
+//! CLOB API Provider（V1.03 第一节 / B2 增强）。
 //!
-//! 对接 Polymarket CLOB API，获取真实订单簿数据（多档盘口）。
-//! 与 Gamma 不同，CLOB 不提供市场列表（使用 Gamma 获取市场后再用 CLOB 查订单簿）。
+//! 对接 Polymarket CLOB API，获取真实市场数据与非归一化价格（tokens[].price）。
+//! 同时支持市场列表（`/markets`）与订单簿（`/orderbook?token_id=`）。
 //!
-//! 能力：订单簿 ✅ / 成交记录 ✅ / 最优买卖价 ✅ / 流动性 ✅ / 盘口深度 ✅（10 档）。
-//! 不支持：市场列表 ❌（需 Gamma 配合使用）。
+//! B2 核心改进：CLOB `/markets` 返回的 token prices 是**真实买卖价**（非 Gamma 归一化价），
+//! 使得 `yes_price + no_price < 0.99` 在真实数据下可达，激活整条投资机会检测链路。
+//!
+//! 能力：市场列表 ✅ / 订单簿 ✅ / 最优买卖价 ✅ / 流动性 ✅ / 盘口深度 ✅（10 档）。
+//! 无需 Gamma 配合——CLOB 本身提供完整市场元数据。
 //!
 //! 模拟研究专用 -- 不连接钱包 / 不签名 / 不下单 / 不真实交易。
 
@@ -13,7 +16,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
-use pm_models::{OrderBook, PriceLevel, PriceQuote, ProviderCapability};
+use pm_models::{MarketStatus, OrderBook, PriceLevel, PriceQuote, ProviderCapability, UnifiedMarket};
 
 use crate::datasource::{HealthProbe, MarketDataProvider};
 use crate::stats::{FetchResult, FetchStats};
@@ -37,10 +40,10 @@ impl ClobProvider {
         Self { client, debug }
     }
 
-    /// CLOB 能力声明（V1.03 第二节 / 第八节）。
+    /// CLOB 能力声明（V1.03 第二节 / 第八节；B2：新增 supports_markets: true）。
     pub fn capability_value() -> ProviderCapability {
         ProviderCapability {
-            supports_markets: false,
+            supports_markets: true,
             supports_orderbook: true,
             supports_trades: true,
             supports_bid_ask: true,
@@ -118,12 +121,103 @@ impl MarketDataProvider for ClobProvider {
         Self::capability_value()
     }
 
-    /// CLOB 不提供市场列表，返回空。
+    /// 从 CLOB API 拉取市场列表（B2：使用 `/markets` 端点获取真实 token prices）。
+    ///
+    /// CLOB `/markets` 返回的 `tokens[].price` 是**真实买卖价**（非 Gamma 归一化价），
+    /// `yes_price + no_price < 0.99` 在真实数据下可达，驱动套利检测。
+    /// 支持：`condition_id` / `question` / `closed` / `tokens[].{outcome,price}`。
+    /// 不支持：`volume` / `liquidity`（Gamma 有但 CLOB 无），默认 0.0。
     async fn fetch_markets(&self) -> Result<FetchResult> {
-        tracing::debug!("CLOB Provider 不支持市场列表，返回空");
+        let url = format!("{}/markets", CLOB_API_BASE);
+        let resp = self.client.get(&url).timeout(Duration::from_secs(30)).send().await?;
+        let body = resp.error_for_status()?.text().await?;
+
+        let parsed: serde_json::Value = serde_json::from_str(&body)?;
+        let arr = parsed
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("CLOB /markets 响应不是数组"))?;
+
+        let mut markets: Vec<UnifiedMarket> = Vec::with_capacity(arr.len());
+
+        for m in arr {
+            let market_id = match m.get("condition_id").and_then(|v| v.as_str()) {
+                Some(id) => id.to_string(),
+                None => continue, // 无 condition_id 无法标识
+            };
+            let question = m
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("未知")
+                .to_string();
+            let closed = m.get("closed").and_then(|v| v.as_bool()).unwrap_or(false);
+
+            let tokens = m.get("tokens").and_then(|v| v.as_array());
+            let mut yes_price = None;
+            let mut no_price = None;
+            if let Some(tokens) = tokens {
+                for token in tokens {
+                    let outcome = token
+                        .get("outcome")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let price = token
+                        .get("price")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse::<f64>().ok());
+                    match outcome.to_lowercase().as_str() {
+                        "yes" => yes_price = price,
+                        "no" => no_price = price,
+                        _ => {}
+                    }
+                }
+            }
+
+            // 非二元市场跳过（无 YES/NO 价格对无法用于套利检测）
+            let (y, n) = match (yes_price, no_price) {
+                (Some(y), Some(n)) => (y, n),
+                _ => continue,
+            };
+
+            let status = if closed {
+                MarketStatus::Closed
+            } else {
+                MarketStatus::Active
+            };
+
+            if self.debug {
+                tracing::debug!(
+                    market_id = %market_id,
+                    question = %question,
+                    yes_price = %y,
+                    no_price = %n,
+                    sum = %(y + n),
+                    "CLOB 市场加载"
+                );
+            }
+
+            markets.push(UnifiedMarket {
+                market_id,
+                question,
+                description: None,
+                status,
+                yes_price: Some(y),
+                no_price: Some(n),
+                volume: 0.0,
+                liquidity: 0.0,
+                category: None,
+                outcome_count: 2,
+                provider: "clob".into(),
+                updated_at: chrono::Utc::now(),
+            });
+        }
+
         Ok(FetchResult {
-            markets: Vec::new(),
-            stats: FetchStats::default(),
+            markets,
+            stats: FetchStats {
+                request_count: 1,
+                success_count: 1,
+                ..Default::default()
+            },
         })
     }
 
@@ -213,29 +307,23 @@ impl MarketDataProvider for ClobProvider {
         Ok(Vec::new())
     }
 
-    /// 健康检查：用 `limit=1` 的市场查询订单簿。
+    /// 健康检查：探测 `/markets` 端点（B2：CLOB 现在支持市场列表）。
     async fn health_check(&self) -> Result<HealthProbe> {
-        // CLOB 没有 "limit=1" 的市场列表端点，用常见的 token_id 探测
-        let test_url = format!("{}/orderbook?token_id=test", CLOB_API_BASE);
+        let url = format!("{}/markets", CLOB_API_BASE);
         let start = Instant::now();
-        let resp = self
-            .client
-            .get(&test_url)
-            .timeout(Duration::from_secs(15))
-            .send()
-            .await;
+        let resp = self.client.get(&url).timeout(Duration::from_secs(15)).send().await;
         let latency_ms = start.elapsed().as_millis();
 
         match resp {
             Ok(r) => {
                 let status = r.status().as_u16();
-                Ok(HealthProbe {
-                    ok: status == 200,
-                    status,
-                    market_count: 0,
-                    latency_ms,
-                    detail: format!("CLOB API HTTP {}（探测地址: {}）", status, test_url),
-                })
+                let ok = status == 200;
+                let detail = if ok {
+                    format!("CLOB API HTTP {} – /markets 返回正常", status)
+                } else {
+                    format!("CLOB API HTTP {}（探测地址: /markets）", status)
+                };
+                Ok(HealthProbe { ok, status, market_count: 0, latency_ms, detail })
             }
             Err(e) => Ok(HealthProbe {
                 ok: false,
@@ -253,9 +341,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clob_capability_has_orderbook_and_depth() {
+    fn clob_capability_has_markets_orderbook_and_depth() {
         let cap = ClobProvider::capability_value();
-        assert!(!cap.supports_markets);
+        assert!(cap.supports_markets, "B2: CLOB 现在支持 /markets 端点获取真实价格");
         assert!(cap.supports_orderbook);
         assert!(cap.supports_bid_ask);
         assert!(cap.supports_trades);
