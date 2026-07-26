@@ -116,25 +116,40 @@ async fn main() -> Result<()> {
             run_market(&cfg).await
         }
         "orderbook" => {
-            println!("模式：订单簿");
-            run_orderbook(&cfg).await
-        }
-        "spread" => {
-            println!("模式：价差分析");
-            run_spread(&cfg).await
-        }
-        "liquidity" => {
-            println!("模式：流动性分析");
-            run_liquidity(&cfg).await
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "spread" => {
+                    println!("模式：价差分析");
+                    run_spread(&cfg).await
+                }
+                "liquidity" => {
+                    println!("模式：流动性分析");
+                    run_liquidity(&cfg).await
+                }
+                _ => {
+                    println!("模式：订单簿");
+                    run_orderbook(&cfg).await
+                }
+            }
         }
         // ---- V1.04 机会引擎 CLI ----
         "opportunities" | "opps" => {
-            println!("模式：机会列表");
-            run_opportunities(&cfg).await
+            let all = args.iter().any(|a| a == "--all");
+            if all {
+                println!("模式：机会列表（全部）");
+            } else {
+                println!("模式：Top 10 机会（加 --all 查看全部）");
+            }
+            run_opportunities(&cfg, all).await
         }
-        "top" => {
-            println!("模式：Top 10 机会");
-            run_top(&cfg).await
+        "opportunity" => {
+            let id = args.get(2).cloned().unwrap_or_default();
+            if id.is_empty() {
+                println!("用法: cargo run -- opportunity <id>");
+                return Ok(());
+            }
+            println!("模式：机会解释");
+            run_explain(&cfg, &id).await
         }
         "explain" => {
             let sub = args.get(2).map(|s| s.as_str()).unwrap_or("pipeline");
@@ -160,68 +175,92 @@ async fn main() -> Result<()> {
         // ---- V1.09 End ----
         // ---- V1.05 风险引擎 CLI ----
         "risk" => {
-            println!("模式：风险仪表盘");
-            run_risk(&cfg).await
-        }
-        "explain-risk" => {
-            println!("模式：风险解释");
-            run_explain_risk(&cfg).await
-        }
-        "risk-replay" => {
-            println!("模式：风险回放");
-            run_risk_replay(&cfg).await
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "explain" => {
+                    println!("模式：风险解释");
+                    run_explain_risk(&cfg).await
+                }
+                "replay" => {
+                    println!("模式：风险回放");
+                    run_risk_replay(&cfg).await
+                }
+                _ => {
+                    println!("模式：风险仪表盘");
+                    run_risk(&cfg).await
+                }
+            }
         }
         // ---- V1.06 执行引擎 CLI ----
-        "orders" => {
-            println!("模式：订单列表");
-            run_orders(&cfg).await
-        }
-        "execution" => {
-            println!("模式：执行状态");
-            run_execution_status(&cfg)
-        }
-        "queue" => {
-            println!("模式：队列查看");
-            run_queue_status(&cfg)
-        }
-        "exec-replay" => {
-            let id = args.get(2).cloned().unwrap_or_default();
-            if id.is_empty() {
-                println!("用法: cargo run -- exec-replay <order_id>");
-                return Ok(());
+        "exec" => {
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "orders" => {
+                    println!("模式：订单列表");
+                    run_orders(&cfg).await
+                }
+                "queue" => {
+                    println!("模式：队列查看");
+                    run_queue_status(&cfg)
+                }
+                "replay" => {
+                    let id = args.get(3).cloned().unwrap_or_default();
+                    if id.is_empty() {
+                        println!("用法: cargo run -- exec replay <order_id>");
+                        return Ok(());
+                    }
+                    println!("模式：订单回放");
+                    run_exec_replay(&cfg, &id)
+                }
+                _ => {
+                    println!("模式：执行状态");
+                    run_execution_status(&cfg)
+                }
             }
-            println!("模式：订单回放");
-            run_exec_replay(&cfg, &id)
         }
         // ---- V1.07 Trading Infrastructure CLI ----
-        "provider" => {
-            println!("模式：Provider 诊断");
-            run_trading_provider(&cfg).await
-        }
-        "health" => {
-            println!("模式：Health 诊断");
-            run_trading_health(&cfg).await
-        }
-        "session" => {
-            println!("模式：Session 诊断");
-            run_trading_session(&cfg)
-        }
-        "connection" => {
-            println!("模式：Connection 诊断");
-            run_trading_connection(&cfg)
+        "trading" => {
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "provider" => {
+                    println!("模式：Provider 诊断");
+                    run_trading_provider(&cfg).await
+                }
+                "health" => {
+                    println!("模式：Health 诊断");
+                    run_trading_health(&cfg).await
+                }
+                "session" => {
+                    println!("模式：Session 诊断");
+                    run_trading_session(&cfg)
+                }
+                "connection" => {
+                    println!("模式：Connection 诊断");
+                    run_trading_connection(&cfg)
+                }
+                _ => {
+                    println!("用法: cargo run -- trading [provider|health|session|connection]");
+                    Ok(())
+                }
+            }
         }
         // ---- V1.08 Exchange Gateway CLI ----
         "gateway" => {
-            println!("模式：Gateway 状态");
-            run_gateway(&cfg).await
-        }
-        "account" => {
-            println!("模式：账户诊断");
-            run_account(&cfg).await
-        }
-        "balance" => {
-            println!("模式：余额查询");
-            run_balance(&cfg).await
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "account" => {
+                    println!("模式：账户诊断");
+                    run_account(&cfg).await
+                }
+                "balance" => {
+                    println!("模式：余额查询");
+                    run_balance(&cfg).await
+                }
+                _ => {
+                    println!("模式：Gateway 状态");
+                    run_gateway(&cfg).await
+                }
+            }
         }
         // ---- P2-02 API Workflow CLI ----
         "workflow" => {
@@ -231,46 +270,56 @@ async fn main() -> Result<()> {
         }
         // ---- P2-04 OMS CLI ----
         "oms" => {
-            println!("模式：OMS 概览");
-            run_oms_overview(&cfg).await
-        }
-        "oms-orders" => {
-            println!("模式：OMS 订单列表");
-            run_oms_orders(&cfg).await
-        }
-        "oms-order" => {
-            let id = args.get(2).cloned().unwrap_or_default();
-            if id.is_empty() {
-                println!("用法: cargo run -- oms-order <order_id>");
-                return Ok(());
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "orders" | "oms-orders" => {
+                    println!("模式：OMS 订单列表");
+                    run_oms_orders(&cfg).await
+                }
+                "order" | "oms-order" => {
+                    let id = args.get(3).cloned().unwrap_or_default();
+                    if id.is_empty() {
+                        println!("用法: cargo run -- oms order <order_id>");
+                        return Ok(());
+                    }
+                    println!("模式：OMS 订单详情");
+                    run_oms_order(&cfg, &id).await
+                }
+                "events" | "oms-events" => {
+                    println!("模式：OMS 事件流");
+                    run_oms_events(&cfg).await
+                }
+                "demo" | "oms-demo" => {
+                    println!("模式：OMS 演示（创建 5 个订单 + 推进到终态）");
+                    run_oms_demo(&cfg).await
+                }
+                _ => {
+                    println!("模式：OMS 概览");
+                    run_oms_overview(&cfg).await
+                }
             }
-            println!("模式：OMS 订单详情");
-            run_oms_order(&cfg, &id).await
-        }
-        "oms-events" => {
-            println!("模式：OMS 事件流");
-            run_oms_events(&cfg).await
-        }
-        "oms-demo" => {
-            println!("模式：OMS 演示（创建 5 个订单 + 推进到终态）");
-            run_oms_demo(&cfg).await
         }
         // ---- P2-05 PMS CLI ----
         "portfolio" => {
-            println!("模式：投资组合");
-            run_portfolio(&cfg)
-        }
-        "positions" => {
-            println!("模式：持仓列表");
-            run_positions(&cfg)
-        }
-        "pnl" => {
-            println!("模式：盈亏报告");
-            run_pnl(&cfg)
-        }
-        "exposure" => {
-            println!("模式：风险敞口");
-            run_exposure(&cfg)
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "positions" => {
+                    println!("模式：持仓列表");
+                    run_positions(&cfg)
+                }
+                "pnl" => {
+                    println!("模式：盈亏报告");
+                    run_pnl(&cfg)
+                }
+                "exposure" => {
+                    println!("模式：风险敞口");
+                    run_exposure(&cfg)
+                }
+                _ => {
+                    println!("模式：投资组合");
+                    run_portfolio(&cfg)
+                }
+            }
         }
         // ---- P2-06 Auth & Wallet Infrastructure CLI ----
         "auth" => {
@@ -317,16 +366,21 @@ async fn main() -> Result<()> {
         }
         // ---- P2-06 Settlement Engine CLI ----
         "settlement" => {
-            println!("模式：结算引擎");
-            run_settlement(&cfg).await
-        }
-        "ledger" => {
-            println!("模式：资金流水");
-            run_ledger(&cfg)
-        }
-        "fees" => {
-            println!("模式：手续费");
-            run_fees(&cfg)
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "ledger" => {
+                    println!("模式：资金流水");
+                    run_ledger(&cfg)
+                }
+                "fees" => {
+                    println!("模式：手续费");
+                    run_fees(&cfg)
+                }
+                _ => {
+                    println!("模式：结算引擎");
+                    run_settlement(&cfg).await
+                }
+            }
         }
         // ---- P3.0 多市场统一框架 CLI ----
         "markets" => {
@@ -841,12 +895,16 @@ fn run_reset(cfg: &pm_models::Config, yes: bool) -> Result<()> {
 // V1.04 机会引擎 CLI 命令
 // ============================================================================
 
-/// `cargo run -- opportunities`：列出所有机会。
-async fn run_opportunities(cfg: &pm_models::Config) -> Result<()> {
+/// `cargo run -- opportunities [--all]`：列出机会（默认 Top 10，加 `--all` 显示全部）。
+async fn run_opportunities(cfg: &pm_models::Config, all: bool) -> Result<()> {
     let mut manager = DataSourceManager::from_config(cfg)?;
     manager.print_capability_block();
 
-    println!("正在拉取市场数据并分析机会...");
+    if all {
+        println!("正在拉取市场数据并分析全部机会...");
+    } else {
+        println!("正在拉取市场数据并分析 Top 10 机会...");
+    }
     println!();
 
     let outcome = manager.fetch_markets().await?;
@@ -898,76 +956,38 @@ async fn run_opportunities(cfg: &pm_models::Config) -> Result<()> {
         return Ok(());
     }
 
-    for opp in &output.opportunities {
-        println!("{}", pm_opportunity::ExplainEngine::explain(opp));
+    if all {
+        // 显示全部机会的详细解释
+        for opp in &output.opportunities {
+            println!("{}", pm_opportunity::ExplainEngine::explain(opp));
+            println!();
+        }
+    } else {
+        // 显示 Top 10 表格
+        let top = engine.top_n(10);
+        println!("Top {} 机会：", top.len());
+        println!();
+        println!(
+            "{:<6} {:<10} {:<45} {:<8} {:<8} {:<8} {:<8}",
+            "排名", "类型", "问题", "评分", "置信度", "风险", "ROI"
+        );
+        println!("{}", "-".repeat(100));
+
+        for (i, opp) in top.iter().enumerate() {
+            let q: String = opp.question.chars().take(43).collect();
+            println!(
+                "{:<6} {:<10} {:<45} {:<8.0} {:<8.0} {:<8.0} {:<8.2}",
+                i + 1,
+                opp.opportunity_type.as_zh(),
+                q,
+                opp.score,
+                opp.confidence * 100.0,
+                opp.risk_score,
+                opp.expected_roi * 100.0,
+            );
+        }
         println!();
     }
-
-    Ok(())
-}
-
-/// `cargo run -- top`：Top 10 机会。
-async fn run_top(cfg: &pm_models::Config) -> Result<()> {
-    let mut manager = DataSourceManager::from_config(cfg)?;
-    manager.print_capability_block();
-
-    println!("正在拉取市场数据并分析 Top 10 机会...");
-    println!();
-
-    let outcome = manager.fetch_markets().await?;
-    let markets = &outcome.markets;
-
-    let mut engine = pm_opportunity::OpportunityEngine::from_pm_config(cfg);
-
-    let mut orderbooks_map: std::collections::HashMap<String, pm_models::OrderBook> =
-        std::collections::HashMap::new();
-    if manager.capability().supports_orderbook {
-        let ids: Vec<String> = markets.iter().map(|m| m.market_id.clone()).collect();
-        if let Ok(obs) = manager.provider().fetch_orderbooks(&ids).await {
-            for ob in obs {
-                if ob.best_bid.is_some() || ob.best_ask.is_some() {
-                    orderbooks_map.insert(ob.market_id.clone(), ob);
-                }
-            }
-        }
-    }
-
-    let _output = engine.analyze(
-        markets,
-        &orderbooks_map,
-        &manager.provider().capability(),
-        chrono::Utc::now(),
-    );
-
-    let top = engine.top_n(10);
-
-    if top.is_empty() {
-        println!("（未发现符合条件的套利机会）");
-        return Ok(());
-    }
-
-    println!("Top {} 机会：", top.len());
-    println!();
-    println!(
-        "{:<6} {:<10} {:<45} {:<8} {:<8} {:<8} {:<8}",
-        "排名", "类型", "问题", "评分", "置信度", "风险", "ROI"
-    );
-    println!("{}", "-".repeat(100));
-
-    for (i, opp) in top.iter().enumerate() {
-        let q: String = opp.question.chars().take(43).collect();
-        println!(
-            "{:<6} {:<10} {:<45} {:<8.0} {:<8.0} {:<8.0} {:<8.2}",
-            i + 1,
-            opp.opportunity_type.as_zh(),
-            q,
-            opp.score,
-            opp.confidence * 100.0,
-            opp.risk_score,
-            opp.expected_roi * 100.0,
-        );
-    }
-    println!();
 
     Ok(())
 }
@@ -2793,91 +2813,84 @@ fn print_usage() {
     println!();
     println!("用法:");
     println!();
-    println!("  cargo run -- scan            正常扫描 + 纸面交易 + 执行模拟器");
-    println!("  cargo run -- diagnose        诊断模式（单次扫描 + 完整诊断报告，不进入循环）");
-    println!(
-        "  cargo run -- datasource      数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照）"
-    );
-    println!("  cargo run -- replay          历史回放");
-    println!("  cargo run -- paper           基于历史机会的纸面交易");
-    println!("  cargo run -- backtest        完整回测");
-    println!("  cargo run -- execution-test  执行模拟器压测");
-    println!("  cargo run -- report          汇总报告");
+    println!("  ── 核心 ──");
+    println!("  cargo run -- scan                   正常扫描 + 纸面交易 + 执行模拟器（默认）");
+    println!("  cargo run -- diagnose               诊断模式（单次扫描 + 完整诊断报告，不进入循环）");
+    println!("  cargo run -- datasource             数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照）");
     println!();
-    println!("  多市场框架（P3.0）：");
-    println!("  cargo run -- markets          列出所有已安装市场");
-    println!("  cargo run -- markets health   多市场健康检查");
+    println!("  ── 回放与回测 ──");
+    println!("  cargo run -- replay                 历史回放");
+    println!("  cargo run -- paper                  基于历史机会的纸面交易");
+    println!("  cargo run -- backtest               完整回测");
+    println!("  cargo run -- execution-test         执行模拟器压测");
     println!();
-    println!("  市场微观结构（V1.03）：");
-    println!("  cargo run -- market          市场列表");
-    println!("  cargo run -- orderbook       订单簿");
-    println!("  cargo run -- spread          价差分析");
-    println!("  cargo run -- liquidity       流动性分析");
+    println!("  ── 报告与审计 ──");
+    println!("  cargo run -- report                 汇总报告");
+    println!("  cargo run -- reset [--yes]          清空历史数据（加 --yes 真删）");
+    println!("  cargo run -- explain [pipeline|rejections|<id>]  数据链路分析 / 拒绝分析 / 机会解释");
+    println!("  cargo run -- audit                  自动数据一致性审计");
+    println!("  cargo run -- trace --order <id>     订单链路追踪");
     println!();
-    println!("  数据审计（V1.09）：");
-    println!("  cargo run -- explain           完整数据链路分析报告");
-    println!("  cargo run -- explain pipeline  同上");
-    println!("  cargo run -- explain rejections  拒绝原因分析");
-    println!("  cargo run -- explain <id>      解释某个机会的评分");
-    println!("  cargo run -- audit             自动数据一致性审计");
-    println!("  cargo run -- trace --order <id> 订单链路追踪");
+    println!("  ── 市场数据 ──");
+    println!("  cargo run -- market                 市场列表（前20活跃）");
+    println!("  cargo run -- orderbook [spread|liquidity]  订单簿（默认）/ 价差分析 / 流动性分析");
+    println!("  cargo run -- markets [health]       多市场注册表 / 健康检查（P3.0）");
     println!();
-    println!("  机会引擎（V1.04）：");
-    println!("  cargo run -- opportunities   列出全部机会");
-    println!("  cargo run -- top             Top 10 机会");
+    println!("  ── 机会引擎 ──");
+    println!("  cargo run -- opportunities [--all]  机会列表（默认 Top 10，加 --all 全部）");
+    println!("  cargo run -- opportunity <id>       机会详情解释");
     println!();
-    println!("  风险引擎（V1.05）：");
-    println!("  cargo run -- risk           风险仪表盘");
-    println!("  cargo run -- explain-risk   风险规则说明");
-    println!("  cargo run -- risk-replay    风险回放");
+    println!("  ── 风控引擎 ──");
+    println!("  cargo run -- risk                   风险仪表盘");
+    println!("  cargo run -- risk explain           风险规则说明");
+    println!("  cargo run -- risk replay            风险回放");
     println!();
-    println!("  执行引擎（V1.06）：");
-    println!("  cargo run -- orders         订单列表");
-    println!("  cargo run -- execution      执行状态");
-    println!("  cargo run -- queue          队列查看");
-    println!("  cargo run -- exec-replay <id>  订单回放");
+    println!("  ── 执行引擎 ──");
+    println!("  cargo run -- exec                   执行状态");
+    println!("  cargo run -- exec orders            订单列表（经 Gateway）");
+    println!("  cargo run -- exec queue             队列查看");
+    println!("  cargo run -- exec replay <id>       订单回放");
     println!();
-    println!("  Trading 基础设施（V1.07）：");
-    println!("  cargo run -- provider       Provider 诊断");
-    println!("  cargo run -- health         Health 诊断");
-    println!("  cargo run -- session        Session 诊断");
-    println!("  cargo run -- connection     Connection 诊断");
+    println!("  ── Trading 基础设施 ──");
+    println!("  cargo run -- trading provider       Provider 诊断");
+    println!("  cargo run -- trading health         Health 诊断");
+    println!("  cargo run -- trading session        Session 诊断");
+    println!("  cargo run -- trading connection     Connection 诊断");
     println!();
-    println!("  Exchange Gateway（V1.08）：");
-    println!("  cargo run -- gateway        Gateway 状态与诊断");
-    println!("  cargo run -- account        账户详情（余额+持仓）");
-    println!("  cargo run -- balance        余额查询");
-    println!("  cargo run -- orders         订单列表（经 Gateway）");
+    println!("  ── Exchange Gateway ──");
+    println!("  cargo run -- gateway                Gateway 状态与诊断");
+    println!("  cargo run -- gateway account        账户详情");
+    println!("  cargo run -- gateway balance        余额查询");
     println!();
-    println!("  API Workflow（P2-02）：");
-    println!("  cargo run -- workflow       显示当前 Workflow（配置+状态机+最近报告）");
-    println!("  cargo run -- workflow dryrun   执行 DryRun Workflow（默认，无网络/无下单）");
-    println!("  cargo run -- workflow replay   执行 Replay Workflow（从 fixtures 回放）");
-    println!("  cargo run -- workflow live     执行 Live ReadOnly Workflow（真实只读）");
+    println!("  ── API Workflow ──");
+    println!("  cargo run -- workflow               显示当前 Workflow");
+    println!("  cargo run -- workflow dryrun        执行 DryRun Workflow");
+    println!("  cargo run -- workflow replay        执行 Replay Workflow");
+    println!("  cargo run -- workflow live          执行 Live ReadOnly Workflow");
     println!();
-    println!("  OMS（P2-04）：");
-    println!("  cargo run -- oms              OMS 健康概览 + 状态机图");
-    println!("  cargo run -- oms-orders       OMS 订单列表（CSV 持久化）");
-    println!("  cargo run -- oms-order <id>   OMS 订单详情（含状态历史）");
-    println!("  cargo run -- oms-events       OMS 事件流");
-    println!("  cargo run -- oms-demo         创建 5 个示例订单");
+    println!("  ── OMS 订单管理 ──");
+    println!("  cargo run -- oms                    OMS 健康概览 + 状态机");
+    println!("  cargo run -- oms orders             OMS 订单列表");
+    println!("  cargo run -- oms order <id>         OMS 订单详情");
+    println!("  cargo run -- oms events             OMS 事件流");
+    println!("  cargo run -- oms demo               创建示例订单");
     println!();
-    println!("  PMS（P2-05）：");
-    println!("  cargo run -- portfolio       投资组合仪表盘");
-    println!("  cargo run -- positions       全部持仓列表");
-    println!("  cargo run -- pnl             盈亏报告");
-    println!("  cargo run -- exposure        风险敞口报告");
+    println!("  ── PMS 投资组合 ──");
+    println!("  cargo run -- portfolio              投资组合仪表盘");
+    println!("  cargo run -- portfolio positions    全部持仓");
+    println!("  cargo run -- portfolio pnl          盈亏报告");
+    println!("  cargo run -- portfolio exposure     风险敞口");
     println!();
-    println!("  认证与钱包（P2-06）：");
-    println!("  cargo run -- auth health     认证健康诊断（凭据/会话/Token/认证）");
-    println!("  cargo run -- auth session    会话诊断");
-    println!("  cargo run -- auth credential 凭据诊断（脱敏）");
-    println!("  cargo run -- wallet health   钱包健康诊断（钱包/余额/授权/Nonce）");
-    println!("  cargo run -- wallet balance  余额查询");
-    println!("  cargo run -- wallet account  账户列表（脱敏）");
+    println!("  ── 认证与钱包 ──");
+    println!("  cargo run -- auth health            认证健康诊断");
+    println!("  cargo run -- auth session           会话诊断");
+    println!("  cargo run -- auth credential        凭据诊断");
+    println!("  cargo run -- wallet health          钱包健康诊断");
+    println!("  cargo run -- wallet balance         余额查询");
+    println!("  cargo run -- wallet account         账户列表");
     println!();
-    println!("  结算引擎（P2-06）：");
-    println!("  cargo run -- settlement      查看最近结算（含模拟数据）");
-    println!("  cargo run -- ledger          查看资金流水");
-    println!("  cargo run -- fees            查看手续费规则与示例");
+    println!("  ── 结算引擎 ──");
+    println!("  cargo run -- settlement             最近结算");
+    println!("  cargo run -- settlement ledger      资金流水");
+    println!("  cargo run -- settlement fees        手续费规则");
 }

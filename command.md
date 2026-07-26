@@ -1,7 +1,7 @@
 # pm-cli 命令参考
 
 **用法:** `cargo run -- <command>`  
-**版本:** V1.08 + P2.02/P2.04/P2.05/P2.06/P3.0
+**版本:** V2.0（命令合并重构）
 
 ---
 
@@ -28,7 +28,6 @@
 |------|------|
 | `report` | 汇总报告（读取所有 CSV，打印平台级统计） |
 | `reset` | 清空 data/*.csv（预览模式，加 `--yes` 真删） |
-| `reset --yes` | 实际删除所有历史 CSV 数据 |
 | `explain` | 完整数据链路分析报告（= `explain pipeline`） |
 | `explain pipeline` | 完整数据链路分析报告 |
 | `explain rejections` | 拒绝原因分析 |
@@ -36,56 +35,59 @@
 | `audit` | 自动数据一致性审计 |
 | `trace --order <id>` | 订单链路追踪（Market → Opportunity → PaperOrder → Execution → Settlement） |
 
-## 市场微观结构（V1.03）
+## 市场数据（V1.03 + P3.0）
 
 | 命令 | 说明 |
 |------|------|
 | `market` | 市场列表（前20个活跃市场） |
 | `orderbook` | 订单簿（拉取并展示前10个市场订单簿） |
-| `spread` | 价差分析（前10个市场） |
-| `liquidity` | 流动性分析（前10个市场，含深度分析） |
+| `orderbook spread` | 价差分析（前10个市场） |
+| `orderbook liquidity` | 流动性分析（前10个市场，含深度分析） |
+| `markets` | 列出所有已安装市场（能力模板 + 注册表） |
+| `markets health` | 多市场健康检查（REST/WS/网关/认证/延迟） |
 
 ## 机会引擎（V1.04）
 
 | 命令 | 说明 |
 |------|------|
-| `opportunities` | 列出全部套利机会 |
+| `opportunities` | 机会列表（默认 Top 10，加 `--all` 查看全部） |
+| `opportunities --all` | 列出全部套利机会 |
 | `opps` | 同 `opportunities` |
-| `top` | Top 10 机会（按评分排序） |
+| `opportunity <id>` | 机会详情解释 |
 
-## 风险引擎（V1.05）
+## 风控引擎（V1.05）
 
 | 命令 | 说明 |
 |------|------|
 | `risk` | 风险仪表盘 |
-| `explain-risk` | 风险规则说明（阈值/仓位/暴露/流动性等所有规则） |
-| `risk-replay` | 风险回放（模拟多种场景） |
+| `risk explain` | 风险规则说明（阈值/仓位/暴露/流动性等所有规则） |
+| `risk replay` | 风险回放（模拟多种场景） |
 
 ## 执行引擎（V1.06）
 
 | 命令 | 说明 |
 |------|------|
-| `orders` | 订单列表（经 Gateway 查询活跃订单 + 历史 CSV 计数） |
-| `execution` | 执行状态（配置/队列/调度器/CSV 路径） |
-| `queue` | 队列查看（当前队列状态） |
-| `exec-replay <order_id>` | 订单回放（指定订单的生命周期时间线） |
+| `exec` | 执行状态（配置/队列/调度器/CSV 路径） |
+| `exec orders` | 订单列表（经 Gateway 查询活跃订单 + 历史 CSV 计数） |
+| `exec queue` | 队列查看（当前队列状态） |
+| `exec replay <id>` | 订单回放（指定订单的生命周期时间线） |
 
 ## Trading 基础设施（V1.07）
 
 | 命令 | 说明 |
 |------|------|
-| `provider` | Provider 诊断（MockTradingProvider） |
-| `health` | Health 诊断 |
-| `session` | Session 诊断 |
-| `connection` | Connection 诊断（含凭据诊断） |
+| `trading provider` | Provider 诊断（MockTradingProvider） |
+| `trading health` | Health 诊断 |
+| `trading session` | Session 诊断 |
+| `trading connection` | Connection 诊断（含凭据诊断） |
 
 ## Exchange Gateway（V1.08）
 
 | 命令 | 说明 |
 |------|------|
 | `gateway` | Gateway 状态与诊断（安全摘要 + 断路器状态） |
-| `account` | 账户详情（余额 + 持仓） |
-| `balance` | 余额查询 |
+| `gateway account` | 账户详情（余额 + 持仓） |
+| `gateway balance` | 余额查询 |
 
 ## API Workflow（P2-02）
 
@@ -101,19 +103,19 @@
 | 命令 | 说明 |
 |------|------|
 | `oms` | OMS 健康概览 + 11态状态机图 |
-| `oms-orders` | OMS 订单列表（CSV 持久化，含状态分布 + Metrics） |
-| `oms-order <id>` | OMS 订单详情（含完整状态历史时间线） |
-| `oms-events` | OMS 事件流（最近50条） |
-| `oms-demo` | 创建 5 个示例订单（演示用） |
+| `oms orders` | OMS 订单列表（CSV 持久化，含状态分布 + Metrics） |
+| `oms order <id>` | OMS 订单详情（含完整状态历史时间线） |
+| `oms events` | OMS 事件流（最近50条） |
+| `oms demo` | 创建 5 个示例订单（演示用） |
 
 ## PMS 投资组合管理系统（P2-05）
 
 | 命令 | 说明 |
 |------|------|
 | `portfolio` | 投资组合仪表盘 |
-| `positions` | 全部持仓列表 |
-| `pnl` | 盈亏报告 |
-| `exposure` | 风险敞口报告 |
+| `portfolio positions` | 全部持仓列表 |
+| `portfolio pnl` | 盈亏报告 |
+| `portfolio exposure` | 风险敞口报告 |
 
 ## 认证与钱包（P2-06）
 
@@ -131,12 +133,5 @@
 | 命令 | 说明 |
 |------|------|
 | `settlement` | 查看最近结算（含模拟数据演示） |
-| `ledger` | 查看资金流水（最近20条） |
-| `fees` | 查看手续费规则与示例（标准费率/零费率/示例计算） |
-
-## 多市场统一框架（P3.0）
-
-| 命令 | 说明 |
-|------|------|
-| `markets` | 列出所有已安装市场（能力模板 + 注册表） |
-| `markets health` | 多市场健康检查（REST/WS/网关/认证/延迟） |
+| `settlement ledger` | 查看资金流水（最近20条） |
+| `settlement fees` | 查看手续费规则与示例（标准费率/零费率/示例计算） |
