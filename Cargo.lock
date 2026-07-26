@@ -1001,6 +1001,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "csv",
  "pm-models",
  "pm-storage",
  "pm-utils",
@@ -1050,6 +1051,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "csv",
  "pm-api-workflow",
  "pm-audit",
  "pm-auth",
@@ -1279,6 +1281,7 @@ version = "1.0.0"
 dependencies = [
  "chrono",
  "pm-core",
+ "tracing",
 ]
 
 [[package]]

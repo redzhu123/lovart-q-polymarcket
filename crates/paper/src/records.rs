@@ -19,6 +19,7 @@ pub const ORDERS_HEADER: &[&str] = &[
     "fill_time",
     "status",
     "simulation_only",
+    "source_opportunity_id",
 ];
 
 /// paper_positions.csv 表头（列顺序须与 [`PositionRecord`] 字段顺序一致）。
@@ -63,6 +64,7 @@ pub struct OrderRecord {
     pub fill_time: String,
     pub status: String,
     pub simulation_only: bool,
+    pub source_opportunity_id: String,
 }
 
 impl From<&Order> for OrderRecord {
@@ -80,6 +82,7 @@ impl From<&Order> for OrderRecord {
                 .unwrap_or_default(),
             status: o.status.as_str().to_string(),
             simulation_only: o.simulation_only,
+            source_opportunity_id: o.source_opportunity_id.clone().unwrap_or_default(),
         }
     }
 }
@@ -201,12 +204,21 @@ mod tests {
     #[test]
     fn order_record_from_order() {
         let now = Local::now();
-        let mut o = Order::new("PO-1".into(), "Q".into(), Side::Buy, 200.0, 0.5, now);
+        let mut o = Order::new(
+            "PO-1".into(),
+            "Q".into(),
+            Side::Buy,
+            200.0,
+            0.5,
+            now,
+            Some("OPP-test-001".into()),
+        );
         o.fill(now);
         let r = OrderRecord::from(&o);
         assert_eq!(r.order_id, "PO-1");
         assert_eq!(r.side, "BUY");
         assert_eq!(r.status, "Filled");
         assert!(r.simulation_only);
+        assert_eq!(r.source_opportunity_id, "OPP-test-001");
     }
 }

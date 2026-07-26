@@ -99,7 +99,13 @@ pub fn paper_backtest(
 
     for opp in opps {
         let entry_yes = opp.best_sum / 2.0 * (1.0 + entry_slippage);
-        let outcome = eng.open_position(&opp.question, entry_yes, opp.start_time);
+        // ReplayOpportunity 无 id 字段，从 question + start_time 构造来源 ID
+        let source_id = Some(format!(
+            "REPLAY-{}-{}",
+            opp.question.chars().take(20).collect::<String>(),
+            opp.start_time.timestamp_millis()
+        ));
+        let outcome = eng.open_position(&opp.question, entry_yes, opp.start_time, source_id);
         match outcome {
             crate::engine::OpenOutcome::Filled(_) => {
                 opened += 1;

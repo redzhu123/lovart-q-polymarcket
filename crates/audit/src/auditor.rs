@@ -90,6 +90,8 @@ pub struct AuditStats {
     pub execution_rejected: u64,
     pub portfolio_snapshots: u64,
     pub scan_rounds: u64,
+    /// 孤儿纸面订单数（source_opportunity_id 为空）。
+    pub orphan_paper_orders_count: u64,
 }
 
 impl StatisticsAudit {
@@ -111,6 +113,7 @@ impl StatisticsAudit {
         paper_portfolio_csv: &str,
         execution_csv: &str,
     ) -> Self {
+        let orphan = count_orphan_paper_orders(paper_orders_csv);
         let stats = AuditStats {
             opportunities_count: pm_storage::count_rows(opportunities_csv),
             detected_opportunities_count: pm_storage::count_rows(detected_opportunities_csv),
@@ -119,6 +122,7 @@ impl StatisticsAudit {
             paper_positions_closed: pm_storage::count_rows(paper_positions_csv),
             portfolio_snapshots: pm_storage::count_rows(paper_portfolio_csv),
             execution_orders_count: pm_storage::count_rows(execution_csv),
+            orphan_paper_orders_count: orphan,
             ..Default::default()
         };
         Self {
@@ -237,6 +241,21 @@ impl StatisticsAudit {
             });
         }
 
+        // 规则 7：孤儿纸面订单检测（source_opportunity_id 为空）。
+        if self.stats.orphan_paper_orders_count > 0 {
+            self.findings.push(AuditFinding {
+                check: "孤儿纸面订单".into(),
+                passed: false,
+                detail: format!(
+                    "纸面订单中 {} 个为孤儿订单（缺少 Opportunity 来源）。\
+                     PaperOrder 必须在有对应 Opportunity 时才能创建。\
+                     可能原因：旧版 CSV 数据无 source_opportunity_id 列，或历史回放路径创建了无来源订单。",
+                    self.stats.orphan_paper_orders_count
+                ),
+                severity: AuditSeverity::Error,
+            });
+        }
+
         // 如果没有发现任何 Error，添加摘要
         if !self
             .findings
@@ -293,6 +312,11 @@ impl fmt::Display for StatisticsAudit {
         writeln!(f, "  检测机会(CSV): {}", self.stats.detected_opportunities_count)?;
         writeln!(f, "  执行订单(CSV): {}", self.stats.execution_orders_count)?;
         writeln!(f, "  组合快照(CSV): {}", self.stats.portfolio_snapshots)?;
+        writeln!(
+            f,
+            "  孤儿订单(CSV): {}",
+            self.stats.orphan_paper_orders_count
+        )?;
         writeln!(f)?;
         writeln!(f, "── 审计检查 ──")?;
         writeln!(f)?;
@@ -313,6 +337,47 @@ impl fmt::Display for StatisticsAudit {
         }
         Ok(())
     }
+}
+
+/// 统计 paper_orders.csv 中 source_opportunity_id 为空的订单数（孤儿订单）。
+pub(crate) fn count_orphan_paper_orders(path: &str) -> u64 {
+    use std::path::Path;
+    if !Path::new(path).exists() {
+        return 0;
+    }
+    let mut reader = match csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_path(path)
+    {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+    // 查找 source_opportunity_id 列索引
+    let headers = match reader.headers() {
+        Ok(h) => h.clone(),
+        Err(_) => return 0,
+    };
+    let col_idx = headers
+        .iter()
+        .position(|h| h.trim() == "source_opportunity_id");
+    let col_idx = match col_idx {
+        Some(i) => i,
+        None => return 0, // 旧版 CSV 无此列，孤儿数计为 0
+    };
+    let mut orphan = 0u64;
+    for result in reader.records() {
+        match result {
+            Ok(record) => {
+                let val = record.get(col_idx).unwrap_or("").trim();
+                if val.is_empty() {
+                    orphan += 1;
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    orphan
 }
 
 #[cfg(test)]

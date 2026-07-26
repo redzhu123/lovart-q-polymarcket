@@ -90,10 +90,12 @@ impl Strategy for DefaultStrategy {
                 ctx.events.shadow_opened.push(trade);
             }
             // Paper Trading：自动 BUY 开仓（风控由 paper 内部 RiskManager 检查）
-            match ctx
-                .paper
-                .open_position(&opp.question, opp.yes_price, ctx.now)
-            {
+            match ctx.paper.open_position(
+                &opp.question,
+                opp.yes_price,
+                ctx.now,
+                Some(opp.id.clone()),
+            ) {
                 OpenOutcome::Filled(o) => ctx.events.paper_opens.push(o),
                 OpenOutcome::Rejected(r) => {
                     ctx.events.paper_rejections.push((opp.question.clone(), r));

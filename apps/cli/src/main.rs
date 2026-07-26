@@ -342,6 +342,22 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        "trace" => {
+            let order_id = args
+                .iter()
+                .position(|a| a == "--order")
+                .and_then(|i| args.get(i + 1))
+                .cloned()
+                .unwrap_or_default();
+            if order_id.is_empty() {
+                println!("用法: cargo run -- trace --order <order_id>");
+                println!();
+                println!("示例: cargo run -- trace --order PO-000001");
+                return Ok(());
+            }
+            println!("模式：订单链路追踪");
+            run_trace(&cfg, &order_id)
+        }
         // "orders" 已存在（V1.06），但 V1.08 增强为经 Gateway 查询
         other => {
             println!("未知模式: {}", other);
@@ -2539,6 +2555,240 @@ async fn run_market_health() -> Result<()> {
     Ok(())
 }
 
+// ============================================================================
+// 订单链路追踪命令
+// ============================================================================
+
+/// `cargo run -- trace --order <id>`：追踪 PaperOrder 的完整生命周期。
+///
+/// 输出生命周期链：
+/// ```text
+/// Market → Candidate → Opportunity → PaperOrder → Execution → Settlement
+/// ```
+fn run_trace(cfg: &pm_models::Config, order_id: &str) -> Result<()> {
+    println!();
+    println!("══════════════════════════════════════════════");
+    println!("  订单链路追踪: {}", order_id);
+    println!("══════════════════════════════════════════════");
+    println!();
+
+    // ── 1. 查找 Paper Order ──
+    let paper_path = &cfg.paths.paper_orders_csv;
+    if !std::path::Path::new(paper_path).exists() {
+        println!("✗ 未找到 paper_orders.csv: {}", paper_path);
+        println!();
+        println!("提示：运行 `cargo run -- scan` 生成纸面订单。");
+        return Ok(());
+    }
+
+    let mut paper_reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .from_path(paper_path)?;
+
+    let headers: Vec<String> = paper_reader
+        .headers()?
+        .iter()
+        .map(|h| h.to_string())
+        .collect();
+
+    let oid_idx = headers.iter().position(|h| h == "order_id");
+    let q_idx = headers.iter().position(|h| h == "question");
+    let side_idx = headers.iter().position(|h| h == "side");
+    let price_idx = headers.iter().position(|h| h == "price");
+    let qty_idx = headers.iter().position(|h| h == "quantity");
+    let status_idx = headers.iter().position(|h| h == "status");
+    let ctime_idx = headers.iter().position(|h| h == "create_time");
+    let ftime_idx = headers.iter().position(|h| h == "fill_time");
+    let src_idx = headers.iter().position(|h| h == "source_opportunity_id");
+
+    let mut found_order: Option<Vec<String>> = None;
+    for result in paper_reader.records() {
+        let record = result?;
+        if oid_idx.map_or(false, |i| record.get(i) == Some(order_id)) {
+            found_order = Some(record.iter().map(|f| f.to_string()).collect());
+            break;
+        }
+    }
+
+    let record = match found_order {
+        Some(r) => r,
+        None => {
+            println!("✗ 未找到订单: {}", order_id);
+            println!();
+            println!("提示：运行 `cargo run -- report` 查看所有订单。");
+            return Ok(());
+        }
+    };
+
+    // 提取字段
+    let get = |idx: Option<usize>| -> &str {
+        idx.and_then(|i| record.get(i).map(|s| s.as_str()))
+            .unwrap_or("-")
+    };
+
+    // ── 2. 打印 PaperOrder 信息 ──
+    let question = get(q_idx);
+    let side = get(side_idx);
+    let price = get(price_idx);
+    let quantity = get(qty_idx);
+    let status = get(status_idx);
+    let create_time = get(ctime_idx);
+    let fill_time = get(ftime_idx);
+    let source_opp_id = get(src_idx);
+
+    println!("── PaperOrder ──");
+    println!();
+    println!("  订单 ID:     {}", order_id);
+    println!("  问题:        {}", question);
+    println!("  方向:        {}", side);
+    println!("  价格:        {}", price);
+    println!("  数量:        {}", quantity);
+    println!("  状态:        {}", status);
+    println!("  创建时间:    {}", create_time);
+    println!("  成交时间:    {}", fill_time);
+    println!(
+        "  来源 Opp:    {}",
+        if source_opp_id.is_empty() || source_opp_id == "-" {
+            "⚠️  无来源（孤儿订单）"
+        } else {
+            source_opp_id
+        }
+    );
+    println!();
+
+    // ── 3. 查找来源 Opportunity ──
+    if !source_opp_id.is_empty() && source_opp_id != "-" {
+        println!("── Opportunity ──");
+        println!();
+        let detected_path = &cfg.paths.detected_opportunities_csv;
+        if std::path::Path::new(detected_path).exists() {
+            let mut opp_reader = csv::ReaderBuilder::new()
+                .has_headers(true)
+                .flexible(true)
+                .from_path(detected_path)?;
+            let opp_headers: Vec<String> = opp_reader
+                .headers()?
+                .iter()
+                .map(|h| h.to_string())
+                .collect();
+            let opp_id_idx = opp_headers.iter().position(|h| h == "id");
+            let opp_q_idx = opp_headers.iter().position(|h| h == "question");
+            let opp_type_idx = opp_headers.iter().position(|h| h == "opportunity_type");
+            let opp_score_idx = opp_headers.iter().position(|h| h == "score");
+            let opp_roi_idx = opp_headers.iter().position(|h| h == "expected_roi");
+            let opp_sum_idx = opp_headers.iter().position(|h| h == "sum");
+            let opp_yes_idx = opp_headers.iter().position(|h| h == "yes_price");
+            let opp_no_idx = opp_headers.iter().position(|h| h == "no_price");
+
+            let mut found_opp = false;
+            for result in opp_reader.records() {
+                let r = result?;
+                if opp_id_idx.map_or(false, |i| r.get(i) == Some(source_opp_id)) {
+                    let get_opp = |idx: Option<usize>| -> &str {
+                        idx.and_then(|i| r.get(i)).unwrap_or("-")
+                    };
+                    println!("  ID:          {}", source_opp_id);
+                    println!("  问题:        {}", get_opp(opp_q_idx));
+                    println!("  类型:        {}", get_opp(opp_type_idx));
+                    println!("  评分:        {}", get_opp(opp_score_idx));
+                    println!(
+                        "  预期 ROI:    {}%",
+                        get_opp(opp_roi_idx)
+                            .parse::<f64>()
+                            .map(|v| format!("{:.2}", v * 100.0))
+                            .unwrap_or_else(|_| "-".into())
+                    );
+                    println!("  SUM:         {}", get_opp(opp_sum_idx));
+                    println!("  YES:         {}", get_opp(opp_yes_idx));
+                    println!("  NO:          {}", get_opp(opp_no_idx));
+                    found_opp = true;
+                    break;
+                }
+            }
+            if !found_opp {
+                println!("  （未在 detected_opportunities.csv 中找到对应记录）");
+                println!("  提示：该机会可能在之前的运行中被清除。");
+            }
+        } else {
+            println!("  （未找到 detected_opportunities.csv）");
+        }
+        println!();
+    }
+
+    // ── 4. 查找关联 Execution ──
+    println!("── Execution ──");
+    println!();
+    let exec_path = &cfg.paths.execution_csv;
+    if std::path::Path::new(exec_path).exists() {
+        let mut exec_reader = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .flexible(true)
+            .from_path(exec_path)?;
+        let exec_headers: Vec<String> = exec_reader
+            .headers()?
+            .iter()
+            .map(|h| h.to_string())
+            .collect();
+        let exec_q_idx = exec_headers.iter().position(|h| h == "question");
+        let exec_oid_idx = exec_headers.iter().position(|h| h == "order_id");
+        let exec_status_idx = exec_headers.iter().position(|h| h == "status");
+        let exec_ctime_idx = exec_headers.iter().position(|h| h == "create_time");
+        let exec_ftime_idx = exec_headers.iter().position(|h| h == "fill_time");
+
+        let mut exec_count = 0usize;
+        for result in exec_reader.records() {
+            let r = result?;
+            if exec_q_idx.map_or(false, |i| r.get(i) == Some(question)) {
+                let get_exec = |idx: Option<usize>| -> &str {
+                    idx.and_then(|i| r.get(i)).unwrap_or("-")
+                };
+                exec_count += 1;
+                println!(
+                    "  {}. {} | 状态: {} | 创建: {} | 成交: {}",
+                    exec_count,
+                    get_exec(exec_oid_idx),
+                    get_exec(exec_status_idx),
+                    get_exec(exec_ctime_idx),
+                    get_exec(exec_ftime_idx),
+                );
+            }
+        }
+        if exec_count == 0 {
+            println!("  （未找到关联的执行订单）");
+        }
+    } else {
+        println!("  （未找到 execution_orders.csv）");
+    }
+    println!();
+
+    // ── 5. 生命周期链路图 ──
+    println!("── 生命周期链路 ──");
+    println!();
+    let src_status = if source_opp_id.is_empty() || source_opp_id == "-" {
+        "⚠️ 缺失"
+    } else {
+        "✓"
+    };
+    println!("  Market ──→ Candidate ──→ Opportunity [{}] ──→ PaperOrder [{}] ──→ Execution ──→ Settlement", src_status, order_id);
+    println!();
+    if source_opp_id.is_empty() || source_opp_id == "-" {
+        println!("  ⚠️  警告：此订单为孤儿订单，缺少 Opportunity 来源！");
+        println!("  PaperOrder 必须在有对应 Opportunity 时才能创建。");
+        println!();
+    }
+
+    println!("══════════════════════════════════════════════");
+    println!();
+    println!("提示：");
+    println!("  cargo run -- report           查看所有数据统计");
+    println!("  cargo run -- audit            数据一致性审计");
+    println!("  cargo run -- explain pipeline 完整数据链路分析");
+    println!();
+
+    Ok(())
+}
+
 fn print_usage() {
     println!();
     println!("用法:");
@@ -2570,6 +2820,7 @@ fn print_usage() {
     println!("  cargo run -- explain rejections  拒绝原因分析");
     println!("  cargo run -- explain <id>      解释某个机会的评分");
     println!("  cargo run -- audit             自动数据一致性审计");
+    println!("  cargo run -- trace --order <id> 订单链路追踪");
     println!();
     println!("  机会引擎（V1.04）：");
     println!("  cargo run -- opportunities   列出全部机会");

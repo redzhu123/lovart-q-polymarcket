@@ -11,3 +11,4 @@ description = "组合资金管理：Position/Order/Portfolio + RiskManager（Sim
 [dependencies]
 pm-core = { workspace = true }
 chrono = { workspace = true }
+tracing = { workspace = true }

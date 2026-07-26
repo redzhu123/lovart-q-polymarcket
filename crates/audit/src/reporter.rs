@@ -43,6 +43,7 @@ impl ExplainReport {
         paper_portfolio_csv: &str,
         execution_csv: &str,
     ) -> Self {
+        use crate::auditor::count_orphan_paper_orders;
         let stats = AuditStats {
             opportunities_count: pm_storage::count_rows(opportunities_csv),
             detected_opportunities_count: pm_storage::count_rows(detected_opportunities_csv),
@@ -51,6 +52,7 @@ impl ExplainReport {
             paper_positions_closed: pm_storage::count_rows(paper_positions_csv),
             portfolio_snapshots: pm_storage::count_rows(paper_portfolio_csv),
             execution_orders_count: pm_storage::count_rows(execution_csv),
+            orphan_paper_orders_count: count_orphan_paper_orders(paper_orders_csv),
             ..Default::default()
         };
         Self {
@@ -122,6 +124,10 @@ impl ExplainReport {
         out.push_str(&format!(
             "  组合快照(CSV):  {}\n",
             self.stats.portfolio_snapshots
+        ));
+        out.push_str(&format!(
+            "  孤儿订单(CSV):  {}\n",
+            self.stats.orphan_paper_orders_count
         ));
         out.push_str(&format!("  扫描轮次:       {}\n", self.stats.scan_rounds));
         out.push('\n');
@@ -297,6 +303,10 @@ impl AuditReport {
         out.push_str(&format!(
             "  组合快照(CSV):  {}\n",
             self.stats.portfolio_snapshots
+        ));
+        out.push_str(&format!(
+            "  孤儿订单(CSV):  {}\n",
+            self.stats.orphan_paper_orders_count
         ));
         out.push('\n');
 

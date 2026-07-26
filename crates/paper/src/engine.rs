@@ -28,8 +28,8 @@ pub struct PaperTradingEngine {
     risk: RiskManager,
     /// 自增计数器，用于生成 order_id（启动时从 CSV 行数恢复基线，避免重复）。
     counter: u64,
-    /// question -> ()，开仓判重集合，与 portfolio.open_positions 保持一致。
-    open_questions: HashMap<String, ()>,
+    /// question -> source_opportunity_id，开仓判重集合，与 portfolio.open_positions 保持一致。
+    open_questions: HashMap<String, Option<String>>,
 }
 
 impl PaperTradingEngine {
@@ -76,6 +76,7 @@ impl PaperTradingEngine {
         question: &str,
         entry_price: f64,
         now: DateTime<Local>,
+        source_opportunity_id: Option<String>,
     ) -> OpenOutcome {
         // 风控闸
         if let Err(r) = self.risk.check_open_position(
@@ -97,13 +98,15 @@ impl PaperTradingEngine {
             quantity,
             entry_price,
             now,
+            source_opportunity_id.clone(),
         );
         order.fill(now);
 
         // 建仓 + 记账
         let pos = Position::open(question.to_string(), entry_price, quantity, now);
         self.portfolio.add_open(pos);
-        self.open_questions.insert(question.to_string(), ());
+        self.open_questions
+            .insert(question.to_string(), source_opportunity_id);
         OpenOutcome::Filled(order)
     }
 
@@ -124,8 +127,8 @@ impl PaperTradingEngine {
         exit_price: f64,
         now: DateTime<Local>,
     ) -> Option<CloseOutcome> {
-        // 先从判重集合移除，避免任何分支下都不会残留陈旧条目
-        self.open_questions.remove(question)?;
+        // 先从判重集合移除（获取 source_opportunity_id 后再移除），避免任何分支下都不会残留陈旧条目
+        let source_opp_id = self.open_questions.remove(question)?;
         // portfolio.close 完成记账 + 移入 closed_positions，返回已关闭快照
         let position = self.portfolio.close(question, exit_price, now)?;
         // 记录已实现盈亏到风控（当日亏损累计）
@@ -138,6 +141,7 @@ impl PaperTradingEngine {
             position.quantity,
             exit_price,
             now,
+            source_opp_id,
         );
         order.fill(now);
         Some(CloseOutcome { order, position })
@@ -170,8 +174,8 @@ mod tests {
         assert!(approx(eng.portfolio().cash, 10000.0));
         assert_eq!(eng.portfolio().open_count(), 0);
 
-        let o1 = eng.open_position("BTC", 0.42, now);
-        let o2 = eng.open_position("Trump", 0.61, now);
+        let o1 = eng.open_position("BTC", 0.42, now, Some("OPP-BTC".into()));
+        let o2 = eng.open_position("Trump", 0.61, now, Some("OPP-Trump".into()));
         assert!(matches!(o1, OpenOutcome::Filled(_)));
         assert!(matches!(o2, OpenOutcome::Filled(_)));
         assert!(approx(eng.portfolio().cash, 9800.0));
@@ -207,23 +211,23 @@ mod tests {
         let mut eng = PaperTradingEngine::new(10000.0, p);
 
         // 持仓上限
-        eng.open_position("A", 0.5, now);
-        eng.open_position("B", 0.5, now);
+        eng.open_position("A", 0.5, now, Some("OPP-A".into()));
+        eng.open_position("B", 0.5, now, Some("OPP-B".into()));
         assert!(matches!(
-            eng.open_position("C", 0.5, now),
+            eng.open_position("C", 0.5, now, Some("OPP-C".into())),
             OpenOutcome::Rejected(RiskRejection::MaxPositions)
         ));
 
         // 非法价格
         assert!(matches!(
-            eng.open_position("D", 0.0, now),
+            eng.open_position("D", 0.0, now, Some("OPP-D".into())),
             OpenOutcome::Rejected(RiskRejection::InvalidPrice)
         ));
 
         // 现金不足
         let mut eng2 = PaperTradingEngine::new(50.0, p);
         assert!(matches!(
-            eng2.open_position("Low", 0.5, now),
+            eng2.open_position("Low", 0.5, now, Some("OPP-Low".into())),
             OpenOutcome::Rejected(RiskRejection::InsufficientCash)
         ));
     }
@@ -238,11 +242,11 @@ mod tests {
             max_daily_loss: 50.0,
         };
         let mut eng = PaperTradingEngine::new(10000.0, p);
-        eng.open_position("A", 0.5, now);
+        eng.open_position("A", 0.5, now, Some("OPP-A".into()));
         // 平仓产生大亏损：entry 0.5 -> exit 0.1，qty=200，realized=200*(0.1-0.5)=-80 < -50
         eng.close_position("A", 0.1, now);
         assert!(matches!(
-            eng.open_position("B", 0.5, now),
+            eng.open_position("B", 0.5, now, Some("OPP-B".into())),
             OpenOutcome::Rejected(RiskRejection::MaxDailyLoss)
         ));
     }
