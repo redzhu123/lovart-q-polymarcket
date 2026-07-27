@@ -309,7 +309,11 @@ impl fmt::Display for StatisticsAudit {
         writeln!(f, "  影子交易(CSV): {}", self.stats.shadow_trades_count)?;
         writeln!(f, "  纸面订单(CSV): {}", self.stats.paper_orders_count)?;
         writeln!(f, "  已平仓持仓(CSV):{}", self.stats.paper_positions_closed)?;
-        writeln!(f, "  检测机会(CSV): {}", self.stats.detected_opportunities_count)?;
+        writeln!(
+            f,
+            "  检测机会(CSV): {}",
+            self.stats.detected_opportunities_count
+        )?;
         writeln!(f, "  执行订单(CSV): {}", self.stats.execution_orders_count)?;
         writeln!(f, "  组合快照(CSV): {}", self.stats.portfolio_snapshots)?;
         writeln!(

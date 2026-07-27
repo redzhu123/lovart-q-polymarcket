@@ -196,10 +196,7 @@ pub async fn run_scan(cfg: &Config) -> Result<()> {
         println!();
         println!("{}", display::SEP);
         println!();
-        println!(
-            "⏳ 等待 {} 秒后开始下一轮扫描……",
-            scan_interval.as_secs()
-        );
+        println!("⏳ 等待 {} 秒后开始下一轮扫描……", scan_interval.as_secs());
         println!();
 
         // 等待后再次扫描；期间可被 Ctrl+C 中断

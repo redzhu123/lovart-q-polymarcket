@@ -16,7 +16,9 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
-use pm_models::{MarketStatus, OrderBook, PriceLevel, PriceQuote, ProviderCapability, UnifiedMarket};
+use pm_models::{
+    MarketStatus, OrderBook, PriceLevel, PriceQuote, ProviderCapability, UnifiedMarket,
+};
 
 use crate::datasource::{HealthProbe, MarketDataProvider};
 use crate::stats::{FetchResult, FetchStats};
@@ -129,7 +131,12 @@ impl MarketDataProvider for ClobProvider {
     /// 不支持：`volume` / `liquidity`（Gamma 有但 CLOB 无），默认 0.0。
     async fn fetch_markets(&self) -> Result<FetchResult> {
         let url = format!("{}/markets", CLOB_API_BASE);
-        let resp = self.client.get(&url).timeout(Duration::from_secs(30)).send().await?;
+        let resp = self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?;
         let body = resp.error_for_status()?.text().await?;
 
         let parsed: serde_json::Value = serde_json::from_str(&body)?;
@@ -156,10 +163,7 @@ impl MarketDataProvider for ClobProvider {
             let mut no_price = None;
             if let Some(tokens) = tokens {
                 for token in tokens {
-                    let outcome = token
-                        .get("outcome")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let outcome = token.get("outcome").and_then(|v| v.as_str()).unwrap_or("");
                     let price = token
                         .get("price")
                         .and_then(|v| v.as_str())
@@ -311,7 +315,12 @@ impl MarketDataProvider for ClobProvider {
     async fn health_check(&self) -> Result<HealthProbe> {
         let url = format!("{}/markets", CLOB_API_BASE);
         let start = Instant::now();
-        let resp = self.client.get(&url).timeout(Duration::from_secs(15)).send().await;
+        let resp = self
+            .client
+            .get(&url)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await;
         let latency_ms = start.elapsed().as_millis();
 
         match resp {
@@ -323,7 +332,13 @@ impl MarketDataProvider for ClobProvider {
                 } else {
                     format!("CLOB API HTTP {}（探测地址: /markets）", status)
                 };
-                Ok(HealthProbe { ok, status, market_count: 0, latency_ms, detail })
+                Ok(HealthProbe {
+                    ok,
+                    status,
+                    market_count: 0,
+                    latency_ms,
+                    detail,
+                })
             }
             Err(e) => Ok(HealthProbe {
                 ok: false,
@@ -343,7 +358,10 @@ mod tests {
     #[test]
     fn clob_capability_has_markets_orderbook_and_depth() {
         let cap = ClobProvider::capability_value();
-        assert!(cap.supports_markets, "B2: CLOB 现在支持 /markets 端点获取真实价格");
+        assert!(
+            cap.supports_markets,
+            "B2: CLOB 现在支持 /markets 端点获取真实价格"
+        );
         assert!(cap.supports_orderbook);
         assert!(cap.supports_bid_ask);
         assert!(cap.supports_trades);

@@ -122,10 +122,7 @@ mod tests {
         assert!(o.fill_time.is_none());
         assert!(approx(o.notional(), 100.0));
         assert!(o.simulation_only);
-        assert_eq!(
-            o.source_opportunity_id,
-            Some("OPP-test-001".to_string())
-        );
+        assert_eq!(o.source_opportunity_id, Some("OPP-test-001".to_string()));
 
         o.fill(now);
         assert_eq!(o.status, OrderStatus::Filled);
