@@ -396,6 +396,13 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        "dex-arb" => {
+            let path = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("dex-arbitrage.toml");
+            run_dex_v2_arbitrage(path).await
+        }
         "trace" => {
             let order_id = args
                 .iter()
@@ -775,7 +782,10 @@ fn run_report(cfg: &pm_models::Config) -> Result<()> {
     println!("--------------------------------------");
     println!();
     println!("机会（生命周期，已结束）  : {}", opps);
-    println!("机会（检测即落盘）        : {}（B3: 与纸面订单对账用）", detected);
+    println!(
+        "机会（检测即落盘）        : {}（B3: 与纸面订单对账用）",
+        detected
+    );
     println!("影子交易（已平仓）        : {}", shadow.stats.total);
     println!(
         "  盈利 / 亏损             : {} / {}",
@@ -2705,9 +2715,8 @@ fn run_trace(cfg: &pm_models::Config, order_id: &str) -> Result<()> {
             for result in opp_reader.records() {
                 let r = result?;
                 if opp_id_idx.map_or(false, |i| r.get(i) == Some(source_opp_id)) {
-                    let get_opp = |idx: Option<usize>| -> &str {
-                        idx.and_then(|i| r.get(i)).unwrap_or("-")
-                    };
+                    let get_opp =
+                        |idx: Option<usize>| -> &str { idx.and_then(|i| r.get(i)).unwrap_or("-") };
                     println!("  ID:          {}", source_opp_id);
                     println!("  问题:        {}", get_opp(opp_q_idx));
                     println!("  类型:        {}", get_opp(opp_type_idx));
@@ -2760,9 +2769,8 @@ fn run_trace(cfg: &pm_models::Config, order_id: &str) -> Result<()> {
         for result in exec_reader.records() {
             let r = result?;
             if exec_q_idx.map_or(false, |i| r.get(i) == Some(question)) {
-                let get_exec = |idx: Option<usize>| -> &str {
-                    idx.and_then(|i| r.get(i)).unwrap_or("-")
-                };
+                let get_exec =
+                    |idx: Option<usize>| -> &str { idx.and_then(|i| r.get(i)).unwrap_or("-") };
                 exec_count += 1;
                 println!(
                     "  {}. {} | 状态: {} | 创建: {} | 成交: {}",
@@ -2790,7 +2798,10 @@ fn run_trace(cfg: &pm_models::Config, order_id: &str) -> Result<()> {
     } else {
         "✓"
     };
-    println!("  Market ──→ Candidate ──→ Opportunity [{}] ──→ PaperOrder [{}] ──→ Execution ──→ Settlement", src_status, order_id);
+    println!(
+        "  Market ──→ Candidate ──→ Opportunity [{}] ──→ PaperOrder [{}] ──→ Execution ──→ Settlement",
+        src_status, order_id
+    );
     println!();
     if source_opp_id.is_empty() || source_opp_id == "-" {
         println!("  ⚠️  警告：此订单为孤儿订单，缺少 Opportunity 来源！");
@@ -2809,14 +2820,66 @@ fn run_trace(cfg: &pm_models::Config, order_id: &str) -> Result<()> {
     Ok(())
 }
 
+async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
+    use std::sync::Arc;
+
+    use pm_arbitrage::dex_v2::{
+        DexV2Config, DexV2Engine, EthCallSimulator, ExecutionMode, JsonRpcConnector,
+    };
+
+    let config = DexV2Config::load(path)?;
+    if !config.enabled {
+        anyhow::bail!("配置文件 {path} 中的 DEX V2 套利功能尚未启用");
+    }
+    let poll_interval_ms = config.poll_interval_ms;
+    let rpc_url = config.rpc_http_url.clone();
+    let mode = config.execution_mode;
+    let connector = Arc::new(JsonRpcConnector::new(rpc_url)?);
+    let mut engine = DexV2Engine::from_config(config)?;
+    if mode == ExecutionMode::SimulateOnly {
+        engine = engine.with_simulator(Arc::new(EthCallSimulator::new(connector.clone())));
+    }
+    let engine = Arc::new(engine);
+    let block = engine.initialize(connector.as_ref()).await?;
+    println!("DEX V2 循环套利扫描器已在区块 {block} 初始化，当前模式：{mode:?}");
+    println!("按 Ctrl+C 停止。当前未启用交易签名或广播。");
+
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(poll_interval_ms));
+    let mut scan_count: u64 = 0;
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => break,
+            _ = interval.tick() => {
+                scan_count = scan_count.saturating_add(1);
+                match engine.sync_once(connector.as_ref()).await {
+                    Ok(opportunities) if !opportunities.is_empty() => {
+                        println!("第 {scan_count} 轮扫描发现套利机会：{} 个", opportunities.len());
+                    }
+                    Ok(_) if scan_count % 30 == 0 => {
+                        println!("已完成 {scan_count} 轮扫描，暂无通过风控的套利机会。");
+                    }
+                    Ok(_) => {}
+                    Err(error) => tracing::warn!(error = %error, "DEX V2 同步失败，将在下一轮轮询时重试"),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn print_usage() {
     println!();
+    println!("  cargo run -p pm-cli-app -- dex-arb [config]  EVM V2 同链两跳/三跳循环套利");
     println!("用法:");
     println!();
     println!("  ── 核心 ──");
     println!("  cargo run -- scan                   正常扫描 + 纸面交易 + 执行模拟器（默认）");
-    println!("  cargo run -- diagnose               诊断模式（单次扫描 + 完整诊断报告，不进入循环）");
-    println!("  cargo run -- datasource             数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照）");
+    println!(
+        "  cargo run -- diagnose               诊断模式（单次扫描 + 完整诊断报告，不进入循环）"
+    );
+    println!(
+        "  cargo run -- datasource             数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照）"
+    );
     println!();
     println!("  ── 回放与回测 ──");
     println!("  cargo run -- replay                 历史回放");
@@ -2827,7 +2890,9 @@ fn print_usage() {
     println!("  ── 报告与审计 ──");
     println!("  cargo run -- report                 汇总报告");
     println!("  cargo run -- reset [--yes]          清空历史数据（加 --yes 真删）");
-    println!("  cargo run -- explain [pipeline|rejections|<id>]  数据链路分析 / 拒绝分析 / 机会解释");
+    println!(
+        "  cargo run -- explain [pipeline|rejections|<id>]  数据链路分析 / 拒绝分析 / 机会解释"
+    );
     println!("  cargo run -- audit                  自动数据一致性审计");
     println!("  cargo run -- trace --order <id>     订单链路追踪");
     println!();

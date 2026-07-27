@@ -1,5 +1,13 @@
 # Polymarket Quant Platform V1.02
 
+## EVM DEX V2 循环套利
+
+工作区包含一个默认安全的同链 Uniswap V2 兼容套利扫描器，支持有界的两跳和三跳
+循环路径。所有链上金额使用整数计算，支持 Shadow 和原子 `eth_call` 模拟，真实交易
+广播保持关闭。使用说明参见
+[`docs/dex-v2-arbitrage.md`](docs/dex-v2-arbitrage.md) 和
+[`dex-arbitrage.toml`](dex-arbitrage.toml).
+
 > Research Platform：持续采集数据 / 发现机会 / 验证策略 / 模拟交易 / 统计收益。
 > **Simulation Only** -- 不连接钱包 / 不真实交易 / 不签名 / 不下单 / 无 Polygon / WebSocket / 数据库 / Redis。
 

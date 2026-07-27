@@ -17,7 +17,7 @@ use crate::capability::CapabilitySet;
 use crate::error::MarketFrameworkResult;
 use crate::health::MarketHealthReport;
 use crate::metadata::MarketMetadata;
-use crate::provider::MarketDataProvider;
+use crate::provider::{CexMarketDataProvider, DexMarketDataProvider, MarketDataProvider};
 
 // ============================================================================
 // MarketPlugin Trait
@@ -99,6 +99,16 @@ pub trait MarketPlugin: Send + Sync {
     /// 用于读取行情、订单簿、成交记录等。
     /// None 表示该市场不需要数据供应商。
     fn provider(&self) -> Option<&dyn MarketDataProvider> {
+        None
+    }
+
+    /// Typed CEX provider. CEX plugins should prefer this over `provider()`.
+    fn cex_provider(&self) -> Option<&dyn CexMarketDataProvider> {
+        None
+    }
+
+    /// Typed DEX provider. DEX plugins should prefer this over `provider()`.
+    fn dex_provider(&self) -> Option<&dyn DexMarketDataProvider> {
         None
     }
 

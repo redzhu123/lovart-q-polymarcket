@@ -7,6 +7,31 @@ use async_trait::async_trait;
 
 use crate::error::MarketFrameworkResult;
 use crate::metadata::MarketMetadata;
+use crate::{AmmPoolState, DexPoolQuote, VenueQuote};
+
+/// Typed market-data boundary for centralized exchanges.
+#[async_trait]
+pub trait CexMarketDataProvider: Send + Sync {
+    fn provider_name(&self) -> &str;
+    async fn fetch_quotes(&self) -> MarketFrameworkResult<Vec<VenueQuote>>;
+    async fn health_check(&self) -> MarketFrameworkResult<()>;
+}
+
+/// Typed market-data boundary for decentralized exchanges.
+///
+/// A DEX provider exposes AMM state and quantity-specific swap quotes. It is
+/// intentionally separate from the order-book provider contract.
+#[async_trait]
+pub trait DexMarketDataProvider: Send + Sync {
+    fn provider_name(&self) -> &str;
+    async fn fetch_pool_states(&self) -> MarketFrameworkResult<Vec<AmmPoolState>>;
+    async fn quote_pool(
+        &self,
+        pool_id: &str,
+        base_quantity: f64,
+    ) -> MarketFrameworkResult<DexPoolQuote>;
+    async fn health_check(&self) -> MarketFrameworkResult<()>;
+}
 
 // ============================================================================
 // MarketDataProvider Trait

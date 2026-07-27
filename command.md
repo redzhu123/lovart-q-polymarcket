@@ -13,6 +13,43 @@
 | `diagnose` | 诊断模式（单次扫描 + 完整诊断报告，不进入循环） |
 | `datasource` | 数据源诊断（Provider / 能力 / 健康 / 缓存 / 校验 / 快照） |
 
+## EVM DEX 循环套利
+
+当前支持同链 Uniswap V2 兼容池的两跳/三跳循环套利扫描。默认使用 `shadow` 模式，只读取链上状态并在本地模拟，不连接钱包、不签名、不广播交易。
+
+| 命令 | 说明 |
+|------|------|
+| `cargo run -p pm-cli-app -- dex-arb dex-arbitrage.toml` | 使用指定配置启动 DEX 循环套利扫描器 |
+| `cargo test -p pm-arbitrage --all-features` | 运行套利模块单元测试和集成测试 |
+| `cargo check -p pm-cli-app` | 检查 CLI 与套利模块是否能够正常编译 |
+
+Windows PowerShell 使用本地 HTTP 代理（当前代理端口为 `7897`）：
+
+```powershell
+$env:HTTP_PROXY="http://127.0.0.1:7897"
+$env:HTTPS_PROXY="http://127.0.0.1:7897"
+cargo run -p pm-cli-app -- dex-arb dex-arbitrage.toml
+```
+
+如果代理提供的是 SOCKS5 协议：
+
+```powershell
+$env:HTTP_PROXY="socks5h://127.0.0.1:7897"
+$env:HTTPS_PROXY="socks5h://127.0.0.1:7897"
+cargo run -p pm-cli-app -- dex-arb dex-arbitrage.toml
+```
+
+正常运行时，CLI 每 30 轮输出一次扫描心跳。没有套利输出表示当前池间价差未通过手续费、Gas 成本和风控门槛，并非程序停止。
+
+公共 RPC 如果返回 `eth_getLogs: invalid block range params`，请保持以下配置，并根据节点日志索引延迟将 `log_query_delay_blocks` 调整到 `3` 至 `10`：
+
+```toml
+confirmation_mode = "finalized"
+log_query_delay_blocks = 5
+```
+
+`simulate_only` 模式需要先部署并配置 `execution.executor_address`，它会执行 `eth_call` 和 `eth_estimateGas`。当前版本禁止 `live` 模式，不会发送真实交易。
+
 ## 历史回放与回测
 
 | 命令 | 说明 |

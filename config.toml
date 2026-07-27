@@ -179,3 +179,22 @@ gateway_health_csv = "data/gateway_health.csv"
 entry_slippage = 0.005
 # 策略名称（写入报告，便于多次回测对比）
 strategy_name = "ShadowStrategy-v1.0"
+
+# ============================================================================
+# Independent arbitrage domains
+# ============================================================================
+[arbitrage.cex]
+# Order-book spread after taker fees and a conservative slippage buffer.
+min_profit_bps = 10.0
+min_profit_quote = 0.10
+max_quote_age_ms = 2000
+slippage_buffer_bps = 3.0
+max_notional = 1000.0
+min_quantity = 0.000001
+
+[arbitrage.dex]
+# AMM quotes already include LP fee and price impact; detection also subtracts gas.
+min_profit_bps = 10.0
+min_profit_quote = 0.10
+max_quote_age_ms = 12000
+quantity_tolerance = 0.000000001

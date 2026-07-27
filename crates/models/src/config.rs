@@ -676,6 +676,96 @@ impl Default for GatewayRawConfig {
     }
 }
 
+/// CEX order-book arbitrage limits.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CexArbitrageRawConfig {
+    #[serde(default = "default_arb_min_profit_bps")]
+    pub min_profit_bps: f64,
+    #[serde(default = "default_arb_min_profit_quote")]
+    pub min_profit_quote: f64,
+    #[serde(default = "default_arb_max_quote_age_ms")]
+    pub max_quote_age_ms: i64,
+    #[serde(default = "default_arb_slippage_buffer_bps")]
+    pub slippage_buffer_bps: f64,
+    #[serde(default = "default_arb_max_notional")]
+    pub max_notional: f64,
+    #[serde(default = "default_arb_min_quantity")]
+    pub min_quantity: f64,
+}
+
+fn default_arb_min_profit_bps() -> f64 {
+    10.0
+}
+fn default_arb_min_profit_quote() -> f64 {
+    0.10
+}
+fn default_arb_max_quote_age_ms() -> i64 {
+    2_000
+}
+fn default_arb_slippage_buffer_bps() -> f64 {
+    3.0
+}
+fn default_arb_max_notional() -> f64 {
+    1_000.0
+}
+fn default_arb_min_quantity() -> f64 {
+    0.000_001
+}
+
+impl Default for CexArbitrageRawConfig {
+    fn default() -> Self {
+        Self {
+            min_profit_bps: default_arb_min_profit_bps(),
+            min_profit_quote: default_arb_min_profit_quote(),
+            max_quote_age_ms: default_arb_max_quote_age_ms(),
+            slippage_buffer_bps: default_arb_slippage_buffer_bps(),
+            max_notional: default_arb_max_notional(),
+            min_quantity: default_arb_min_quantity(),
+        }
+    }
+}
+
+/// DEX AMM arbitrage limits. LP fee and price impact belong in each executable
+/// pool quote; gas remains an explicit per-swap cost.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DexArbitrageRawConfig {
+    #[serde(default = "default_arb_min_profit_bps")]
+    pub min_profit_bps: f64,
+    #[serde(default = "default_arb_min_profit_quote")]
+    pub min_profit_quote: f64,
+    #[serde(default = "default_dex_max_quote_age_ms")]
+    pub max_quote_age_ms: i64,
+    #[serde(default = "default_dex_quantity_tolerance")]
+    pub quantity_tolerance: f64,
+}
+
+fn default_dex_max_quote_age_ms() -> i64 {
+    12_000
+}
+fn default_dex_quantity_tolerance() -> f64 {
+    1e-9
+}
+
+impl Default for DexArbitrageRawConfig {
+    fn default() -> Self {
+        Self {
+            min_profit_bps: default_arb_min_profit_bps(),
+            min_profit_quote: default_arb_min_profit_quote(),
+            max_quote_age_ms: default_dex_max_quote_age_ms(),
+            quantity_tolerance: default_dex_quantity_tolerance(),
+        }
+    }
+}
+
+/// CEX and DEX are configured as independent strategy domains.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ArbitrageRawConfig {
+    #[serde(default)]
+    pub cex: CexArbitrageRawConfig,
+    #[serde(default)]
+    pub dex: DexArbitrageRawConfig,
+}
+
 /// 顶层配置。各子段缺省时退化为代码默认值。
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
@@ -702,6 +792,9 @@ pub struct Config {
     /// Gateway 配置（V1.08）。缺省段 -> gateway_type=mock, enable_live=false。
     #[serde(default)]
     pub gateway: GatewayRawConfig,
+    /// Independent CEX and DEX arbitrage limits.
+    #[serde(default)]
+    pub arbitrage: ArbitrageRawConfig,
 }
 
 impl Config {

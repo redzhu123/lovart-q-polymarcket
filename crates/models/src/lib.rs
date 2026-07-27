@@ -14,7 +14,10 @@ pub mod datasource;
 pub mod market;
 pub mod opportunity;
 
-pub use config::{Config, DataSourceConfig, GatewayRawConfig, LogLevel, LoggingConfig};
+pub use config::{
+    ArbitrageRawConfig, CexArbitrageRawConfig, Config, DataSourceConfig, DexArbitrageRawConfig,
+    GatewayRawConfig, LogLevel, LoggingConfig,
+};
 pub use datasource::{
     MarketStatus, OrderBook, PriceLevel, PriceQuote, ProviderCapability, UnifiedMarket,
 };

@@ -63,6 +63,7 @@
 //! ```
 
 pub mod adapter;
+pub mod amm;
 pub mod capability;
 pub mod diagnostics;
 pub mod discovery;
@@ -72,6 +73,7 @@ pub mod health;
 pub mod metadata;
 pub mod plugin;
 pub mod provider;
+pub mod quote;
 pub mod registry;
 
 // ============================================================================
@@ -82,6 +84,7 @@ pub mod registry;
 pub mod prelude {
     pub use crate::MarketFramework;
     pub use crate::adapter::{MarketAdapter, NoopAdapter, UnifiedMarketSummary, UnifiedOrderBook};
+    pub use crate::amm::{AmmPoolState, AmmState, DexPoolQuote};
     pub use crate::capability::{CapabilitySet, MarketCapability};
     pub use crate::diagnostics::{
         MarketFrameworkReport, diagnose_capability_matrix, diagnose_plugin_details,
@@ -95,9 +98,15 @@ pub mod prelude {
     };
     pub use crate::metadata::{FeeModel, MarketId, MarketMetadata, MarketType};
     pub use crate::plugin::MarketPlugin;
-    pub use crate::provider::{MarketDataProvider, MockMarketDataProvider};
+    pub use crate::provider::{
+        CexMarketDataProvider, DexMarketDataProvider, MarketDataProvider, MockMarketDataProvider,
+    };
+    pub use crate::quote::{CanonicalInstrument, ProductKind, VenueKind, VenueQuote};
     pub use crate::registry::{MarketRegistry, PluginSummary};
 }
+
+pub use amm::{AmmPoolState, AmmState, DexPoolQuote};
+pub use quote::{CanonicalInstrument, ProductKind, VenueKind, VenueQuote};
 
 // ============================================================================
 // MarketFramework（顶层门面）
