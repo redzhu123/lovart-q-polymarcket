@@ -89,6 +89,7 @@ pub struct RouteId(pub B256);
 pub enum RouteKind {
     TwoHop,
     ThreeHop,
+    FourHop,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,9 +113,10 @@ impl ArbitrageRoute {
         let kind = match legs.len() {
             2 => RouteKind::TwoHop,
             3 => RouteKind::ThreeHop,
+            4 => RouteKind::FourHop,
             count => {
                 return Err(DexV2Error::Route(format!(
-                    "invalid hop count {count}; only 2 or 3 are supported"
+                    "invalid hop count {count}; only 2 to 4 are supported"
                 )));
             }
         };

@@ -106,7 +106,7 @@ impl RiskGuard for DefaultRiskGuard {
         route: &ArbitrageRoute,
         snapshot: &StateSnapshot,
     ) -> Result<(), RejectionReason> {
-        if route.hop_count() != 2 && route.hop_count() != 3 {
+        if !(2..=4).contains(&route.hop_count()) {
             return Err(RejectionReason::InvalidRouteLength);
         }
         if route.anchor_token.chain_id != snapshot.chain_id || route.chain_id != snapshot.chain_id {
@@ -172,6 +172,10 @@ impl RiskGuard for DefaultRiskGuard {
         let (min_net, min_roi) = match route.kind {
             RouteKind::TwoHop => (self.min_net_profit, self.min_roi_bps),
             RouteKind::ThreeHop => (
+                self.min_three_hop_net_profit.max(self.min_net_profit),
+                self.min_three_hop_roi_bps.max(self.min_roi_bps),
+            ),
+            RouteKind::FourHop => (
                 self.min_three_hop_net_profit.max(self.min_net_profit),
                 self.min_three_hop_roi_bps.max(self.min_roi_bps),
             ),

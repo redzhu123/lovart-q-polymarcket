@@ -3,6 +3,7 @@
 pub mod adapter;
 pub mod config;
 pub mod connector;
+pub mod discovery;
 pub mod error;
 pub mod execution;
 pub mod gas;
@@ -21,19 +22,26 @@ pub mod types;
 pub use adapter::{PoolAdapter, UniswapV2Adapter};
 pub use config::DexV2Config;
 pub use connector::{ChainConnector, JsonRpcConnector, MockConnector};
+pub use discovery::{DiscoveryStats, discover_configured_v2_pools};
 pub use error::{DexV2Error, DexV2Result};
 pub use execution::ExecutionRequestBuilder;
-pub use gas::{GasEstimate, GasEstimateSource, GasEstimator, HopGasEstimator};
+pub use gas::{
+    FixedGasPriceOracle, GasEstimate, GasEstimateSource, GasEstimator, GasPriceOracle,
+    HopGasEstimator, RpcGasPriceOracle,
+};
 pub use graph::{
     BoundedRouteGenerator, PoolRegistry, RouteGenerationConfig, RouteGenerator, RouteIndex,
     TokenPoolGraph,
 };
 pub use optimizer::{AmountOptimizer, IntegerSearchOptimizer};
-pub use profit::{FixedNativePriceOracle, NativePriceOracle, ProfitEngine, V2ProfitEngine};
+pub use profit::{
+    FixedNativePriceOracle, NativePriceOracle, ProfitEngine, V2PoolNativePriceOracle,
+    V2ProfitEngine,
+};
 pub use quoter::{LocalRouteQuoter, RouteQuoter};
 pub use repository::{InMemoryOpportunityRepository, OpportunityRepository};
 pub use risk::{DefaultRiskGuard, RejectionReason, RiskGuard};
-pub use runtime::{DexV2Engine, RuntimeHandle};
+pub use runtime::{CostDataSnapshot, DexV2Engine, RuntimeHandle};
 pub use simulator::{EthCallSimulator, LocalShadowSimulator, SimulationEngine};
 pub use state::PoolStateCache;
 pub use types::*;

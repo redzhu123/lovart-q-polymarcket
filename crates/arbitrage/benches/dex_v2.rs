@@ -58,6 +58,7 @@ fn generation_benchmark(edges_per_pair: u16) {
     let config = RouteGenerationConfig {
         enable_two_hop: false,
         enable_three_hop: true,
+        enable_four_hop: false,
         max_route_hops: 3,
         max_routes_total: 100_000,
         max_routes_per_anchor: 100_000,

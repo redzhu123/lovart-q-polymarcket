@@ -36,7 +36,7 @@ impl RouteQuoter for LocalRouteQuoter {
         snapshot: &StateSnapshot,
         amount_in: U256,
     ) -> DexV2Result<RouteQuote> {
-        if route.hop_count() != 2 && route.hop_count() != 3 {
+        if !(2..=4).contains(&route.hop_count()) {
             return Err(DexV2Error::Route(format!(
                 "route {} has unsupported hop count {}",
                 route.id.0,

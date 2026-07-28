@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use alloy_primitives::{Address, Bytes, U256, keccak256};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use tokio::sync::{mpsc, watch};
 
 use super::adapter::{PoolAdapter, UniswapV2Adapter};
@@ -10,7 +12,7 @@ use super::config::DexV2Config;
 use super::connector::ChainConnector;
 use super::error::{DexV2Error, DexV2Result};
 use super::execution::ExecutionRequestBuilder;
-use super::gas::{GasEstimator, HopGasEstimator};
+use super::gas::{FixedGasPriceOracle, GasEstimator, GasPriceOracle, HopGasEstimator};
 use super::graph::{PoolRegistry, RouteIndex, TokenPoolGraph};
 use super::metrics::DexV2Metrics;
 use super::optimizer::{AmountOptimizer, IntegerSearchOptimizer, has_marginal_edge};
@@ -35,6 +37,7 @@ pub struct DexV2Engine {
     oracle: Arc<dyn NativePriceOracle>,
     risk: Arc<dyn RiskGuard>,
     gas_estimator: Arc<dyn GasEstimator>,
+    gas_price_oracle: Arc<dyn GasPriceOracle>,
     execution_builder: ExecutionRequestBuilder,
     simulator: Arc<dyn SimulationEngine>,
     repository: Arc<dyn OpportunityRepository>,
@@ -42,6 +45,7 @@ pub struct DexV2Engine {
     latest_checks: Mutex<HashMap<(RouteId, u64), u64>>,
     last_synced_block: Mutex<Option<u64>>,
     last_full_resync_block: Mutex<Option<u64>>,
+    log_polling_unavailable: AtomicBool,
 }
 
 impl DexV2Engine {
@@ -79,8 +83,11 @@ impl DexV2Engine {
         let gas_estimator: Arc<dyn GasEstimator> = Arc::new(HopGasEstimator {
             two_hop_fallback_gas: config.gas.two_hop_fallback_gas,
             three_hop_fallback_gas: config.gas.three_hop_fallback_gas,
+            four_hop_fallback_gas: config.gas.four_hop_fallback_gas,
             gas_units_buffer_bps: config.gas.gas_units_buffer_bps,
         });
+        let gas_price_oracle: Arc<dyn GasPriceOracle> =
+            Arc::new(FixedGasPriceOracle::new(config.max_fee_per_gas()?));
         let execution_builder = ExecutionRequestBuilder {
             default_leg_slippage_bps: config.execution.default_leg_slippage_bps,
             three_hop_leg_slippage_bps: config.execution.three_hop_leg_slippage_bps,
@@ -96,6 +103,7 @@ impl DexV2Engine {
             oracle,
             risk,
             gas_estimator,
+            gas_price_oracle,
             execution_builder,
             simulator: Arc::new(LocalShadowSimulator),
             repository: Arc::new(InMemoryOpportunityRepository::new()),
@@ -103,6 +111,7 @@ impl DexV2Engine {
             latest_checks: Mutex::new(HashMap::new()),
             last_synced_block: Mutex::new(None),
             last_full_resync_block: Mutex::new(None),
+            log_polling_unavailable: AtomicBool::new(false),
         })
     }
 
@@ -114,6 +123,33 @@ impl DexV2Engine {
     pub fn with_simulator(mut self, simulator: Arc<dyn SimulationEngine>) -> Self {
         self.simulator = simulator;
         self
+    }
+
+    pub fn with_native_price_oracle(mut self, oracle: Arc<dyn NativePriceOracle>) -> Self {
+        self.oracle = oracle;
+        self
+    }
+
+    pub fn with_gas_price_oracle(mut self, oracle: Arc<dyn GasPriceOracle>) -> Self {
+        self.gas_price_oracle = oracle;
+        self
+    }
+
+    pub async fn cost_snapshot(
+        &self,
+        anchor: &super::types::TokenId,
+        block: u64,
+    ) -> DexV2Result<CostDataSnapshot> {
+        let gas_price_wei = self.gas_price_oracle.gas_price(block).await?;
+        let native_price_anchor = self
+            .oracle
+            .quote_native_to_token(anchor, U256::from(10u64).pow(U256::from(18)), block)
+            .await?;
+        Ok(CostDataSnapshot {
+            block_number: block,
+            gas_price_wei,
+            native_price_anchor,
+        })
     }
 
     pub async fn initialize(&self, connector: &dyn ChainConnector) -> DexV2Result<u64> {
@@ -141,6 +177,7 @@ impl DexV2Engine {
             routes = self.routes.routes.len(),
             two_hop_routes = self.routes.generation_stats.generated_two_hop,
             three_hop_routes = self.routes.generation_stats.generated_three_hop,
+            four_hop_routes = self.routes.generation_stats.generated_four_hop,
             execution_mode = ?self.config.execution_mode,
             "DEX V2 cyclic engine initialized"
         );
@@ -162,18 +199,42 @@ impl DexV2Engine {
             return Ok(Vec::new());
         }
         let pools = self.registry.pools().cloned().collect::<Vec<_>>();
-        let updates = connector.poll_pool_updates(&pools, from, latest).await?;
-        let mut opportunities = Vec::new();
-        for update in updates {
-            opportunities.extend(self.process_pool_update(update).await?);
-        }
+        let mut reserve_fallback = self.log_polling_unavailable.load(Ordering::Relaxed);
+        let updates = if reserve_fallback {
+            self.load_all_pool_updates(connector, &pools, latest)
+                .await?
+        } else {
+            match connector.poll_pool_updates(&pools, from, latest).await {
+                Ok(updates) => updates,
+                Err(error) if is_log_access_restriction(&error) => {
+                    self.log_polling_unavailable.store(true, Ordering::Relaxed);
+                    reserve_fallback = true;
+                    tracing::warn!(
+                        error = %error,
+                        "RPC 限制 eth_getLogs，已降级为按新区块刷新全部池储备"
+                    );
+                    self.load_all_pool_updates(connector, &pools, latest)
+                        .await?
+                }
+                Err(error) => return Err(error),
+            }
+        };
+        let opportunities = if reserve_fallback {
+            self.process_full_snapshot(updates, latest).await?
+        } else {
+            let mut opportunities = Vec::new();
+            for update in updates {
+                opportunities.extend(self.process_pool_update(update).await?);
+            }
+            opportunities
+        };
         let should_resync = self
             .last_full_resync_block
             .lock()
             .map_err(|_| DexV2Error::PoolState("resync block lock poisoned".into()))?
             .map(|block| latest.saturating_sub(block) >= self.config.resync_interval_blocks)
             .unwrap_or(true);
-        if should_resync {
+        if should_resync && !reserve_fallback {
             for pool in &pools {
                 let state = connector.get_reserves(pool, latest).await?;
                 let _ = self.state.apply(PoolUpdate {
@@ -192,6 +253,67 @@ impl DexV2Engine {
             .last_synced_block
             .lock()
             .map_err(|_| DexV2Error::PoolState("sync block lock poisoned".into()))? = Some(latest);
+        Ok(opportunities)
+    }
+
+    async fn load_all_pool_updates(
+        &self,
+        connector: &dyn ChainConnector,
+        pools: &[super::types::V2Pool],
+        block: u64,
+    ) -> DexV2Result<Vec<PoolUpdate>> {
+        let concurrency = self.config.worker_count.clamp(1, pools.len().max(1));
+        let updates = stream::iter(pools.iter().cloned().map(|pool| async move {
+            Ok::<_, DexV2Error>(PoolUpdate {
+                pool_id: pool.id.clone(),
+                state: connector.get_reserves(&pool, block).await?,
+                log_index: 0,
+            })
+        }))
+        .buffer_unordered(concurrency)
+        .try_collect::<Vec<_>>()
+        .await?;
+        *self
+            .last_full_resync_block
+            .lock()
+            .map_err(|_| DexV2Error::PoolState("resync block lock poisoned".into()))? = Some(block);
+        Ok(updates)
+    }
+
+    async fn process_full_snapshot(
+        &self,
+        updates: Vec<PoolUpdate>,
+        block: u64,
+    ) -> DexV2Result<Vec<ArbitrageOpportunity>> {
+        let mut affected = HashMap::<RouteId, PoolId>::new();
+        for update in updates {
+            if !self.state.apply(update.clone())? {
+                continue;
+            }
+            DexV2Metrics::increment(&self.metrics.pool_updates_total);
+            for route_id in self.routes.affected_routes(&update.pool_id) {
+                affected
+                    .entry(route_id.clone())
+                    .or_insert_with(|| update.pool_id.clone());
+            }
+        }
+
+        let mut opportunities = Vec::new();
+        for (route_id, trigger_pool) in affected {
+            if let Some(opportunity) = self
+                .scan_route(
+                    &route_id,
+                    &trigger_pool,
+                    StateVersion {
+                        block_number: block,
+                        max_log_index: 0,
+                    },
+                )
+                .await?
+            {
+                opportunities.push(opportunity);
+            }
+        }
         Ok(opportunities)
     }
 
@@ -299,6 +421,10 @@ impl DexV2Engine {
                 .config
                 .min_three_hop_net_profit()?
                 .max(self.config.min_net_profit()?),
+            super::types::RouteKind::FourHop => self
+                .config
+                .min_three_hop_net_profit()?
+                .max(self.config.min_net_profit()?),
         };
         let execution = self.execution_builder.build(
             route,
@@ -321,7 +447,10 @@ impl DexV2Engine {
             .gas_estimator
             .estimate_route(route, &execution, None)
             .await?;
-        let max_fee = self.config.max_fee_per_gas()?;
+        let max_fee = self
+            .gas_price_oracle
+            .gas_price(trigger_version.block_number)
+            .await?;
         let preliminary_native = U256::from(preliminary_gas.gas_units)
             .checked_mul(max_fee)
             .ok_or_else(|| DexV2Error::Quote("gas cost overflow".into()))?;
@@ -495,6 +624,22 @@ impl DexV2Engine {
             joins,
         }
     }
+}
+
+fn is_log_access_restriction(error: &DexV2Error) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("eth_getlogs")
+        && (message.contains("http 403")
+            || message.contains("archive requests")
+            || message.contains("personal token")
+            || message.contains("invalid block range"))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CostDataSnapshot {
+    pub block_number: u64,
+    pub gas_price_wei: U256,
+    pub native_price_anchor: U256,
 }
 
 pub struct RuntimeHandle {

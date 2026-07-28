@@ -140,6 +140,9 @@ impl IntegerSearchOptimizer {
         bounds: &AmountBounds,
     ) -> DexV2Result<bool> {
         let max = self.effective_max(route, snapshot, bounds)?;
+        if max < bounds.min_input {
+            return Ok(false);
+        }
         let mut seeds = vec![bounds.min_input, max];
         for bps in &bounds.seed_reserve_bps {
             let candidate = max
@@ -186,6 +189,7 @@ impl AmountOptimizer for IntegerSearchOptimizer {
         let method = match route.kind {
             RouteKind::TwoHop => OptimizationMethod::TwoPoolClosedFormWithLocalSearch,
             RouteKind::ThreeHop => OptimizationMethod::CoarseToFine,
+            RouteKind::FourHop => OptimizationMethod::CoarseToFine,
         };
         let mut candidate_set = HashSet::new();
         candidate_set.insert(bounds.min_input);
@@ -460,6 +464,16 @@ mod tests {
             assert_eq!(result.route_quote.amount_in, U256::from(fixed));
             assert!(result.tested_amounts <= 8);
         }
+    }
+
+    #[test]
+    fn skips_route_when_reserve_cap_is_below_minimum_input() {
+        let (registry, route, snapshot) = fixture(1_080_000);
+        assert!(
+            !optimizer(registry)
+                .has_profitable_seed(&route, &snapshot, &bounds(2_000_000, 3_000_000, 8))
+                .unwrap()
+        );
     }
 
     #[test]

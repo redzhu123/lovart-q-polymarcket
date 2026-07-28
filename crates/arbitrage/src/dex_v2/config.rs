@@ -22,6 +22,8 @@ pub struct DexV2Config {
     #[serde(default)]
     pub execution_mode: ExecutionMode,
     #[serde(default)]
+    pub market_data: MarketDataConfig,
+    #[serde(default)]
     pub confirmation_mode: ConfirmationMode,
     #[serde(default = "default_poll_interval")]
     pub poll_interval_ms: u64,
@@ -66,6 +68,8 @@ pub struct DexV2Config {
     pub tokens: Vec<TokenConfig>,
     #[serde(default)]
     pub pools: Vec<PoolConfig>,
+    #[serde(default)]
+    pub factories: Vec<FactoryDiscoveryConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -74,6 +78,8 @@ pub struct RoutesConfig {
     pub enable_two_hop: bool,
     #[serde(default)]
     pub enable_three_hop: bool,
+    #[serde(default)]
+    pub enable_four_hop: bool,
     #[serde(default = "default_max_hops")]
     pub max_route_hops: usize,
     #[serde(default = "default_max_routes")]
@@ -88,11 +94,43 @@ pub struct RoutesConfig {
     pub allowed_intermediate_tokens: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketDataConfig {
+    #[serde(default)]
+    pub use_realtime_gas_price: bool,
+    #[serde(default = "default_gas_price_buffer")]
+    pub gas_price_buffer_bps: u32,
+    #[serde(default)]
+    pub native_price_pool: Option<NativePricePoolConfig>,
+}
+
+impl Default for MarketDataConfig {
+    fn default() -> Self {
+        Self {
+            use_realtime_gas_price: false,
+            gas_price_buffer_bps: default_gas_price_buffer(),
+            native_price_pool: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NativePricePoolConfig {
+    pub name: String,
+    pub address: String,
+    pub factory: String,
+    pub wrapped_native_address: String,
+    pub anchor_token: String,
+    pub native_symbol: String,
+    pub native_is_token0: bool,
+}
+
 impl Default for RoutesConfig {
     fn default() -> Self {
         Self {
             enable_two_hop: true,
             enable_three_hop: false,
+            enable_four_hop: false,
             max_route_hops: 2,
             max_routes_total: default_max_routes(),
             max_routes_per_anchor: default_max_routes_per_anchor(),
@@ -153,6 +191,8 @@ pub struct GasConfig {
     pub two_hop_fallback_gas: u64,
     #[serde(default = "default_three_hop_gas")]
     pub three_hop_fallback_gas: u64,
+    #[serde(default = "default_four_hop_gas")]
+    pub four_hop_fallback_gas: u64,
     #[serde(default = "default_gas_buffer")]
     pub gas_units_buffer_bps: u32,
 }
@@ -162,6 +202,7 @@ impl Default for GasConfig {
         Self {
             two_hop_fallback_gas: default_two_hop_gas(),
             three_hop_fallback_gas: default_three_hop_gas(),
+            four_hop_fallback_gas: default_four_hop_gas(),
             gas_units_buffer_bps: default_gas_buffer(),
         }
     }
@@ -219,6 +260,22 @@ pub struct PoolConfig {
     pub enabled: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct FactoryDiscoveryConfig {
+    pub name: String,
+    pub address: String,
+    #[serde(default)]
+    pub router: Option<String>,
+    #[serde(default = "default_fee_numerator")]
+    pub fee_numerator: u32,
+    #[serde(default = "default_fee_denominator")]
+    pub fee_denominator: u32,
+    #[serde(default = "default_factory_pair_limit")]
+    pub max_pairs: usize,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
 fn default_workers() -> usize {
     1
 }
@@ -227,6 +284,9 @@ fn default_poll_interval() -> u64 {
 }
 fn default_resync_blocks() -> u64 {
     100
+}
+fn default_gas_price_buffer() -> u32 {
+    1_000
 }
 fn default_queue() -> usize {
     1024
@@ -306,6 +366,9 @@ fn default_two_hop_gas() -> u64 {
 fn default_three_hop_gas() -> u64 {
     260_000
 }
+fn default_four_hop_gas() -> u64 {
+    340_000
+}
 fn default_gas_buffer() -> u32 {
     1_500
 }
@@ -323,6 +386,9 @@ fn default_fee_numerator() -> u32 {
 }
 fn default_fee_denominator() -> u32 {
     1000
+}
+fn default_factory_pair_limit() -> usize {
+    100
 }
 fn default_true() -> bool {
     true
@@ -365,12 +431,15 @@ impl DexV2Config {
                 "simulate_only requires execution.executor_address".into(),
             ));
         }
-        if !self.routes.enable_two_hop && !self.routes.enable_three_hop {
+        if !self.routes.enable_two_hop
+            && !self.routes.enable_three_hop
+            && !self.routes.enable_four_hop
+        {
             return Err(DexV2Error::Configuration(
                 "at least one route kind must be enabled".into(),
             ));
         }
-        if !(2..=3).contains(&self.routes.max_route_hops)
+        if !(2..=4).contains(&self.routes.max_route_hops)
             || self.routes.max_routes_total == 0
             || self.routes.max_routes_per_anchor == 0
             || self.routes.max_edges_per_token_pair == 0
@@ -391,6 +460,7 @@ impl DexV2Config {
             || self.risk.max_leg_price_impact_bps > 10_000
             || self.risk.max_total_price_impact_bps > 10_000
             || self.gas.gas_units_buffer_bps > 10_000
+            || self.market_data.gas_price_buffer_bps > 10_000
             || self.execution.default_leg_slippage_bps > 10_000
             || self.execution.three_hop_leg_slippage_bps > 10_000
         {
@@ -436,8 +506,24 @@ impl DexV2Config {
                 )));
             }
         }
+        for factory in self.factories.iter().filter(|factory| factory.enabled) {
+            let _ = parse_address(&factory.address)?;
+            if factory.name.trim().is_empty()
+                || factory.max_pairs == 0
+                || factory.fee_denominator == 0
+                || factory.fee_numerator >= factory.fee_denominator
+            {
+                return Err(DexV2Error::Configuration(
+                    "invalid V2 factory discovery config".into(),
+                ));
+            }
+            if let Some(router) = &factory.router {
+                let _ = parse_address(router)?;
+            }
+        }
         self.resolve_tokens(&self.routes.allowed_anchor_tokens)?;
         self.resolve_tokens(&self.routes.allowed_intermediate_tokens)?;
+        let _ = self.native_price_pool()?;
         let bounds = self.amount_bounds()?;
         if bounds.min_input.is_zero()
             || bounds.min_input > bounds.max_input
@@ -503,6 +589,7 @@ impl DexV2Config {
         Ok(RouteGenerationConfig {
             enable_two_hop: self.routes.enable_two_hop,
             enable_three_hop: self.routes.enable_three_hop,
+            enable_four_hop: self.routes.enable_four_hop,
             max_route_hops: self.routes.max_route_hops,
             max_routes_total: self.routes.max_routes_total,
             max_routes_per_anchor: self.routes.max_routes_per_anchor,
@@ -557,6 +644,50 @@ impl DexV2Config {
                 })
             })
             .collect()
+    }
+
+    pub fn native_price_pool(&self) -> DexV2Result<Option<(V2Pool, TokenId, TokenId)>> {
+        let Some(config) = &self.market_data.native_price_pool else {
+            return Ok(None);
+        };
+        let anchor = self
+            .resolve_tokens(std::slice::from_ref(&config.anchor_token))?
+            .into_iter()
+            .next()
+            .ok_or_else(|| DexV2Error::Configuration("native price anchor is missing".into()))?;
+        let native = TokenId {
+            chain_id: self.chain_id,
+            address: parse_address(&config.wrapped_native_address)?,
+        };
+        if native == anchor {
+            return Err(DexV2Error::Configuration(
+                "native price pool tokens must differ".into(),
+            ));
+        }
+        let (token0, token1) = if config.native_is_token0 {
+            (native.clone(), anchor.clone())
+        } else {
+            (anchor.clone(), native.clone())
+        };
+        Ok(Some((
+            V2Pool {
+                id: PoolId {
+                    chain_id: self.chain_id,
+                    address: parse_address(&config.address)?,
+                },
+                name: config.name.clone(),
+                protocol: Protocol::UniswapV2Compatible {
+                    factory: parse_address(&config.factory)?,
+                    router: None,
+                },
+                token0,
+                token1,
+                fee_numerator: 997,
+                fee_denominator: 1000,
+            },
+            native,
+            anchor,
+        )))
     }
 
     pub fn amount_bounds(&self) -> DexV2Result<AmountBounds> {
@@ -625,9 +756,12 @@ mod tests {
         assert!(config.validate().is_ok());
         assert_eq!(config.execution_mode, ExecutionMode::Shadow);
         assert!(config.routes.enable_two_hop);
-        assert!(!config.routes.enable_three_hop);
-        assert_eq!(config.routes.max_route_hops, 3);
-        assert_eq!(config.log_query_delay_blocks, 5);
+        assert!(config.routes.enable_three_hop);
+        assert!(config.routes.enable_four_hop);
+        assert_eq!(config.routes.max_route_hops, 4);
+        assert_eq!(config.log_query_delay_blocks, 0);
+        assert!(config.market_data.use_realtime_gas_price);
+        assert!(config.native_price_pool().unwrap().is_some());
     }
 
     #[test]
@@ -637,7 +771,21 @@ mod tests {
         config.execution_mode = ExecutionMode::Live;
         assert!(config.validate().is_err());
         config.execution_mode = ExecutionMode::Shadow;
-        config.routes.max_route_hops = 4;
+        config.routes.max_route_hops = 5;
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn base_and_arbitrum_configs_are_shadow_safe() {
+        for text in [
+            include_str!("../../../../dex-base.toml"),
+            include_str!("../../../../dex-arbitrum.toml"),
+        ] {
+            let config: DexV2Config = toml::from_str(text).unwrap();
+            assert!(config.validate().is_ok());
+            assert_eq!(config.execution_mode, ExecutionMode::Shadow);
+            assert!(config.factories.len() >= 2);
+            assert!(config.native_price_pool().unwrap().is_some());
+        }
     }
 }

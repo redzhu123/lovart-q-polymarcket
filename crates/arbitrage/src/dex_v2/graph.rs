@@ -107,6 +107,7 @@ impl TokenPoolGraph {
 pub struct RouteGenerationConfig {
     pub enable_two_hop: bool,
     pub enable_three_hop: bool,
+    pub enable_four_hop: bool,
     pub max_route_hops: usize,
     pub max_routes_total: usize,
     pub max_routes_per_anchor: usize,
@@ -119,6 +120,7 @@ pub struct RouteGenerationConfig {
 pub struct RouteGenerationStats {
     pub generated_two_hop: usize,
     pub generated_three_hop: usize,
+    pub generated_four_hop: usize,
     pub pruned_duplicate: usize,
     pub pruned_pair_edge_limit: usize,
     pub pruned_anchor_limit: usize,
@@ -133,6 +135,11 @@ pub trait RouteGenerator: Send + Sync {
     ) -> DexV2Result<Vec<ArbitrageRoute>>;
 
     fn generate_three_hop_routes(
+        &self,
+        graph: &TokenPoolGraph,
+        config: &RouteGenerationConfig,
+    ) -> DexV2Result<Vec<ArbitrageRoute>>;
+    fn generate_four_hop_routes(
         &self,
         graph: &TokenPoolGraph,
         config: &RouteGenerationConfig,
@@ -273,6 +280,81 @@ impl RouteGenerator for BoundedRouteGenerator<'_> {
         }
         Ok(routes)
     }
+
+    fn generate_four_hop_routes(
+        &self,
+        graph: &TokenPoolGraph,
+        config: &RouteGenerationConfig,
+    ) -> DexV2Result<Vec<ArbitrageRoute>> {
+        if !config.enable_four_hop || config.max_route_hops < 4 {
+            return Ok(Vec::new());
+        }
+        let mut routes = Vec::new();
+        for anchor in self.anchors(config) {
+            for first in graph.outgoing(&anchor.id) {
+                if !self
+                    .limited_edges(graph, &anchor.id, &first.token_out, config)
+                    .contains(first)
+                {
+                    continue;
+                }
+                let token_b = &first.token_out;
+                if token_b == &anchor.id || !self.allowed_intermediate(token_b, config) {
+                    continue;
+                }
+                for second in graph.outgoing(token_b) {
+                    if !self
+                        .limited_edges(graph, token_b, &second.token_out, config)
+                        .contains(second)
+                    {
+                        continue;
+                    }
+                    let token_c = &second.token_out;
+                    if token_c == &anchor.id
+                        || token_c == token_b
+                        || second.pool_id == first.pool_id
+                        || !self.allowed_intermediate(token_c, config)
+                    {
+                        continue;
+                    }
+                    for third in graph.outgoing(token_c) {
+                        if !self
+                            .limited_edges(graph, token_c, &third.token_out, config)
+                            .contains(third)
+                        {
+                            continue;
+                        }
+                        let token_d = &third.token_out;
+                        if token_d == &anchor.id
+                            || token_d == token_b
+                            || token_d == token_c
+                            || third.pool_id == first.pool_id
+                            || third.pool_id == second.pool_id
+                            || !self.allowed_intermediate(token_d, config)
+                        {
+                            continue;
+                        }
+                        for fourth in self.limited_edges(graph, token_d, &anchor.id, config) {
+                            if fourth.pool_id == first.pool_id
+                                || fourth.pool_id == second.pool_id
+                                || fourth.pool_id == third.pool_id
+                            {
+                                continue;
+                            }
+                            routes.push(self.make_route(
+                                &anchor.id,
+                                &[first.clone(), second.clone(), third.clone(), fourth.clone()],
+                            )?);
+                            if routes.len() >= config.max_routes_total {
+                                return Ok(routes);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(routes)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -290,14 +372,15 @@ impl RouteIndex {
         graph: &TokenPoolGraph,
         config: &RouteGenerationConfig,
     ) -> DexV2Result<Self> {
-        if config.max_route_hops != 2 && config.max_route_hops != 3 {
+        if !(2..=4).contains(&config.max_route_hops) {
             return Err(DexV2Error::Configuration(
-                "max_route_hops must be 2 or 3".into(),
+                "max_route_hops must be between 2 and 4".into(),
             ));
         }
         let generator = BoundedRouteGenerator::new(registry);
         let mut candidates = generator.generate_two_hop_routes(graph, config)?;
         candidates.extend(generator.generate_three_hop_routes(graph, config)?);
+        candidates.extend(generator.generate_four_hop_routes(graph, config)?);
         candidates.sort_by_key(|route| (route.anchor_token.address, route.id.clone()));
 
         let mut index = Self::default();
@@ -325,6 +408,7 @@ impl RouteIndex {
             match route.legs.len() {
                 2 => index.generation_stats.generated_two_hop += 1,
                 3 => index.generation_stats.generated_three_hop += 1,
+                4 => index.generation_stats.generated_four_hop += 1,
                 _ => return Err(DexV2Error::Route("unsupported route length".into())),
             }
             let id = route.id.clone();
@@ -420,6 +504,7 @@ mod tests {
         RouteGenerationConfig {
             enable_two_hop: true,
             enable_three_hop: true,
+            enable_four_hop: false,
             max_route_hops: 3,
             max_routes_total: 100,
             max_routes_per_anchor: 100,

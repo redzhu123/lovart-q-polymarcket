@@ -4,6 +4,7 @@ use std::time::SystemTime;
 
 use alloy_primitives::{Address, B256, Bytes, U256, keccak256};
 use async_trait::async_trait;
+use futures_util::{StreamExt, TryStreamExt, stream};
 use serde_json::{Value, json};
 
 use super::error::{DexV2Error, DexV2Result};
@@ -12,6 +13,13 @@ use super::types::{ConfirmationMode, PoolId, PoolUpdate, V2Pool, V2PoolState};
 #[async_trait]
 pub trait ChainConnector: Send + Sync {
     async fn head_block(&self, mode: ConfirmationMode) -> DexV2Result<u64>;
+    async fn gas_price(&self) -> DexV2Result<U256>;
+    async fn v2_pair(
+        &self,
+        factory: Address,
+        token_a: Address,
+        token_b: Address,
+    ) -> DexV2Result<Address>;
     async fn get_reserves(&self, pool: &V2Pool, block: u64) -> DexV2Result<V2PoolState>;
     async fn poll_pool_updates(
         &self,
@@ -62,7 +70,7 @@ impl JsonRpcConnector {
             .await
             .map_err(|e| DexV2Error::Rpc(format!("{method} decode: {e}")))?;
         if !status.is_success() {
-            return Err(DexV2Error::Rpc(format!("{method} HTTP {status}")));
+            return Err(DexV2Error::Rpc(format!("{method} HTTP {status}: {body}")));
         }
         if let Some(error) = body.get("error") {
             return Err(DexV2Error::Rpc(format!("{method}: {error}")));
@@ -100,6 +108,47 @@ impl ChainConnector for JsonRpcConnector {
         )
     }
 
+    async fn gas_price(&self) -> DexV2Result<U256> {
+        let value = self.rpc("eth_gasPrice", json!([])).await?;
+        parse_hex_u256(
+            value
+                .as_str()
+                .ok_or_else(|| DexV2Error::Rpc("invalid gas price".into()))?,
+        )
+    }
+
+    async fn v2_pair(
+        &self,
+        factory: Address,
+        token_a: Address,
+        token_b: Address,
+    ) -> DexV2Result<Address> {
+        let mut data = Vec::with_capacity(68);
+        data.extend_from_slice(&[0xe6, 0xa4, 0x39, 0x05]);
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(token_a.as_slice());
+        data.extend_from_slice(&[0u8; 12]);
+        data.extend_from_slice(token_b.as_slice());
+        let result = self
+            .rpc(
+                "eth_call",
+                json!([{
+                    "to": format!("{factory:#x}"),
+                    "data": format!("0x{}", hex_encode(&data)),
+                }, "latest"]),
+            )
+            .await?;
+        let bytes = parse_hex_bytes(
+            result
+                .as_str()
+                .ok_or_else(|| DexV2Error::Rpc("invalid getPair result".into()))?,
+        )?;
+        if bytes.len() < 32 {
+            return Err(DexV2Error::Rpc("short getPair result".into()));
+        }
+        Ok(Address::from_slice(&bytes[bytes.len() - 20..]))
+    }
+
     async fn get_reserves(&self, pool: &V2Pool, block: u64) -> DexV2Result<V2PoolState> {
         let bytes = self
             .eth_call(
@@ -132,44 +181,53 @@ impl ChainConnector for JsonRpcConnector {
         if from_block > to_block || pools.is_empty() {
             return Ok(Vec::new());
         }
-        let addresses = pools
-            .iter()
-            .map(|pool| format!("{:#x}", pool.id.address))
-            .collect::<Vec<_>>();
         let sync_topic = format!("{:#x}", keccak256("Sync(uint112,uint112)"));
-        let result = self
-            .rpc(
-                "eth_getLogs",
-                json!([{
-                    "fromBlock": format!("0x{from_block:x}"), "toBlock": format!("0x{to_block:x}"),
-                    "address": addresses, "topics": [sync_topic],
-                }]),
-            )
-            .await?;
-        let logs = result
-            .as_array()
-            .ok_or_else(|| DexV2Error::Rpc("eth_getLogs result is not an array".into()))?;
+        let addresses = pools.iter().map(|pool| pool.id.address).collect::<Vec<_>>();
+        // PublicNode 等免费 RPC 会拦截 address 数组，因此按单池查询，并限制并发。
+        let results = stream::iter(addresses.into_iter().map(|address| {
+            let sync_topic = sync_topic.clone();
+            async move {
+                self.rpc(
+                    "eth_getLogs",
+                    json!([{
+                        "fromBlock": format!("0x{from_block:x}"),
+                        "toBlock": format!("0x{to_block:x}"),
+                        "address": format!("{address:#x}"),
+                        "topics": [sync_topic],
+                    }]),
+                )
+                .await
+            }
+        }))
+        .buffer_unordered(4)
+        .try_collect::<Vec<_>>()
+        .await?;
         let by_address = pools
             .iter()
             .map(|pool| (pool.id.address, pool))
             .collect::<HashMap<_, _>>();
         let mut latest = HashMap::<Address, (u64, u64, Option<B256>)>::new();
-        for raw in logs {
-            let address = parse_address_field(raw, "address")?;
-            if raw.get("removed").and_then(Value::as_bool).unwrap_or(false) {
-                latest.insert(address, (to_block, u64::MAX, None));
-                continue;
-            }
-            let block = parse_hex_u64(field_str(raw, "blockNumber")?)?;
-            let index = parse_hex_u64(field_str(raw, "logIndex")?)?;
-            let hash = raw
-                .get("blockHash")
-                .and_then(Value::as_str)
-                .map(parse_b256)
-                .transpose()?;
-            let version = latest.entry(address).or_insert((0, 0, None));
-            if (block, index) > (version.0, version.1) {
-                *version = (block, index, hash);
+        for result in results {
+            let logs = result
+                .as_array()
+                .ok_or_else(|| DexV2Error::Rpc("eth_getLogs result is not an array".into()))?;
+            for raw in logs {
+                let address = parse_address_field(raw, "address")?;
+                if raw.get("removed").and_then(Value::as_bool).unwrap_or(false) {
+                    latest.insert(address, (to_block, u64::MAX, None));
+                    continue;
+                }
+                let block = parse_hex_u64(field_str(raw, "blockNumber")?)?;
+                let index = parse_hex_u64(field_str(raw, "logIndex")?)?;
+                let hash = raw
+                    .get("blockHash")
+                    .and_then(Value::as_str)
+                    .map(parse_b256)
+                    .transpose()?;
+                let version = latest.entry(address).or_insert((0, 0, None));
+                if (block, index) > (version.0, version.1) {
+                    *version = (block, index, hash);
+                }
             }
         }
         let mut updates = Vec::with_capacity(latest.len());
@@ -232,8 +290,12 @@ impl ChainConnector for JsonRpcConnector {
 #[derive(Debug, Default)]
 pub struct MockConnector {
     latest: Mutex<u64>,
+    gas_price: Mutex<U256>,
     states: Mutex<HashMap<PoolId, V2PoolState>>,
     affected: Mutex<HashSet<PoolId>>,
+    pairs: Mutex<HashMap<(Address, Address, Address), Address>>,
+    call_result: Mutex<Bytes>,
+    gas_estimate: Mutex<u64>,
 }
 
 impl MockConnector {
@@ -246,6 +308,31 @@ impl MockConnector {
     pub fn set_block(&self, block: u64) {
         if let Ok(mut latest) = self.latest.lock() {
             *latest = block;
+        }
+    }
+    pub fn set_gas_price(&self, gas_price: U256) {
+        if let Ok(mut value) = self.gas_price.lock() {
+            *value = gas_price;
+        }
+    }
+    pub fn set_v2_pair(&self, factory: Address, token_a: Address, token_b: Address, pair: Address) {
+        let (token0, token1) = if token_a < token_b {
+            (token_a, token_b)
+        } else {
+            (token_b, token_a)
+        };
+        if let Ok(mut pairs) = self.pairs.lock() {
+            pairs.insert((factory, token0, token1), pair);
+        }
+    }
+    pub fn set_call_result(&self, result: Bytes) {
+        if let Ok(mut value) = self.call_result.lock() {
+            *value = result;
+        }
+    }
+    pub fn set_gas_estimate(&self, gas: u64) {
+        if let Ok(mut value) = self.gas_estimate.lock() {
+            *value = gas;
         }
     }
     pub fn set_state(&self, pool_id: PoolId, state: V2PoolState) {
@@ -265,6 +352,33 @@ impl ChainConnector for MockConnector {
             .lock()
             .map(|value| *value)
             .map_err(|_| DexV2Error::Rpc("mock lock poisoned".into()))
+    }
+    async fn gas_price(&self) -> DexV2Result<U256> {
+        self.gas_price
+            .lock()
+            .map(|value| *value)
+            .map_err(|_| DexV2Error::Rpc("mock gas price lock poisoned".into()))
+    }
+    async fn v2_pair(
+        &self,
+        factory: Address,
+        token_a: Address,
+        token_b: Address,
+    ) -> DexV2Result<Address> {
+        let (token0, token1) = if token_a < token_b {
+            (token_a, token_b)
+        } else {
+            (token_b, token_a)
+        };
+        self.pairs
+            .lock()
+            .map_err(|_| DexV2Error::Rpc("mock pair lock poisoned".into()))
+            .map(|pairs| {
+                pairs
+                    .get(&(factory, token0, token1))
+                    .copied()
+                    .unwrap_or(Address::ZERO)
+            })
     }
     async fn get_reserves(&self, pool: &V2Pool, _block: u64) -> DexV2Result<V2PoolState> {
         self.states
@@ -303,7 +417,10 @@ impl ChainConnector for MockConnector {
         Ok(result)
     }
     async fn eth_call(&self, _to: Address, _data: Bytes, _block: u64) -> DexV2Result<Bytes> {
-        Ok(Bytes::new())
+        self.call_result
+            .lock()
+            .map(|value| value.clone())
+            .map_err(|_| DexV2Error::Rpc("mock call result lock poisoned".into()))
     }
     async fn estimate_gas(
         &self,
@@ -312,7 +429,10 @@ impl ChainConnector for MockConnector {
         _data: Bytes,
         _block: u64,
     ) -> DexV2Result<u64> {
-        Ok(0)
+        self.gas_estimate
+            .lock()
+            .map(|value| *value)
+            .map_err(|_| DexV2Error::Rpc("mock gas estimate lock poisoned".into()))
     }
 }
 
@@ -334,6 +454,10 @@ fn parse_b256(value: &str) -> DexV2Result<B256> {
 }
 fn parse_hex_u64(value: &str) -> DexV2Result<u64> {
     u64::from_str_radix(value.trim_start_matches("0x"), 16)
+        .map_err(|e| DexV2Error::Rpc(format!("invalid hex integer {value}: {e}")))
+}
+fn parse_hex_u256(value: &str) -> DexV2Result<U256> {
+    U256::from_str_radix(value.trim_start_matches("0x"), 16)
         .map_err(|e| DexV2Error::Rpc(format!("invalid hex integer {value}: {e}")))
 }
 fn parse_hex_bytes(value: &str) -> DexV2Result<Bytes> {

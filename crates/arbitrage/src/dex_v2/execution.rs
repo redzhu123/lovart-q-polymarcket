@@ -32,6 +32,7 @@ impl ExecutionRequestBuilder {
         let slippage = match route.kind {
             RouteKind::TwoHop => self.default_leg_slippage_bps,
             RouteKind::ThreeHop => self.three_hop_leg_slippage_bps,
+            RouteKind::FourHop => self.three_hop_leg_slippage_bps,
         };
         let mut steps = Vec::with_capacity(route.hop_count());
         for (index, (leg, leg_quote)) in route.legs.iter().zip(&quote.leg_quotes).enumerate() {
@@ -81,7 +82,7 @@ impl ExecutionRequestBuilder {
         executor: Address,
         request: &ExecutionRequest,
     ) -> DexV2Result<EncodedCall> {
-        if !(2..=3).contains(&request.steps.len()) || request.steps.len() > self.max_steps {
+        if !(2..=4).contains(&request.steps.len()) || request.steps.len() > self.max_steps {
             return Err(DexV2Error::Execution(
                 "executor only accepts 2 or 3 steps".into(),
             ));
