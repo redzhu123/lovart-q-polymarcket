@@ -1,0 +1,78 @@
+# 三链跨链最短路径 Shadow。桥参数用于候选评估，不代表桥的成交保证。
+enabled = true
+anchor_asset = "USDC"
+input_amount_anchor = "1000000000"       # 1000 USDC
+minimum_net_profit_anchor = "1000000"     # 1 USDC
+minimum_roi_bps = 10
+minimum_theoretical_profit_bps = 15
+max_steps = 6
+max_bridges = 2
+risk_buffer_bps = 30
+
+# Polygon
+[[tokens]]
+chain_id = 137
+asset_id = "USDC"
+address = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+decimals = 6
+
+[[tokens]]
+chain_id = 137
+asset_id = "WETH"
+address = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+decimals = 18
+
+# Base
+[[tokens]]
+chain_id = 8453
+asset_id = "USDC"
+address = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+decimals = 6
+
+[[tokens]]
+chain_id = 8453
+asset_id = "WETH"
+address = "0x4200000000000000000000000000000000000006"
+decimals = 18
+
+# Arbitrum One
+[[tokens]]
+chain_id = 42161
+asset_id = "USDC"
+address = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+decimals = 6
+
+[[tokens]]
+chain_id = 42161
+asset_id = "WETH"
+address = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+decimals = 18
+
+[[chain_costs]]
+chain_id = 137
+swap_gas_anchor = "10000"
+
+[[chain_costs]]
+chain_id = 8453
+swap_gas_anchor = "20000"
+
+[[chain_costs]]
+chain_id = 42161
+swap_gas_anchor = "20000"
+
+# V1 使用保守桥费形成候选边；最终执行前仍需用 LI.FI/Across 实时报价替换。
+[[bridges]]
+provider = "lifi_estimate"
+asset_id = "USDC"
+chains = [137, 8453, 42161]
+fee_bps = 20
+fixed_cost_anchor = "500000"
+estimated_seconds = 120
+
+[[bridges]]
+provider = "lifi_estimate"
+asset_id = "WETH"
+chains = [137, 8453, 42161]
+fee_bps = 20
+fixed_cost_anchor = "500000"
+estimated_seconds = 120

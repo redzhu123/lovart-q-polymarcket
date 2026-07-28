@@ -1,0 +1,33 @@
+# 跨链纸面套利只评估“预置库存”模型，不会发交易，也不保证跨链原子性。
+# 下列数值均使用代币最小单位。请用同一时刻的真实 DEX 报价、Gas 换算和桥报价替换后再启用。
+enabled = false
+minimum_net_profit_anchor = "1000000"
+minimum_roi_bps = 10
+max_quote_age_ms = 10000
+bridge_risk_buffer_bps = 20
+
+[snapshot]
+source_chain_id = 137
+destination_chain_id = 8453
+anchor_token_source = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+anchor_token_destination = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+asset_token_source = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"
+asset_token_destination = "0x4200000000000000000000000000000000000006"
+source_anchor_in = "1000000000"
+source_asset_out = "500000000000000000"
+destination_asset_in = "500000000000000000"
+destination_anchor_out = "1005000000"
+source_gas_anchor = "100000"
+destination_gas_anchor = "100000"
+rebalance_cost_anchor = "1000000"
+observed_at_ms = 0
+
+[[inventory]]
+chain_id = 137
+token = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+amount = "10000000000"
+
+[[inventory]]
+chain_id = 8453
+token = "0x4200000000000000000000000000000000000006"
+amount = "10000000000000000000"
