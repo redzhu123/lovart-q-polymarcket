@@ -403,6 +403,20 @@ async fn main() -> Result<()> {
                 .unwrap_or("dex-arbitrage.toml");
             run_dex_v2_arbitrage(path).await
         }
+        "dex-multi" => {
+            let path = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("multi-chain-arbitrage.toml");
+            run_multi_chain_arbitrage(path).await
+        }
+        "cross-chain-paper" => {
+            let path = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("cross-chain-paper.toml");
+            run_cross_chain_paper(path)
+        }
         "trace" => {
             let order_id = args
                 .iter()
@@ -2825,23 +2839,107 @@ async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
 
     use pm_arbitrage::dex_v2::{
         DexV2Config, DexV2Engine, EthCallSimulator, ExecutionMode, JsonRpcConnector,
+        RpcGasPriceOracle, V2PoolNativePriceOracle, discover_configured_v2_pools,
     };
 
-    let config = DexV2Config::load(path)?;
+    let mut config = DexV2Config::load(path)?;
     if !config.enabled {
         anyhow::bail!("配置文件 {path} 中的 DEX V2 套利功能尚未启用");
     }
     let poll_interval_ms = config.poll_interval_ms;
     let rpc_url = config.rpc_http_url.clone();
     let mode = config.execution_mode;
+    let realtime_gas_price = config.market_data.use_realtime_gas_price;
+    let gas_price_buffer_bps = config.market_data.gas_price_buffer_bps;
+    let native_price_pool = config.native_price_pool()?;
+    let realtime_native_price = native_price_pool.is_some();
+    let native_symbol = config
+        .market_data
+        .native_price_pool
+        .as_ref()
+        .map(|pool| pool.native_symbol.clone())
+        .unwrap_or_else(|| "NATIVE".into());
+    let two_hop_fallback_gas = config.gas.two_hop_fallback_gas;
+    let three_hop_fallback_gas = config.gas.three_hop_fallback_gas;
+    let four_hop_fallback_gas = config.gas.four_hop_fallback_gas;
+    let gas_units_buffer_bps = config.gas.gas_units_buffer_bps;
     let connector = Arc::new(JsonRpcConnector::new(rpc_url)?);
+    let discovery = discover_configured_v2_pools(&mut config, connector.as_ref()).await?;
+    println!(
+        "V2 Factory 发现：查询 {} 个 Factory / {} 个交易对，新增 {} 个池，跳过 {} 个重复池。",
+        discovery.factories_queried,
+        discovery.pairs_queried,
+        discovery.pools_discovered,
+        discovery.duplicate_pools,
+    );
     let mut engine = DexV2Engine::from_config(config)?;
+    if realtime_gas_price {
+        engine = engine.with_gas_price_oracle(Arc::new(RpcGasPriceOracle::new(
+            connector.clone(),
+            gas_price_buffer_bps,
+        )?));
+    }
+    if let Some((pool, native_token, anchor_token)) = native_price_pool {
+        engine = engine.with_native_price_oracle(Arc::new(V2PoolNativePriceOracle::new(
+            connector.clone(),
+            pool,
+            native_token,
+            anchor_token,
+        )?));
+    }
     if mode == ExecutionMode::SimulateOnly {
         engine = engine.with_simulator(Arc::new(EthCallSimulator::new(connector.clone())));
     }
     let engine = Arc::new(engine);
     let block = engine.initialize(connector.as_ref()).await?;
     println!("DEX V2 循环套利扫描器已在区块 {block} 初始化，当前模式：{mode:?}");
+    if let Some(anchor) = engine.registry.anchors().next() {
+        let costs = engine.cost_snapshot(&anchor.id, block).await?;
+        let gas_source = if realtime_gas_price {
+            format!("RPC 实时建议价，含 {} bps 缓冲", gas_price_buffer_bps)
+        } else {
+            "配置固定值".into()
+        };
+        let price_source = if realtime_native_price {
+            "链上 V2 池储备"
+        } else {
+            "配置固定值"
+        };
+        println!(
+            "实时成本数据：Gas Price={} Gwei（{}）；1 {}={} {}（{}，区块 {}）",
+            format_u256_units(costs.gas_price_wei, 9, 4),
+            gas_source,
+            native_symbol,
+            format_u256_units(costs.native_price_anchor, anchor.decimals, 6),
+            anchor.symbol,
+            price_source,
+            costs.block_number,
+        );
+        let two_hop_gas = buffered_gas_units(two_hop_fallback_gas, gas_units_buffer_bps)?;
+        let three_hop_gas = buffered_gas_units(three_hop_fallback_gas, gas_units_buffer_bps)?;
+        let four_hop_gas = buffered_gas_units(four_hop_fallback_gas, gas_units_buffer_bps)?;
+        let one_native = alloy_primitives::U256::from(10u64).pow(alloy_primitives::U256::from(18));
+        let gas_cost = |gas_units: u64| -> Result<alloy_primitives::U256> {
+            alloy_primitives::U256::from(gas_units)
+                .checked_mul(costs.gas_price_wei)
+                .and_then(|value| value.checked_mul(costs.native_price_anchor))
+                .map(|value| value / one_native)
+                .ok_or_else(|| anyhow::anyhow!("Gas 成本换算溢出"))
+        };
+        println!(
+            "按当前实时数据估算：两跳 Gas≈{} {}，三跳 Gas≈{} {}，四跳 Gas≈{} {}。",
+            format_u256_units(gas_cost(two_hop_gas)?, anchor.decimals, 6),
+            anchor.symbol,
+            format_u256_units(gas_cost(three_hop_gas)?, anchor.decimals, 6),
+            anchor.symbol,
+            format_u256_units(gas_cost(four_hop_gas)?, anchor.decimals, 6),
+            anchor.symbol,
+        );
+    }
+    println!(
+        "Gas 用量来源：Shadow 两跳/三跳/四跳基础估算={}/{}/{}，另加 {} bps 缓冲；simulate_only 才使用 eth_estimateGas。",
+        two_hop_fallback_gas, three_hop_fallback_gas, four_hop_fallback_gas, gas_units_buffer_bps
+    );
     println!("按 Ctrl+C 停止。当前未启用交易签名或广播。");
 
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(poll_interval_ms));
@@ -2867,9 +2965,166 @@ async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
     Ok(())
 }
 
+async fn run_multi_chain_arbitrage(path: &str) -> Result<()> {
+    use std::collections::HashSet;
+
+    use pm_arbitrage::cross_chain::{CrossChainPathConfig, CrossChainPathScanner};
+    use pm_arbitrage::multi_chain::{MultiChainConfig, build_supervisor};
+
+    let config = MultiChainConfig::load(path)?;
+    let poll_interval_ms = config.poll_interval_ms;
+    let cross_chain_scanner = config
+        .cross_chain_config_path
+        .as_ref()
+        .map(CrossChainPathConfig::load)
+        .transpose()?
+        .map(CrossChainPathScanner::new)
+        .transpose()?;
+    let supervisor = build_supervisor(&config).await?;
+    println!(
+        "多链 DEX Shadow 扫描器启动，共 {} 条链。",
+        supervisor.chains().len()
+    );
+    for report in supervisor.initialize_all().await {
+        if let Some(error) = report.error {
+            println!(
+                "[{}:{}] 初始化失败：{}",
+                report.name, report.chain_id, error
+            );
+        } else {
+            println!(
+                "[{}:{}] 区块={}，池={}，循环路由={}",
+                report.name,
+                report.chain_id,
+                report.block_number.unwrap_or_default(),
+                report.pools,
+                report.routes
+            );
+        }
+    }
+    if cross_chain_scanner.is_some() {
+        println!("跨链最短路径 Shadow 已启用：负对数候选搜索 + U256 整数逐腿复算。 ");
+    }
+    println!("各链独立扫描，不执行跨链原子交易。按 Ctrl+C 停止。");
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(poll_interval_ms));
+    let mut scan_count = 0u64;
+    let mut reported_cross_chain = HashSet::new();
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => break,
+            _ = interval.tick() => {
+                scan_count = scan_count.saturating_add(1);
+                for report in supervisor.sync_all().await {
+                    if let Some(error) = report.error {
+                        tracing::warn!(chain = %report.name, chain_id = report.chain_id, error = %error, "多链 DEX 同步失败");
+                    } else if report.opportunities > 0 {
+                        println!("第 {scan_count} 轮 [{}:{}] 发现 {} 个通过风控的机会。", report.name, report.chain_id, report.opportunities);
+                    }
+                }
+                if let Some(scanner) = &cross_chain_scanner {
+                    match scanner.scan(&supervisor) {
+                        Ok(routes) => {
+                            for route in routes {
+                                if !reported_cross_chain.insert(route.id) {
+                                    continue;
+                                }
+                                let path = route.nodes.iter()
+                                    .map(|node| format!("{}:{}", node.chain_id, node.asset_id))
+                                    .collect::<Vec<_>>()
+                                    .join(" -> ");
+                                println!(
+                                    "跨链 Shadow 最优路径：{}；输入={}，输出={}，总成本={}，净利润={}，ROI={} bps，桥接={} 次，预计桥耗时={} 秒。",
+                                    path,
+                                    route.amount_in,
+                                    route.amount_out,
+                                    route.total_cost_anchor,
+                                    route.net_profit,
+                                    route.roi_bps,
+                                    route.bridge_count,
+                                    route.estimated_bridge_seconds,
+                                );
+                                println!("该路径采用预置库存非原子模型，不会签名、桥接或广播交易。");
+                            }
+                        }
+                        Err(error) => tracing::warn!(error = %error, "跨链最短路径扫描失败"),
+                    }
+                }
+                if scan_count % 30 == 0 {
+                    if cross_chain_scanner.is_some() {
+                        println!("多链与跨链最短路径扫描已完成 {scan_count} 轮。");
+                    } else {
+                        println!("多链扫描已完成 {scan_count} 轮。");
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn run_cross_chain_paper(path: &str) -> Result<()> {
+    use pm_arbitrage::cross_chain::paper::CrossChainPaperFileConfig;
+
+    let config = CrossChainPaperFileConfig::load(path)?;
+    if !config.enabled {
+        anyhow::bail!(
+            "配置文件 {path} 中的跨链纸面套利尚未启用；请先填入同一时刻的真实 DEX、Gas 和桥报价"
+        );
+    }
+    let (detector, snapshot, inventory) = config.build()?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_millis()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("系统时间超出 i64 范围"))?;
+    match detector.detect(&snapshot, &inventory, now_ms)? {
+        Some(opportunity) => println!(
+            "发现跨链纸面机会：id={:#x}，{} -> {}，毛利润={}，总成本={}，净利润={}，ROI={} bps。",
+            opportunity.id,
+            opportunity.source_chain_id,
+            opportunity.destination_chain_id,
+            opportunity.gross_profit_anchor,
+            opportunity.total_cost_anchor,
+            opportunity.net_profit_anchor,
+            opportunity.roi_bps,
+        ),
+        None => println!("当前快照未通过时效、库存、净利润或 ROI 检查。"),
+    }
+    println!("本结果使用预置库存模型，仅模拟记账；跨链再平衡不是原子操作。 ");
+    Ok(())
+}
+
+fn format_u256_units(value: alloy_primitives::U256, decimals: u8, precision: usize) -> String {
+    if decimals == 0 {
+        return value.to_string();
+    }
+    let scale = alloy_primitives::U256::from(10u64).pow(alloy_primitives::U256::from(decimals));
+    let whole = value / scale;
+    let fraction = value % scale;
+    let width = usize::from(decimals);
+    let mut fraction = format!("{fraction:0>width$}");
+    fraction.truncate(precision.min(width));
+    while fraction.ends_with('0') {
+        fraction.pop();
+    }
+    if fraction.is_empty() {
+        whole.to_string()
+    } else {
+        format!("{whole}.{fraction}")
+    }
+}
+
+fn buffered_gas_units(base: u64, buffer_bps: u32) -> Result<u64> {
+    base.checked_mul(10_000u64 + u64::from(buffer_bps))
+        .map(|value| value.div_ceil(10_000))
+        .ok_or_else(|| anyhow::anyhow!("Gas 用量缓冲计算溢出"))
+}
+
 fn print_usage() {
     println!();
-    println!("  cargo run -p pm-cli-app -- dex-arb [config]  EVM V2 同链两跳/三跳循环套利");
+    println!("  cargo run -p pm-cli-app -- dex-arb [config]  EVM V2 同链二至四跳循环套利");
+    println!("  cargo run -p pm-cli-app -- dex-multi [config]  多链并行 Shadow 扫描");
+    println!("  cargo run -p pm-cli-app -- cross-chain-paper [config]  跨链库存纸面套利评估");
     println!("用法:");
     println!();
     println!("  ── 核心 ──");

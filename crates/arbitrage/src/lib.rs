@@ -5,8 +5,11 @@
 //! both types, preventing accidental CEX-to-DEX opportunity construction.
 
 pub mod cex;
+pub mod cross_chain;
 pub mod dex;
+pub mod dex_router;
 pub mod dex_v2;
+pub mod multi_chain;
 
 pub use cex::{CexArbitrageConfig, CexArbitrageDetector, CexArbitrageOpportunity, CexLeg};
 pub use dex::{DexArbitrageConfig, DexArbitrageDetector, DexArbitrageOpportunity, DexLeg};

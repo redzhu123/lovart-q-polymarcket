@@ -79,7 +79,7 @@ contract V2ArbitrageExecutor {
         uint256 deadline,
         V2SwapStep[] calldata steps
     ) external onlyExecutor nonReentrant {
-        if (steps.length < 2 || steps.length > 3) revert InvalidStepCount();
+        if (steps.length < 2 || steps.length > 4) revert InvalidStepCount();
         if (block.timestamp > deadline) revert DeadlineExpired();
         if (!allowedTokens[anchorToken] || steps[0].tokenIn != anchorToken) revert InvalidRoute();
         if (steps[steps.length - 1].tokenOut != anchorToken) revert InvalidRoute();

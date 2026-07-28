@@ -72,6 +72,7 @@ toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
+futures-util = "0.3"
 alloy-primitives = { version = "1", features = ["serde"] }
 
 # ---- 内部 crate（path 依赖，版本跟 workspace.package）----

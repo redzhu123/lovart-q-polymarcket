@@ -38,6 +38,7 @@ pm-settlement = { workspace = true }
 pm-market-framework = { workspace = true }
 pm-audit = { workspace = true }
 pm-arbitrage = { workspace = true }
+alloy-primitives = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

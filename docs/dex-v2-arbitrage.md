@@ -44,9 +44,25 @@ RouteId 使用 `chain_id`、anchor 以及每一跳的池地址、输入代币和
 可以从 [`dex-arbitrage.toml`](../dex-arbitrage.toml) 开始配置。V2 核心配置如下：
 
 ```toml
-confirmation_mode = "finalized"
+confirmation_mode = "latest"
 # 公共 RPC 的 eth_getLogs 索引可能落后链头，按节点情况设置为 3 到 10。
-log_query_delay_blocks = 5
+log_query_delay_blocks = 0
+
+[market_data]
+# 从 RPC 的 eth_gasPrice 获取实时建议价。
+use_realtime_gas_price = true
+# 在实时建议价上增加 10%，防止下一块 Gas Price 上涨造成低估。
+gas_price_buffer_bps = 1000
+
+[market_data.native_price_pool]
+# QuickSwap V2 WPOL/USDC，按指定区块的 getReserves 计算 POL/USDC 现货价格。
+name = "quickswap_v2_wpol_usdc_oracle"
+address = "0x6e7a5FAFcec6BB1e78bAe2A1F0B612012BF14827"
+factory = "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32"
+wrapped_native_address = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"
+anchor_token = "USDC"
+native_symbol = "POL"
+native_is_token0 = true
 
 [routes]
 enable_two_hop = true
@@ -95,6 +111,12 @@ cargo run -p pm-cli-app -- dex-arb dex-arbitrage.toml
 ```
 
 `shadow` 是默认模式，不会发送交易。`simulate_only` 还需要配置 `execution.executor_address`，CLI 会编码完整原子调用，并执行 `eth_call` 和 `eth_estimateGas`。配置为 `live` 时，启动校验会直接拒绝运行。
+
+启动时 CLI 会打印本次评估实际使用的 Gas Price、POL/USDC 价格及数据来源。开启上述实时配置后，Gas Price 来自 `eth_gasPrice`，POL 价格来自 WPOL/USDC Pair 在扫描区块的储备比。所有价格转换都使用整数运算。
+
+储备比是该区块真实可观察的 AMM 现货价，但不具备 TWAP 或 Chainlink 预言机的抗操纵能力。V1 用它估算很小的 Gas 成本换汇；在开放真实交易前，应增加 TWAP/多源价格偏差校验。
+
+Shadow 模式没有已部署执行合约，因此 Gas units 使用两跳/三跳基础估算并增加配置缓冲；这不是实际交易回执。只有 `simulate_only` 模式配置真实 `executor_address` 后，Gas units 才来自 `eth_estimateGas`。系统当前不会签名或广播交易，也不会真实消耗 Gas。
 
 如果公共 RPC 返回 `eth_getLogs: invalid block range params`，说明节点的日志索引高度落后于它报告的链头高度。优先使用 `confirmation_mode = "finalized"`，并适当增大 `log_query_delay_blocks`；这只会让扫描落后少量区块，不影响 Shadow 模式的安全性。
 

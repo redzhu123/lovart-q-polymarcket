@@ -1948,6 +1948,7 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "async-trait",
+ "futures-util",
  "pm-market-framework",
  "pm-models",
  "reqwest",
@@ -2013,6 +2014,7 @@ dependencies = [
 name = "pm-cli-app"
 version = "1.0.0"
 dependencies = [
+ "alloy-primitives",
  "anyhow",
  "chrono",
  "csv",

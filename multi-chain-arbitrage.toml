@@ -1,0 +1,18 @@
+# 多链 Shadow Supervisor。每条链使用独立的 DEX 配置、RPC、状态缓存和成本模型。
+poll_interval_ms = 500
+cross_chain_config_path = "cross-chain-routing.toml"
+
+[[chains]]
+name = "polygon"
+config_path = "dex-arbitrage.toml"
+enabled = true
+
+[[chains]]
+name = "base"
+config_path = "dex-base.toml"
+enabled = true
+
+[[chains]]
+name = "arbitrum"
+config_path = "dex-arbitrum.toml"
+enabled = true
