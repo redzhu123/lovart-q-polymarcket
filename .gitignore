@@ -1,5 +1,7 @@
 # === Rust / Cargo ===
 target/
+logs/*
+!logs/.gitkeep
 **/*.rs.bk
 *.pdb
 

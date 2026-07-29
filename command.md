@@ -21,6 +21,10 @@
 |------|------|
 | `cargo run -p pm-cli-app -- dex-arb dex-arbitrage.toml` | 使用指定配置启动 DEX 循环套利扫描器 |
 | `cargo run -p pm-cli-app -- dex-multi multi-chain-arbitrage.toml` | 启动多链并行 Shadow 扫描器 |
+
+单链和多链 DEX 扫描每个程序进程只会在 `logs/dex-scans/` 下创建一个以启动时间命名的 `.log` 文件，后续扫描轮次持续追加到该文件。日志使用中文记录链、统一计算区块、实时 Gas Price、二至四跳 Gas 成本、池储备与双边现货价格、完整过滤漏斗、Token 与池名称组成的逐路由路径、报价成本、拒绝原因和最终机会。
+
+`dex-multi` 还会按 `[[solana_dexes]]` 同时启动 Solana Raydium 只读利润扫描。默认配置见 `dex-solana-raydium.toml`，设计与风险边界见 `docs/solana-raydium-arbitrage.md`。
 | `cargo run -p pm-cli-app -- cross-chain-paper cross-chain-paper.toml` | 评估一份跨链预置库存快照 |
 | `cargo test -p pm-arbitrage --all-features` | 运行套利模块单元测试和集成测试 |
 | `cargo check -p pm-cli-app` | 检查 CLI 与套利模块是否能够正常编译 |
@@ -71,7 +75,7 @@ worker_count = 4
 
 `dex-multi` 会为每条启用链建立独立 RPC、池状态、路由和成本模型，并发扫描但不把不同链拼成原子交易。当前配置启用 Polygon、Base 和 Arbitrum One：Base 扫描 Uniswap V2/PancakeSwap V2，Arbitrum 扫描 Uniswap V2/PancakeSwap V2/SushiSwap V2。
 
-`multi-chain-arbitrage.toml` 通过 `cross_chain_config_path` 启用跨链超级图。扫描器将 `(链 ID, 统一资产, 代币地址)` 作为节点，同链 V2 池作为 Swap 边，桥作为跨链边；使用受最大 6 步、最多 2 次桥接约束的 Bellman-Ford 最短路径寻找负权循环。边权为扣费后汇率的 `-ln(rate)`，只用于候选筛选，最终结果会使用 `U256` 按池储备逐腿复算。
+`multi-chain-arbitrage.toml` 通过 `cross_chain_config_path` 启用跨链超级图。扫描器将 `(链 ID, 统一资产, 代币地址)` 作为节点，同链 V2 池作为 Swap 边，桥作为跨链边；使用受最大 6 步、最多 2 次桥接约束的 Bellman-Ford 最短路径寻找从源链锚定币到另一条链锚定币的单桥盈利路径。边权为扣费后汇率的 `-ln(rate)`，只用于候选筛选，最终结果会使用 `U256` 按池储备逐腿复算。预置库存双链同时成交仍由 `cross-chain-paper` 独立评估。
 
 ```toml
 cross_chain_config_path = "cross-chain-routing.toml"
