@@ -10,6 +10,7 @@ use crate::dex_v2::{
     ExecutionMode, JsonRpcConnector, RpcGasPriceOracle, V2PoolNativePriceOracle,
     discover_configured_v2_pools,
 };
+use crate::raydium::{RaydiumConfig, RaydiumScanReport, RaydiumScanner};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct MultiChainConfig {
@@ -19,6 +20,8 @@ pub struct MultiChainConfig {
     pub cross_chain_config_path: Option<PathBuf>,
     #[serde(default)]
     pub chains: Vec<ChainConfigRef>,
+    #[serde(default)]
+    pub solana_dexes: Vec<ChainConfigRef>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -52,24 +55,59 @@ impl MultiChainConfig {
                 chain.config_path = base.join(&chain.config_path);
             }
         }
+        for dex in &mut config.solana_dexes {
+            if dex.config_path.is_relative() {
+                dex.config_path = base.join(&dex.config_path);
+            }
+        }
         if let Some(cross_chain) = &mut config.cross_chain_config_path {
             if cross_chain.is_relative() {
                 *cross_chain = base.join(&*cross_chain);
             }
         }
         if config.poll_interval_ms == 0
-            || !config.chains.iter().any(|chain| chain.enabled)
+            || (!config.chains.iter().any(|chain| chain.enabled)
+                && !config.solana_dexes.iter().any(|dex| dex.enabled))
             || config
                 .chains
                 .iter()
                 .filter(|chain| chain.enabled)
                 .any(|chain| chain.name.trim().is_empty())
+            || config
+                .solana_dexes
+                .iter()
+                .filter(|dex| dex.enabled)
+                .any(|dex| dex.name.trim().is_empty())
         {
             return Err(DexV2Error::Configuration(
                 "多链配置必须包含至少一条启用链".into(),
             ));
         }
         Ok(config)
+    }
+}
+
+pub struct SolanaDexRuntime {
+    pub name: String,
+    pub chain_id: u64,
+    pub scanner: Arc<RaydiumScanner>,
+}
+
+impl SolanaDexRuntime {
+    pub fn build(name: impl Into<String>, path: impl AsRef<Path>) -> DexV2Result<Self> {
+        let name = name.into();
+        let config = RaydiumConfig::load(path)?;
+        if !config.enabled {
+            return Err(DexV2Error::Configuration(format!(
+                "Solana DEX {name} is disabled"
+            )));
+        }
+        let chain_id = config.chain_id;
+        Ok(Self {
+            name,
+            chain_id,
+            scanner: Arc::new(RaydiumScanner::new(config)?),
+        })
     }
 }
 
@@ -95,7 +133,7 @@ impl ChainShadowRuntime {
         let gas_buffer = config.market_data.gas_price_buffer_bps;
         let native_price_pool = config.native_price_pool()?;
         let mode = config.execution_mode;
-        let connector = Arc::new(JsonRpcConnector::new(config.rpc_http_url.clone())?);
+        let connector = Arc::new(JsonRpcConnector::from_urls(config.rpc_http_urls())?);
         let discovery = discover_configured_v2_pools(&mut config, connector.as_ref()).await?;
         let mut engine = DexV2Engine::from_config(config)?;
         if realtime_gas {
@@ -132,6 +170,7 @@ pub struct ChainInitializationReport {
     pub block_number: Option<u64>,
     pub pools: usize,
     pub routes: usize,
+    pub opportunities: usize,
     pub error: Option<String>,
 }
 
@@ -145,11 +184,15 @@ pub struct ChainSyncReport {
 
 pub struct MultiChainSupervisor {
     chains: Vec<Arc<ChainShadowRuntime>>,
+    solana_dexes: Vec<Arc<SolanaDexRuntime>>,
 }
 
 impl MultiChainSupervisor {
-    pub fn new(chains: Vec<Arc<ChainShadowRuntime>>) -> DexV2Result<Self> {
-        if chains.is_empty() {
+    pub fn new(
+        chains: Vec<Arc<ChainShadowRuntime>>,
+        solana_dexes: Vec<Arc<SolanaDexRuntime>>,
+    ) -> DexV2Result<Self> {
+        if chains.is_empty() && solana_dexes.is_empty() {
             return Err(DexV2Error::Configuration(
                 "多链 Supervisor 没有运行链".into(),
             ));
@@ -163,11 +206,29 @@ impl MultiChainSupervisor {
                 ));
             }
         }
-        Ok(Self { chains })
+        for dex in &solana_dexes {
+            if !ids.insert(dex.chain_id) || !names.insert(dex.name.to_ascii_lowercase()) {
+                return Err(DexV2Error::Configuration(
+                    "multi-chain Supervisor has duplicate chain ID or name".into(),
+                ));
+            }
+        }
+        Ok(Self {
+            chains,
+            solana_dexes,
+        })
     }
 
     pub fn chains(&self) -> &[Arc<ChainShadowRuntime>] {
         &self.chains
+    }
+
+    pub fn solana_dexes(&self) -> &[Arc<SolanaDexRuntime>] {
+        &self.solana_dexes
+    }
+
+    pub fn runtime_count(&self) -> usize {
+        self.chains.len() + self.solana_dexes.len()
     }
 
     pub async fn initialize_all(&self) -> Vec<ChainInitializationReport> {
@@ -176,14 +237,29 @@ impl MultiChainSupervisor {
             let chain = Arc::clone(chain);
             joins.spawn(async move {
                 let result = chain.engine.initialize(chain.connector.as_ref()).await;
+                let startup_scan = match result {
+                    Ok(block) => chain.engine.scan_all_routes(block).await,
+                    Err(_) => Ok(Vec::new()),
+                };
                 ChainInitializationReport {
                     name: chain.name.clone(),
                     chain_id: chain.chain_id,
                     block_number: result.as_ref().ok().copied(),
                     pools: chain.engine.registry.pools().count(),
                     routes: chain.engine.routes.routes.len(),
-                    error: result.err().map(|error| error.to_string()),
+                    opportunities: startup_scan.as_ref().map_or(0, Vec::len),
+                    error: result
+                        .err()
+                        .or_else(|| startup_scan.err())
+                        .map(|error| error.to_string()),
                 }
+            });
+        }
+        for dex in &self.solana_dexes {
+            let dex = Arc::clone(dex);
+            joins.spawn(async move {
+                let result = dex.scanner.scan_once().await;
+                initialization_report_from_raydium(&dex, result)
             });
         }
         collect_join_reports(&mut joins).await
@@ -199,6 +275,22 @@ impl MultiChainSupervisor {
                     name: chain.name.clone(),
                     chain_id: chain.chain_id,
                     opportunities: result.as_ref().map_or(0, Vec::len),
+                    error: result.err().map(|error| error.to_string()),
+                }
+            });
+        }
+        for dex in &self.solana_dexes {
+            let dex = Arc::clone(dex);
+            joins.spawn(async move {
+                let result = dex.scanner.scan_if_due().await;
+                ChainSyncReport {
+                    name: dex.name.clone(),
+                    chain_id: dex.chain_id,
+                    opportunities: result
+                        .as_ref()
+                        .ok()
+                        .and_then(|report| report.as_ref())
+                        .map_or(0, |report| report.opportunities.len()),
                     error: result.err().map(|error| error.to_string()),
                 }
             });
@@ -224,5 +316,29 @@ pub async fn build_supervisor(config: &MultiChainConfig) -> DexV2Result<MultiCha
             ChainShadowRuntime::build(&chain.name, &chain.config_path).await?,
         ));
     }
-    MultiChainSupervisor::new(chains)
+    let mut solana_dexes = Vec::new();
+    for dex in config.solana_dexes.iter().filter(|dex| dex.enabled) {
+        solana_dexes.push(Arc::new(SolanaDexRuntime::build(
+            &dex.name,
+            &dex.config_path,
+        )?));
+    }
+    MultiChainSupervisor::new(chains, solana_dexes)
+}
+
+fn initialization_report_from_raydium(
+    dex: &SolanaDexRuntime,
+    result: DexV2Result<RaydiumScanReport>,
+) -> ChainInitializationReport {
+    ChainInitializationReport {
+        name: dex.name.clone(),
+        chain_id: dex.chain_id,
+        block_number: result.as_ref().ok().map(|report| report.slot),
+        pools: result.as_ref().map_or(0, |report| report.pools_observed),
+        routes: dex.scanner.route_count(),
+        opportunities: result
+            .as_ref()
+            .map_or(0, |report| report.opportunities.len()),
+        error: result.err().map(|error| error.to_string()),
+    }
 }

@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use alloy_primitives::{Address, B256, Bytes, U256, keccak256};
 use async_trait::async_trait;
@@ -38,46 +38,102 @@ pub trait ChainConnector: Send + Sync {
 }
 
 pub struct JsonRpcConnector {
-    url: String,
+    urls: Vec<String>,
     client: reqwest::Client,
 }
 
 impl JsonRpcConnector {
     pub fn new(url: impl Into<String>) -> DexV2Result<Self> {
-        let url = url.into();
-        if url.trim().is_empty() {
-            return Err(DexV2Error::Configuration("empty RPC URL".into()));
+        Self::from_urls([url.into()])
+    }
+
+    pub fn from_urls(urls: impl IntoIterator<Item = String>) -> DexV2Result<Self> {
+        let mut resolved = Vec::new();
+        for url in urls {
+            let url = url.trim().to_string();
+            if url.is_empty() || resolved.contains(&url) {
+                continue;
+            }
+            let parsed = reqwest::Url::parse(&url)
+                .map_err(|error| DexV2Error::Configuration(format!("invalid RPC URL: {error}")))?;
+            if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+                return Err(DexV2Error::Configuration(
+                    "RPC URL must use HTTP(S) and include a host".into(),
+                ));
+            }
+            resolved.push(url);
+        }
+        if resolved.is_empty() {
+            return Err(DexV2Error::Configuration("empty RPC URL list".into()));
         }
         Ok(Self {
-            url,
-            client: reqwest::Client::new(),
+            urls: resolved,
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(12))
+                .build()
+                .map_err(|error| DexV2Error::Configuration(format!("RPC client: {error}")))?,
         })
     }
 
     async fn rpc(&self, method: &str, params: Value) -> DexV2Result<Value> {
+        let mut failures = Vec::new();
+        for url in &self.urls {
+            match self.rpc_endpoint(url, method, params.clone()).await {
+                Ok(value) => return Ok(value),
+                Err(error) => failures.push(format!("{}: {error}", rpc_endpoint_label(url))),
+            }
+        }
+        Err(DexV2Error::Rpc(format!(
+            "{method} failed on all {} RPC endpoint(s): {}",
+            self.urls.len(),
+            failures.join("; ")
+        )))
+    }
+
+    async fn rpc_endpoint(&self, url: &str, method: &str, params: Value) -> Result<Value, String> {
         let response = self
             .client
-            .post(&self.url)
+            .post(url)
             .json(&json!({
                 "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
             }))
             .send()
             .await
-            .map_err(|e| DexV2Error::Rpc(format!("{method} transport: {e}")))?;
+            .map_err(|error| rpc_transport_error(&error))?;
         let status = response.status();
         let body: Value = response
             .json()
             .await
-            .map_err(|e| DexV2Error::Rpc(format!("{method} decode: {e}")))?;
+            .map_err(|error| format!("decode: {error}"))?;
         if !status.is_success() {
-            return Err(DexV2Error::Rpc(format!("{method} HTTP {status}: {body}")));
+            return Err(format!("HTTP {status}: {body}"));
         }
         if let Some(error) = body.get("error") {
-            return Err(DexV2Error::Rpc(format!("{method}: {error}")));
+            return Err(format!("JSON-RPC error: {error}"));
         }
         body.get("result")
             .cloned()
-            .ok_or_else(|| DexV2Error::Rpc(format!("{method}: missing result")))
+            .ok_or_else(|| "missing result".into())
+    }
+}
+
+fn rpc_endpoint_label(url: &str) -> String {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_owned))
+        .unwrap_or_else(|| "configured-endpoint".into())
+}
+
+fn rpc_transport_error(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        "transport timeout".into()
+    } else if error.is_connect() {
+        "connection failed".into()
+    } else if error.is_request() {
+        "request failed".into()
+    } else {
+        "transport failed".into()
     }
 }
 
@@ -248,14 +304,26 @@ impl ChainConnector for JsonRpcConnector {
     }
 
     async fn eth_call(&self, to: Address, data: Bytes, block: u64) -> DexV2Result<Bytes> {
-        let result = self
-            .rpc(
-                "eth_call",
-                json!([{
+        let params = json!([{
             "to": format!("{to:#x}"), "data": format!("0x{}", hex_encode(&data)),
-        }, format!("0x{block:x}")]),
-            )
-            .await?;
+        }, format!("0x{block:x}")]);
+        let mut attempt = 0u32;
+        let result = loop {
+            match self.rpc("eth_call", params.clone()).await {
+                Ok(result) => break result,
+                Err(error)
+                    if attempt < 3
+                        && error
+                            .to_string()
+                            .to_ascii_lowercase()
+                            .contains("header not found") =>
+                {
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_millis(200 * u64::from(attempt))).await;
+                }
+                Err(error) => return Err(error),
+            }
+        };
         parse_hex_bytes(
             result
                 .as_str()
@@ -380,13 +448,16 @@ impl ChainConnector for MockConnector {
                     .unwrap_or(Address::ZERO)
             })
     }
-    async fn get_reserves(&self, pool: &V2Pool, _block: u64) -> DexV2Result<V2PoolState> {
-        self.states
+    async fn get_reserves(&self, pool: &V2Pool, block: u64) -> DexV2Result<V2PoolState> {
+        let mut state = self
+            .states
             .lock()
             .map_err(|_| DexV2Error::Rpc("mock lock poisoned".into()))?
             .get(&pool.id)
             .cloned()
-            .ok_or_else(|| DexV2Error::Rpc(format!("missing mock state for {}", pool.name)))
+            .ok_or_else(|| DexV2Error::Rpc(format!("missing mock state for {}", pool.name)))?;
+        state.block_number = block;
+        Ok(state)
     }
     async fn poll_pool_updates(
         &self,
@@ -476,4 +547,26 @@ fn parse_hex_bytes(value: &str) -> DexV2Result<Bytes> {
 }
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod rpc_endpoint_tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_list_keeps_primary_and_deduplicates_fallbacks() {
+        let connector = JsonRpcConnector::from_urls([
+            "https://primary.example/v2/secret".into(),
+            "https://fallback.example".into(),
+            "https://fallback.example".into(),
+        ])
+        .unwrap();
+        assert_eq!(connector.urls.len(), 2);
+        assert_eq!(rpc_endpoint_label(&connector.urls[0]), "primary.example");
+    }
+
+    #[test]
+    fn endpoint_list_rejects_non_http_urls() {
+        assert!(JsonRpcConnector::new("wss://example.com").is_err());
+    }
 }

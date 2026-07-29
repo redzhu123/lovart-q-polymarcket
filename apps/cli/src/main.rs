@@ -2846,8 +2846,10 @@ async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
     if !config.enabled {
         anyhow::bail!("配置文件 {path} 中的 DEX V2 套利功能尚未启用");
     }
+    let scan_log_file = create_scan_log_file("单链扫描")?;
+    println!("本次启动扫描日志：{}", scan_log_file.display());
     let poll_interval_ms = config.poll_interval_ms;
-    let rpc_url = config.rpc_http_url.clone();
+    let rpc_urls = config.rpc_http_urls();
     let mode = config.execution_mode;
     let realtime_gas_price = config.market_data.use_realtime_gas_price;
     let gas_price_buffer_bps = config.market_data.gas_price_buffer_bps;
@@ -2863,7 +2865,7 @@ async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
     let three_hop_fallback_gas = config.gas.three_hop_fallback_gas;
     let four_hop_fallback_gas = config.gas.four_hop_fallback_gas;
     let gas_units_buffer_bps = config.gas.gas_units_buffer_bps;
-    let connector = Arc::new(JsonRpcConnector::new(rpc_url)?);
+    let connector = Arc::new(JsonRpcConnector::from_urls(rpc_urls)?);
     let discovery = discover_configured_v2_pools(&mut config, connector.as_ref()).await?;
     println!(
         "V2 Factory 发现：查询 {} 个 Factory / {} 个交易对，新增 {} 个池，跳过 {} 个重复池。",
@@ -2893,6 +2895,34 @@ async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
     let engine = Arc::new(engine);
     let block = engine.initialize(connector.as_ref()).await?;
     println!("DEX V2 循环套利扫描器已在区块 {block} 初始化，当前模式：{mode:?}");
+    let startup_opportunities = engine.scan_all_routes(block).await?;
+    println!(
+        "启动全量扫描：路由={}，通过风控机会={}。",
+        engine.routes.routes.len(),
+        startup_opportunities.len()
+    );
+    let mut startup_log = format!(
+        "==================== 启动扫描 ====================\n记录时间：{}\n扫描模式：单链\n扫描轮次：启动扫描\n配置文件：{}\n启动区块：{}\n",
+        chrono::Local::now().to_rfc3339(),
+        path,
+        block
+    );
+    startup_log.push_str(
+        &render_chain_scan_log(
+            &chain_display_name(
+                engine
+                    .registry
+                    .anchors()
+                    .next()
+                    .map_or(0, |a| a.id.chain_id),
+            ),
+            engine.as_ref(),
+            "启动扫描成功",
+            startup_opportunities.len(),
+        )
+        .await?,
+    );
+    append_scan_log(&scan_log_file, &startup_log)?;
     if let Some(anchor) = engine.registry.anchors().next() {
         let costs = engine.cost_snapshot(&anchor.id, block).await?;
         let gas_source = if realtime_gas_price {
@@ -2949,16 +2979,35 @@ async fn run_dex_v2_arbitrage(path: &str) -> Result<()> {
             _ = tokio::signal::ctrl_c() => break,
             _ = interval.tick() => {
                 scan_count = scan_count.saturating_add(1);
-                match engine.sync_once(connector.as_ref()).await {
+                let result = engine.sync_once(connector.as_ref()).await;
+                match &result {
                     Ok(opportunities) if !opportunities.is_empty() => {
                         println!("第 {scan_count} 轮扫描发现套利机会：{} 个", opportunities.len());
                     }
                     Ok(_) if scan_count % 30 == 0 => {
                         println!("已完成 {scan_count} 轮扫描，暂无通过风控的套利机会。");
+                        print_dex_v2_funnel("单链", engine.metrics.snapshot());
                     }
                     Ok(_) => {}
                     Err(error) => tracing::warn!(error = %error, "DEX V2 同步失败，将在下一轮轮询时重试"),
                 }
+                let (status, opportunity_count) = match &result {
+                    Ok(opportunities) => ("扫描成功".to_string(), opportunities.len()),
+                    Err(error) => (format!("扫描失败：{error}"), 0),
+                };
+                let mut log = format!(
+                    "==================== 第 {} 轮扫描 ====================\n记录时间：{}\n扫描模式：单链\n配置文件：{}\n",
+                    scan_count,
+                    chrono::Local::now().to_rfc3339(),
+                    path
+                );
+                log.push_str(&render_chain_scan_log(
+                    &chain_display_name(engine.registry.anchors().next().map_or(0, |a| a.id.chain_id)),
+                    engine.as_ref(),
+                    &status,
+                    opportunity_count,
+                ).await?);
+                append_scan_log(&scan_log_file, &log)?;
             }
         }
     }
@@ -2972,6 +3021,8 @@ async fn run_multi_chain_arbitrage(path: &str) -> Result<()> {
     use pm_arbitrage::multi_chain::{MultiChainConfig, build_supervisor};
 
     let config = MultiChainConfig::load(path)?;
+    let scan_log_file = create_scan_log_file("多链扫描")?;
+    println!("本次启动扫描日志：{}", scan_log_file.display());
     let poll_interval_ms = config.poll_interval_ms;
     let cross_chain_scanner = config
         .cross_chain_config_path
@@ -2983,25 +3034,69 @@ async fn run_multi_chain_arbitrage(path: &str) -> Result<()> {
     let supervisor = build_supervisor(&config).await?;
     println!(
         "多链 DEX Shadow 扫描器启动，共 {} 条链。",
-        supervisor.chains().len()
+        supervisor.runtime_count()
     );
-    for report in supervisor.initialize_all().await {
-        if let Some(error) = report.error {
+    let initialization_reports = supervisor.initialize_all().await;
+    for report in &initialization_reports {
+        if let Some(error) = &report.error {
             println!(
                 "[{}:{}] 初始化失败：{}",
                 report.name, report.chain_id, error
             );
         } else {
             println!(
-                "[{}:{}] 区块={}，池={}，循环路由={}",
+                "[{}:{}] 区块={}，池={}，循环路由={}，启动机会={}",
                 report.name,
                 report.chain_id,
                 report.block_number.unwrap_or_default(),
                 report.pools,
-                report.routes
+                report.routes,
+                report.opportunities,
             );
         }
     }
+    let mut startup_log = format!(
+        "==================== 启动扫描 ====================\n记录时间：{}\n扫描模式：多链\n扫描轮次：启动扫描\n配置文件：{}\n",
+        chrono::Local::now().to_rfc3339(),
+        path
+    );
+    for chain in supervisor.chains() {
+        let report = initialization_reports
+            .iter()
+            .find(|report| report.chain_id == chain.chain_id);
+        let status = report
+            .and_then(|report| report.error.as_deref())
+            .map_or_else(
+                || "启动扫描成功".to_string(),
+                |error| format!("启动扫描失败：{error}"),
+            );
+        startup_log.push_str(
+            &render_chain_scan_log(
+                &format!("{}:{}", chain.name, chain.chain_id),
+                chain.engine.as_ref(),
+                &status,
+                report.map_or(0, |report| report.opportunities),
+            )
+            .await?,
+        );
+    }
+    for dex in supervisor.solana_dexes() {
+        let report = initialization_reports
+            .iter()
+            .find(|report| report.chain_id == dex.chain_id);
+        let status = report
+            .and_then(|report| report.error.as_deref())
+            .map_or_else(
+                || "启动扫描成功".to_string(),
+                |error| format!("启动扫描失败：{error}"),
+            );
+        startup_log.push_str(&render_raydium_scan_log(
+            &format!("{}:{}", dex.name, dex.chain_id),
+            dex.scanner.as_ref(),
+            &status,
+        )?);
+    }
+    append_scan_log(&scan_log_file, &startup_log)?;
     if cross_chain_scanner.is_some() {
         println!("跨链最短路径 Shadow 已启用：负对数候选搜索 + U256 整数逐腿复算。 ");
     }
@@ -3014,17 +3109,21 @@ async fn run_multi_chain_arbitrage(path: &str) -> Result<()> {
             _ = tokio::signal::ctrl_c() => break,
             _ = interval.tick() => {
                 scan_count = scan_count.saturating_add(1);
-                for report in supervisor.sync_all().await {
-                    if let Some(error) = report.error {
+                let reports = supervisor.sync_all().await;
+                for report in &reports {
+                    if let Some(error) = &report.error {
                         tracing::warn!(chain = %report.name, chain_id = report.chain_id, error = %error, "多链 DEX 同步失败");
                     } else if report.opportunities > 0 {
                         println!("第 {scan_count} 轮 [{}:{}] 发现 {} 个通过风控的机会。", report.name, report.chain_id, report.opportunities);
                     }
                 }
+                let mut cross_chain_log = String::new();
                 if let Some(scanner) = &cross_chain_scanner {
                     match scanner.scan(&supervisor) {
                         Ok(routes) => {
-                            for route in routes {
+                            cross_chain_log.push_str(&format!("跨链扫描状态：成功\n跨链候选数量：{}\n", routes.len()));
+                            for route in &routes {
+                                cross_chain_log.push_str(&render_cross_chain_route_log(route)?);
                                 if !reported_cross_chain.insert(route.id) {
                                     continue;
                                 }
@@ -3043,13 +3142,64 @@ async fn run_multi_chain_arbitrage(path: &str) -> Result<()> {
                                     route.bridge_count,
                                     route.estimated_bridge_seconds,
                                 );
-                                println!("该路径采用预置库存非原子模型，不会签名、桥接或广播交易。");
+                                println!("该路径采用链内兑换与桥接组合的顺序非原子模型，不会签名、桥接或广播交易；预置库存套利由 cross-chain-paper 独立评估。");
                             }
                         }
-                        Err(error) => tracing::warn!(error = %error, "跨链最短路径扫描失败"),
+                        Err(error) => {
+                            cross_chain_log.push_str(&format!("跨链扫描状态：失败，原因：{error}\n"));
+                            tracing::warn!(error = %error, "跨链最短路径扫描失败")
+                        },
                     }
                 }
+                let mut log = format!(
+                    "==================== 第 {} 轮扫描 ====================\n记录时间：{}\n扫描模式：多链\n配置文件：{}\n",
+                    scan_count,
+                    chrono::Local::now().to_rfc3339(),
+                    path
+                );
+                for chain in supervisor.chains() {
+                    let report = reports.iter().find(|report| report.chain_id == chain.chain_id);
+                    let status = report
+                        .and_then(|report| report.error.as_deref())
+                        .map_or_else(|| "扫描成功".to_string(), |error| format!("扫描失败：{error}"));
+                    log.push_str(&render_chain_scan_log(
+                        &format!("{}:{}", chain.name, chain.chain_id),
+                        chain.engine.as_ref(),
+                        &status,
+                        report.map_or(0, |report| report.opportunities),
+                    ).await?);
+                }
+                for dex in supervisor.solana_dexes() {
+                    let report = reports.iter().find(|report| report.chain_id == dex.chain_id);
+                    let status = report
+                        .and_then(|report| report.error.as_deref())
+                        .map_or_else(|| "扫描成功".to_string(), |error| format!("扫描失败：{error}"));
+                    log.push_str(&render_raydium_scan_log(
+                        &format!("{}:{}", dex.name, dex.chain_id),
+                        dex.scanner.as_ref(),
+                        &status,
+                    )?);
+                }
+                log.push_str(&cross_chain_log);
+                append_scan_log(&scan_log_file, &log)?;
                 if scan_count % 30 == 0 {
+                    for chain in supervisor.chains() {
+                        print_dex_v2_funnel(&format!("{}:{}", chain.name, chain.chain_id), chain.engine.metrics.snapshot());
+                    }
+                    for dex in supervisor.solana_dexes() {
+                        if let Some(report) = dex.scanner.last_report()? {
+                            println!(
+                                "[{}:{}] Raydium 漏斗：slot={}，闭环检查={}，失败={}，观察池={}，通过机会={}。",
+                                dex.name,
+                                dex.chain_id,
+                                report.slot,
+                                report.routes_checked,
+                                report.routes_failed,
+                                report.pools_observed,
+                                report.opportunities.len(),
+                            );
+                        }
+                    }
                     if cross_chain_scanner.is_some() {
                         println!("多链与跨链最短路径扫描已完成 {scan_count} 轮。");
                     } else {
@@ -3060,6 +3210,562 @@ async fn run_multi_chain_arbitrage(path: &str) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn render_raydium_scan_log(
+    label: &str,
+    scanner: &pm_arbitrage::raydium::RaydiumScanner,
+    status: &str,
+) -> Result<String> {
+    use std::fmt::Write as _;
+
+    let mut output = String::new();
+    writeln!(output, "链：{label}")?;
+    writeln!(output, "DEX：Raydium Trade API（只读 Shadow）")?;
+    writeln!(output, "扫描状态：{status}")?;
+    let Some(report) = scanner.last_report()? else {
+        writeln!(output, "尚无成功报价快照")?;
+        return Ok(output);
+    };
+    writeln!(output, "Solana confirmed slot：{}", report.slot)?;
+    writeln!(
+        output,
+        "闭环路由：检查={}，失败={}",
+        report.routes_checked, report.routes_failed
+    )?;
+    writeln!(output, "报价涉及池数量：{}", report.pools_observed)?;
+    writeln!(output, "本轮通过风控机会：{}", report.opportunities.len())?;
+    for (index, opportunity) in report.opportunities.iter().enumerate() {
+        let anchor = scanner.token(&opportunity.path[0]);
+        let decimals = anchor.map_or(6, |token| token.decimals);
+        writeln!(
+            output,
+            "机会 {}：{}\n  输入={}，保守输出={}，毛利润={}，净利润={}，ROI={} bps",
+            index + 1,
+            opportunity.path.join(" -> "),
+            format_decimal_u128(opportunity.amount_in, decimals),
+            format_decimal_u128(opportunity.amount_out, decimals),
+            format_decimal_i128(opportunity.gross_profit, decimals),
+            format_decimal_i128(opportunity.net_profit, decimals),
+            opportunity.roi_bps,
+        )?;
+        for leg in &opportunity.legs {
+            writeln!(
+                output,
+                "  {} -> {}：输入={}，预期输出={}，滑点阈值输出={}，价格影响={:.6}%，池={}",
+                leg.input_symbol,
+                leg.output_symbol,
+                leg.input_amount,
+                leg.expected_output,
+                leg.conservative_output,
+                leg.price_impact_pct * 100.0,
+                leg.route_plan
+                    .iter()
+                    .map(|step| step.pool_id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" -> "),
+            )?;
+        }
+    }
+    Ok(output)
+}
+
+fn format_decimal_u128(value: u128, decimals: u8) -> String {
+    let scale = 10u128.saturating_pow(u32::from(decimals));
+    if scale == 0 {
+        return value.to_string();
+    }
+    format!(
+        "{}.{:0width$}",
+        value / scale,
+        value % scale,
+        width = usize::from(decimals)
+    )
+}
+
+fn format_decimal_i128(value: i128, decimals: u8) -> String {
+    let sign = if value < 0 { "-" } else { "" };
+    format!(
+        "{sign}{}",
+        format_decimal_u128(value.unsigned_abs(), decimals)
+    )
+}
+
+fn render_cross_chain_route_log(
+    route: &pm_arbitrage::cross_chain::CrossChainOptimalRoute,
+) -> Result<String> {
+    use std::fmt::Write as _;
+
+    let mut output = String::new();
+    let anchor_decimals = route.start.decimals;
+    writeln!(
+        output,
+        "\n-------------------- 单链 + 跨链组合套利 --------------------"
+    )?;
+    writeln!(output, "组合路线 ID：{:#x}", route.id)?;
+    writeln!(
+        output,
+        "完整资金路径：{}",
+        route
+            .nodes
+            .iter()
+            .map(|node| format!("{}:{}", node.chain_id, node.asset_id))
+            .collect::<Vec<_>>()
+            .join(" -> ")
+    )?;
+    for (index, (edge, quote)) in route.edges.iter().zip(&route.step_quotes).enumerate() {
+        let from = &route.nodes[index];
+        let to = &route.nodes[index + 1];
+        match &edge.kind {
+            pm_arbitrage::cross_chain::SuperEdgeKind::Swap { pool, .. } => writeln!(
+                output,
+                "第 {} 段｜链内兑换（链 {}，池 {}）：\n  输入：{} {}\n  输出：{} {}\n  本段显式 Gas 成本：{} {}\n  说明：池手续费和滑点已体现在输出金额中",
+                index + 1,
+                from.chain_id,
+                pool.name,
+                format_u256_units(quote.amount_in, from.decimals, 8),
+                from.asset_id,
+                format_u256_units(quote.amount_out, to.decimals, 8),
+                to.asset_id,
+                format_u256_units(quote.explicit_cost_anchor, anchor_decimals, 8),
+                route.start.asset_id,
+            )?,
+            pm_arbitrage::cross_chain::SuperEdgeKind::Bridge {
+                provider,
+                fee_bps,
+                estimated_seconds,
+                ..
+            } => writeln!(
+                output,
+                "第 {} 段｜跨链桥接（{}，链 {} → 链 {}）：\n  桥前：{} {}\n  桥后预计到账：{} {}\n  桥费率：{} bps\n  固定桥成本：{} {}\n  预计耗时：{} 秒",
+                index + 1,
+                provider,
+                from.chain_id,
+                to.chain_id,
+                format_u256_units(quote.amount_in, from.decimals, 8),
+                from.asset_id,
+                format_u256_units(quote.amount_out, to.decimals, 8),
+                to.asset_id,
+                fee_bps,
+                format_u256_units(quote.explicit_cost_anchor, anchor_decimals, 8),
+                route.start.asset_id,
+                estimated_seconds,
+            )?,
+        }
+    }
+    writeln!(
+        output,
+        "组合收益汇总：\n  初始投入：{} {}\n  最终回收：{} {}\n  毛利润：{} {}\n  链内 Gas + 固定桥成本 + 风险缓冲：{} {}\n  最终预计净利润：{} {}\n  ROI：{} bps（约 {:.2}%）\n  桥接次数：{}\n  预计桥接时间：{} 秒\n  执行模型：{}",
+        format_u256_units(route.amount_in, anchor_decimals, 8),
+        route.start.asset_id,
+        format_u256_units(route.amount_out, anchor_decimals, 8),
+        route.start.asset_id,
+        format_i256_units(route.gross_profit, anchor_decimals, 8),
+        route.start.asset_id,
+        format_u256_units(route.total_cost_anchor, anchor_decimals, 8),
+        route.start.asset_id,
+        format_i256_units(route.net_profit, anchor_decimals, 8),
+        route.start.asset_id,
+        route.roi_bps,
+        route.roi_bps as f64 / 100.0,
+        route.bridge_count,
+        route.estimated_bridge_seconds,
+        route.execution_model,
+    )?;
+    Ok(output)
+}
+
+fn print_dex_v2_funnel(label: &str, metrics: pm_arbitrage::dex_v2::DexV2MetricsSnapshot) {
+    println!(
+        "[{label}] 机会漏斗：池更新={}，路由检查={}，去重={}，边际价差通过={}/拒绝={}，种子报价通过={}/拒绝={}，优化无利润={}，最终风控拒绝={}，通过机会={}。",
+        metrics.pool_updates_total,
+        metrics.route_checks_total,
+        metrics.route_checks_deduplicated_total,
+        metrics.marginal_filter_pass_total,
+        metrics.marginal_filter_rejected_total,
+        metrics.seed_quote_filter_pass_total,
+        metrics.seed_quote_filter_rejected_total,
+        metrics.optimization_no_profit_total,
+        metrics.opportunities_rejected_total,
+        metrics.profitable_quotes_total,
+    );
+}
+
+fn create_scan_log_file(mode: &str) -> Result<std::path::PathBuf> {
+    static PROCESS_SCAN_LOG: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    if let Some(path) = PROCESS_SCAN_LOG.get() {
+        return Ok(path.clone());
+    }
+    let directory = std::path::PathBuf::from("logs").join("dex-scans");
+    std::fs::create_dir_all(&directory)?;
+    let path = directory.join(format!(
+        "{}-{}.log",
+        mode,
+        chrono::Local::now().format("%Y-%m-%d_%H-%M-%S-%3f")
+    ));
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    let _ = PROCESS_SCAN_LOG.set(path.clone());
+    Ok(path)
+}
+
+fn append_scan_log(path: &std::path::Path, body: &str) -> Result<()> {
+    use std::io::Write;
+
+    let mut file = std::fs::OpenOptions::new().append(true).open(path)?;
+    file.write_all(body.as_bytes())?;
+    file.flush()?;
+    Ok(())
+}
+
+async fn render_chain_scan_log(
+    label: &str,
+    engine: &pm_arbitrage::dex_v2::DexV2Engine,
+    status: &str,
+    opportunity_count: usize,
+) -> Result<String> {
+    use std::fmt::Write as _;
+
+    let metrics = engine.metrics.snapshot();
+    let audits = engine.drain_scan_audit()?;
+    let mut output = String::new();
+    writeln!(output, "链：{label}")?;
+    writeln!(output, "扫描状态：{status}")?;
+    writeln!(output, "已加载池数量：{}", engine.registry.pools().count())?;
+    writeln!(output, "已生成路由数量：{}", engine.routes.routes.len())?;
+    writeln!(output, "本轮通过风控机会：{opportunity_count}")?;
+
+    if let Some(block) = engine.latest_synced_block()? {
+        writeln!(
+            output,
+            "\n-------------------- Gas 成本明细 --------------------"
+        )?;
+        writeln!(output, "成本计算区块：{block}")?;
+        if let Some(anchor) = engine.registry.anchors().next() {
+            match engine.hop_gas_cost_snapshot(&anchor.id, block).await {
+                Ok(costs) => {
+                    if let Some(first) = costs.first() {
+                        writeln!(
+                            output,
+                            "当前 Gas Price：{} Gwei（{} Wei）",
+                            format_u256_units(first.gas_price_wei, 9, 6),
+                            first.gas_price_wei
+                        )?;
+                    }
+                    for cost in costs {
+                        writeln!(
+                            output,
+                            "{} 跳路由：预计 Gas 用量={}，原生币成本={}，折合={} {}",
+                            cost.hop_count,
+                            cost.gas_units,
+                            format_u256_units(cost.native_cost, 18, 9),
+                            format_u256_units(cost.anchor_cost, anchor.decimals, 6),
+                            anchor.symbol,
+                        )?;
+                    }
+                }
+                Err(error) => writeln!(output, "Gas 成本读取失败：{error}")?,
+            }
+        }
+    }
+
+    writeln!(
+        output,
+        "\n-------------------- 池价格明细 --------------------"
+    )?;
+    let mut pools = engine.registry.pools().collect::<Vec<_>>();
+    pools.sort_by(|left, right| left.name.cmp(&right.name));
+    for pool in pools {
+        let token0 = engine.registry.token(&pool.token0);
+        let token1 = engine.registry.token(&pool.token1);
+        let symbol0 = token0.map_or("未知币", |token| token.symbol.as_str());
+        let symbol1 = token1.map_or("未知币", |token| token.symbol.as_str());
+        match engine.state.get(&pool.id)? {
+            Some(state) => {
+                let decimals0 = token0.map_or(18, |token| token.decimals);
+                let decimals1 = token1.map_or(18, |token| token.decimals);
+                let price_0_in_1 =
+                    human_spot_price(state.reserve0, decimals0, state.reserve1, decimals1);
+                let price_1_in_0 =
+                    human_spot_price(state.reserve1, decimals1, state.reserve0, decimals0);
+                let fee_bps = u64::from(pool.fee_denominator - pool.fee_numerator) * 10_000
+                    / u64::from(pool.fee_denominator);
+                writeln!(
+                    output,
+                    "池：{}（{:#x}）\n  状态区块：{}\n  储备：{} {} / {} {}\n  储备现货价格（未扣手续费和滑点）：1 {} ≈ {} {}；1 {} ≈ {} {}\n  池手续费：{} bps",
+                    pool.name,
+                    pool.id.address,
+                    state.block_number,
+                    format_u256_units(state.reserve0, decimals0, 8),
+                    symbol0,
+                    format_u256_units(state.reserve1, decimals1, 8),
+                    symbol1,
+                    symbol0,
+                    price_0_in_1.map_or_else(|| "不可用".into(), |value| format!("{value:.10}")),
+                    symbol1,
+                    symbol1,
+                    price_1_in_0.map_or_else(|| "不可用".into(), |value| format!("{value:.10}")),
+                    symbol0,
+                    fee_bps,
+                )?;
+            }
+            None => writeln!(
+                output,
+                "池：{}（{:#x}）——尚无储备状态",
+                pool.name, pool.id.address
+            )?,
+        }
+    }
+
+    writeln!(
+        output,
+        "\n-------------------- 扫描过滤明细 --------------------"
+    )?;
+    writeln!(
+        output,
+        "累计扫描漏斗：池更新={}，路由检查={}，重复检查跳过={}，边际价差通过={}，边际价差不足={}，种子报价通过={}，种子报价无利润={}，金额优化无利润={}，最终风控拒绝={}，最终盈利机会={}",
+        metrics.pool_updates_total,
+        metrics.route_checks_total,
+        metrics.route_checks_deduplicated_total,
+        metrics.marginal_filter_pass_total,
+        metrics.marginal_filter_rejected_total,
+        metrics.seed_quote_filter_pass_total,
+        metrics.seed_quote_filter_rejected_total,
+        metrics.optimization_no_profit_total,
+        metrics.opportunities_rejected_total,
+        metrics.profitable_quotes_total,
+    )?;
+    writeln!(output, "本轮路由审计记录：{} 条", audits.len())?;
+    for (index, audit) in audits.into_iter().enumerate() {
+        let path = engine
+            .routes
+            .routes
+            .get(&audit.route_id)
+            .map(|route| {
+                route
+                    .legs
+                    .iter()
+                    .map(|leg| {
+                        let token_in = engine.registry.token(&leg.token_in).map_or_else(
+                            || format!("{:#x}", leg.token_in.address),
+                            |token| token.symbol.clone(),
+                        );
+                        let token_out = engine.registry.token(&leg.token_out).map_or_else(
+                            || format!("{:#x}", leg.token_out.address),
+                            |token| token.symbol.clone(),
+                        );
+                        let pool = engine.registry.pool(&leg.pool_id).map_or_else(
+                            |_| format!("未知池 {:#x}", leg.pool_id.address),
+                            |pool| format!("{}（{:#x}）", pool.name, pool.id.address),
+                        );
+                        format!("{token_in} --[{pool}]--> {token_out}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            })
+            .unwrap_or_else(|| "未找到路由定义".into());
+        let trigger_pool = engine.registry.pool(&audit.trigger_pool).map_or_else(
+            |_| format!("未知池（{:#x}）", audit.trigger_pool.address),
+            |pool| format!("{}（{:#x}）", pool.name, pool.id.address),
+        );
+        writeln!(
+            output,
+            "\n路由 {}：\n  区块：{}\n  路由 ID：{:#x}\n  触发池：{}\n  跳数：{}\n  扫描结果：{}\n  完整路径：{}",
+            index + 1,
+            audit.block_number,
+            audit.route_id.0,
+            trigger_pool,
+            audit.hop_count,
+            route_outcome_zh(&audit.outcome),
+            path
+        )?;
+        match engine
+            .route_quote_diagnostic(&audit.route_id, audit.block_number, audit.quote_amount)
+            .await
+        {
+            Ok(diagnostic) => {
+                writeln!(
+                    output,
+                    "  试算口径：{}",
+                    if audit.quote_amount.is_some() {
+                        "使用金额优化器选出的实际输入金额"
+                    } else {
+                        "该路由在前置过滤阶段被淘汰，使用配置的最小输入金额进行诊断试算"
+                    }
+                )?;
+                render_route_quote_diagnostic(&mut output, engine, &diagnostic)?;
+            }
+            Err(error) => writeln!(output, "  路由逐跳试算失败：{error}")?,
+        }
+    }
+    output.push('\n');
+    Ok(output)
+}
+
+fn render_route_quote_diagnostic(
+    output: &mut String,
+    engine: &pm_arbitrage::dex_v2::DexV2Engine,
+    diagnostic: &pm_arbitrage::dex_v2::RouteQuoteDiagnostic,
+) -> Result<()> {
+    use std::fmt::Write as _;
+
+    for leg in &diagnostic.route_quote.leg_quotes {
+        let token_in = engine.registry.token(&leg.token_in);
+        let token_out = engine.registry.token(&leg.token_out);
+        let input_symbol = token_in.map_or("未知币", |token| token.symbol.as_str());
+        let output_symbol = token_out.map_or("未知币", |token| token.symbol.as_str());
+        let input_decimals = token_in.map_or(18, |token| token.decimals);
+        let output_decimals = token_out.map_or(18, |token| token.decimals);
+        let pool = engine.registry.pool(&leg.pool_id)?;
+        let fee_bps = u64::from(pool.fee_denominator - pool.fee_numerator) * 10_000
+            / u64::from(pool.fee_denominator);
+        let estimated_fee = leg
+            .amount_in
+            .saturating_mul(alloy_primitives::U256::from(fee_bps))
+            / alloy_primitives::U256::from(10_000);
+        let execution_price = human_spot_price(
+            leg.amount_in,
+            input_decimals,
+            leg.amount_out,
+            output_decimals,
+        );
+        let impact = diagnostic
+            .route_quote
+            .price_impacts
+            .iter()
+            .find(|impact| impact.leg_index == leg.leg_index);
+        writeln!(
+            output,
+            "  第 {} 跳（{}）：\n    输入：{} {}\n    输出：{} {}\n    本跳实际成交价：1 {} ≈ {} {}\n    池手续费：{} bps（按输入估算约 {} {}）\n    价格冲击：{} bps",
+            usize::from(leg.leg_index) + 1,
+            pool.name,
+            format_u256_units(leg.amount_in, input_decimals, 8),
+            input_symbol,
+            format_u256_units(leg.amount_out, output_decimals, 8),
+            output_symbol,
+            input_symbol,
+            execution_price.map_or_else(|| "不可用".into(), |value| format!("{value:.10}")),
+            output_symbol,
+            fee_bps,
+            format_u256_units(estimated_fee, input_decimals, 8),
+            input_symbol,
+            impact.map_or(0, |value| value.impact_bps),
+        )?;
+    }
+
+    let route = engine
+        .routes
+        .routes
+        .get(&diagnostic.route_quote.route_id)
+        .ok_or_else(|| anyhow::anyhow!("路由诊断结果对应的路由不存在"))?;
+    let anchor = engine
+        .registry
+        .token(&route.anchor_token)
+        .ok_or_else(|| anyhow::anyhow!("路由锚定币不存在"))?;
+    writeln!(
+        output,
+        "  中间成本（Gas 在整条原子路由结束时统一结算，不会从每跳 Token 输出中单独扣除）：\n    Gas Price：{} Gwei（{} Wei）\n    预计 Gas 用量：{}\n    原生币成本：{}\n    折合锚定币成本：{} {}",
+        format_u256_units(diagnostic.gas_price_wei, 9, 6),
+        diagnostic.gas_price_wei,
+        diagnostic.gas_units,
+        format_u256_units(diagnostic.gas_native, 18, 9),
+        format_u256_units(diagnostic.gas_anchor, anchor.decimals, 8),
+        anchor.symbol,
+    )?;
+    writeln!(
+        output,
+        "  最终预期：\n    初始投入：{} {}\n    最后一跳回收：{} {}\n    毛利润（回收－投入）：{} {}\n    Gas 成本：{} {}\n    风险缓冲：{} {}\n    扣除成本后预计回收：{} {}\n    预计净利润：{} {}\n    预计 ROI：{} bps（约 {}%）",
+        format_u256_units(diagnostic.route_quote.amount_in, anchor.decimals, 8),
+        anchor.symbol,
+        format_u256_units(diagnostic.route_quote.amount_out, anchor.decimals, 8),
+        anchor.symbol,
+        format_i256_units(diagnostic.route_quote.gross_profit, anchor.decimals, 8),
+        anchor.symbol,
+        format_u256_units(diagnostic.gas_anchor, anchor.decimals, 8),
+        anchor.symbol,
+        format_u256_units(diagnostic.risk_buffer, anchor.decimals, 8),
+        anchor.symbol,
+        format_u256_units(diagnostic.expected_final_anchor, anchor.decimals, 8),
+        anchor.symbol,
+        format_i256_units(diagnostic.expected_net_profit, anchor.decimals, 8),
+        anchor.symbol,
+        diagnostic.expected_roi_bps,
+        format_i256_bps_percent(diagnostic.expected_roi_bps),
+    )?;
+    Ok(())
+}
+
+fn human_spot_price(
+    reserve_base: alloy_primitives::U256,
+    base_decimals: u8,
+    reserve_quote: alloy_primitives::U256,
+    quote_decimals: u8,
+) -> Option<f64> {
+    if reserve_base.is_zero() || reserve_quote.is_zero() {
+        return None;
+    }
+    let base = reserve_base.to_string().parse::<f64>().ok()? / 10f64.powi(base_decimals.into());
+    let quote = reserve_quote.to_string().parse::<f64>().ok()? / 10f64.powi(quote_decimals.into());
+    let price = quote / base;
+    price.is_finite().then_some(price)
+}
+
+fn chain_display_name(chain_id: u64) -> String {
+    match chain_id {
+        137 => "Polygon（链 ID 137）".into(),
+        8453 => "Base（链 ID 8453）".into(),
+        42161 => "Arbitrum One（链 ID 42161）".into(),
+        value => format!("未知链（链 ID {value}）"),
+    }
+}
+
+fn route_outcome_zh(outcome: &str) -> String {
+    match outcome {
+        "deduplicated" => "本区块已经检查过，跳过重复扫描".into(),
+        "no_theoretical_edge" => "没有达到最低理论价差".into(),
+        "no_profitable_seed" => "存在理论价差，但试算金额扣除池手续费和滑点后均不盈利".into(),
+        "optimization_no_profit" => "金额优化后没有找到盈利输入规模".into(),
+        "simulation_failed" => "交易模拟失败".into(),
+        "stale_result" => "计算期间池状态发生变化，结果已作废".into(),
+        value if value.starts_with("route_rejected:") => {
+            format!("路由结构风控拒绝：{}", &value["route_rejected:".len()..])
+        }
+        value if value.starts_with("quote_rejected:") => {
+            let details = &value["quote_rejected:".len()..];
+            let (reason, quote) = details.split_once(';').unwrap_or((details, ""));
+            format!("报价风控拒绝：{reason}；{}", quote_details_zh(quote))
+        }
+        value if value.starts_with("profitable:") => {
+            format!(
+                "发现通过风控的盈利机会：{}",
+                quote_details_zh(&value["profitable:".len()..])
+            )
+        }
+        value => value.to_string(),
+    }
+}
+
+fn quote_details_zh(details: &str) -> String {
+    details
+        .split(',')
+        .filter_map(|item| item.split_once('='))
+        .map(|(key, value)| {
+            let label = match key {
+                "amount_in" => "输入数量（最小单位）",
+                "amount_out" => "输出数量（最小单位）",
+                "gross_profit" => "毛利润（最小单位）",
+                "gas_anchor" => "Gas 成本（锚定币最小单位）",
+                "risk_buffer" => "风险缓冲（最小单位）",
+                "net_profit" => "净利润（最小单位）",
+                "roi_bps" => "收益率（bps）",
+                _ => key,
+            };
+            format!("{label}={value}")
+        })
+        .collect::<Vec<_>>()
+        .join("，")
 }
 
 fn run_cross_chain_paper(path: &str) -> Result<()> {
@@ -3112,6 +3818,30 @@ fn format_u256_units(value: alloy_primitives::U256, decimals: u8, precision: usi
     } else {
         format!("{whole}.{fraction}")
     }
+}
+
+fn format_i256_units(value: alloy_primitives::I256, decimals: u8, precision: usize) -> String {
+    let sign = if value < alloy_primitives::I256::ZERO {
+        "-"
+    } else {
+        ""
+    };
+    format!(
+        "{sign}{}",
+        format_u256_units(value.unsigned_abs(), decimals, precision)
+    )
+}
+
+fn format_i256_bps_percent(value: alloy_primitives::I256) -> String {
+    let sign = if value < alloy_primitives::I256::ZERO {
+        "-"
+    } else {
+        ""
+    };
+    let magnitude = value.unsigned_abs();
+    let whole = magnitude / alloy_primitives::U256::from(100);
+    let fraction = magnitude % alloy_primitives::U256::from(100);
+    format!("{sign}{whole}.{fraction:0>2}")
 }
 
 fn buffered_gas_units(base: u64, buffer_bps: u32) -> Result<u64> {

@@ -10,6 +10,7 @@ pub mod dex;
 pub mod dex_router;
 pub mod dex_v2;
 pub mod multi_chain;
+pub mod raydium;
 
 pub use cex::{CexArbitrageConfig, CexArbitrageDetector, CexArbitrageOpportunity, CexLeg};
 pub use dex::{DexArbitrageConfig, DexArbitrageDetector, DexArbitrageOpportunity, DexLeg};

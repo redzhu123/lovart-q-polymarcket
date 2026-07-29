@@ -7,7 +7,10 @@ pub struct DexV2Metrics {
     pub route_checks_deduplicated_total: AtomicU64,
     pub theoretical_opportunities_total: AtomicU64,
     pub marginal_filter_pass_total: AtomicU64,
+    pub marginal_filter_rejected_total: AtomicU64,
     pub seed_quote_filter_pass_total: AtomicU64,
+    pub seed_quote_filter_rejected_total: AtomicU64,
+    pub optimization_no_profit_total: AtomicU64,
     pub optimization_quote_evaluations: AtomicU64,
     pub profitable_quotes_total: AtomicU64,
     pub simulation_total: AtomicU64,
@@ -36,7 +39,14 @@ impl DexV2Metrics {
                 .theoretical_opportunities_total
                 .load(Ordering::Relaxed),
             marginal_filter_pass_total: self.marginal_filter_pass_total.load(Ordering::Relaxed),
+            marginal_filter_rejected_total: self
+                .marginal_filter_rejected_total
+                .load(Ordering::Relaxed),
             seed_quote_filter_pass_total: self.seed_quote_filter_pass_total.load(Ordering::Relaxed),
+            seed_quote_filter_rejected_total: self
+                .seed_quote_filter_rejected_total
+                .load(Ordering::Relaxed),
+            optimization_no_profit_total: self.optimization_no_profit_total.load(Ordering::Relaxed),
             optimization_quote_evaluations: self
                 .optimization_quote_evaluations
                 .load(Ordering::Relaxed),
@@ -55,7 +65,10 @@ pub struct DexV2MetricsSnapshot {
     pub route_checks_deduplicated_total: u64,
     pub theoretical_opportunities_total: u64,
     pub marginal_filter_pass_total: u64,
+    pub marginal_filter_rejected_total: u64,
     pub seed_quote_filter_pass_total: u64,
+    pub seed_quote_filter_rejected_total: u64,
+    pub optimization_no_profit_total: u64,
     pub optimization_quote_evaluations: u64,
     pub profitable_quotes_total: u64,
     pub simulation_total: u64,

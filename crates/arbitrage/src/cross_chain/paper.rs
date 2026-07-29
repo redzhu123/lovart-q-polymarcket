@@ -186,12 +186,24 @@ impl CrossChainPaperDetector {
         {
             return Ok(None);
         }
+        let required_source_anchor = snapshot
+            .source_anchor_in
+            .checked_add(snapshot.source_gas_anchor)
+            .ok_or_else(|| RouterError::Quote("源链本金和 Gas 溢出".into()))?;
+        let destination_anchor_after_trade = inventory
+            .balance(
+                snapshot.destination_chain_id,
+                snapshot.anchor_token_destination,
+            )
+            .checked_add(snapshot.destination_anchor_out)
+            .ok_or_else(|| RouterError::Quote("目标链锚定币余额溢出".into()))?;
         if inventory.balance(snapshot.source_chain_id, snapshot.anchor_token_source)
-            < snapshot.source_anchor_in
+            < required_source_anchor
             || inventory.balance(
                 snapshot.destination_chain_id,
                 snapshot.asset_token_destination,
             ) < snapshot.destination_asset_in
+            || destination_anchor_after_trade < snapshot.destination_gas_anchor
         {
             return Ok(None);
         }
@@ -254,34 +266,39 @@ impl CrossChainPaperDetector {
         snapshot: &CrossChainMarketSnapshot,
         inventory: &mut InventoryLedger,
     ) -> RouterResult<()> {
+        // Apply against a clone and commit only after every leg succeeds. A failed late debit
+        // must not leave the paper ledger partially mutated.
+        let mut next = inventory.clone();
         let source_debit = snapshot
             .source_anchor_in
             .checked_add(snapshot.source_gas_anchor)
             .ok_or_else(|| RouterError::Quote("源链纸面扣款溢出".into()))?;
-        inventory.apply_delta(
+        next.apply_delta(
             snapshot.source_chain_id,
             snapshot.anchor_token_source,
             U256::ZERO,
             source_debit,
         )?;
-        inventory.apply_delta(
+        next.apply_delta(
             snapshot.source_chain_id,
             snapshot.asset_token_source,
             snapshot.source_asset_out,
             U256::ZERO,
         )?;
-        inventory.apply_delta(
+        next.apply_delta(
             snapshot.destination_chain_id,
             snapshot.asset_token_destination,
             U256::ZERO,
             snapshot.destination_asset_in,
         )?;
-        inventory.apply_delta(
+        next.apply_delta(
             snapshot.destination_chain_id,
             snapshot.anchor_token_destination,
             snapshot.destination_anchor_out,
             snapshot.destination_gas_anchor,
-        )
+        )?;
+        *inventory = next;
+        Ok(())
     }
 }
 
@@ -325,5 +342,50 @@ mod tests {
             .unwrap();
         assert!(opportunity.net_profit_anchor.is_positive());
         assert_eq!(opportunity.inventory_model, "prepositioned_inventory");
+    }
+
+    #[test]
+    fn paper_execution_rolls_back_all_inventory_on_late_failure() {
+        let source_anchor = Address::from([1u8; 20]);
+        let source_asset = Address::from([2u8; 20]);
+        let destination_asset = Address::from([3u8; 20]);
+        let destination_anchor = Address::from([4u8; 20]);
+        let mut inventory = InventoryLedger::default();
+        inventory.set(137, source_anchor, U256::from(2_000u64));
+        inventory.set(8453, destination_asset, U256::from(100u64));
+        let before = inventory.clone();
+        let snapshot = CrossChainMarketSnapshot {
+            source_chain_id: 137,
+            destination_chain_id: 8453,
+            anchor_token_source: source_anchor,
+            anchor_token_destination: destination_anchor,
+            asset_token_source: source_asset,
+            asset_token_destination: destination_asset,
+            source_anchor_in: U256::from(1_000u64),
+            source_asset_out: U256::from(100u64),
+            destination_asset_in: U256::from(100u64),
+            destination_anchor_out: U256::ZERO,
+            source_gas_anchor: U256::from(10u64),
+            destination_gas_anchor: U256::from(1u64),
+            rebalance_cost_anchor: U256::ZERO,
+            observed_at_ms: 1,
+        };
+        let detector = CrossChainPaperDetector::new(CrossChainPaperConfig::default()).unwrap();
+        assert!(
+            detector
+                .apply_paper_execution(&snapshot, &mut inventory)
+                .is_err()
+        );
+        for (chain, token) in [
+            (137, source_anchor),
+            (137, source_asset),
+            (8453, destination_asset),
+            (8453, destination_anchor),
+        ] {
+            assert_eq!(
+                inventory.balance(chain, token),
+                before.balance(chain, token)
+            );
+        }
     }
 }

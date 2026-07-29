@@ -12,6 +12,6 @@ pub use paper::{
     CrossChainPaperOpportunity,
 };
 pub use path::{
-    CrossChainOptimalRoute, CrossChainPathConfig, CrossChainPathScanner, SuperEdgeKind,
-    SuperGraphNode,
+    CrossChainOptimalRoute, CrossChainPathConfig, CrossChainPathScanner, CrossChainStepQuote,
+    SuperEdgeKind, SuperGraphNode,
 };

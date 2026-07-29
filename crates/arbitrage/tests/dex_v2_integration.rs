@@ -86,6 +86,37 @@ async fn mock_sync_produces_deduplicated_three_hop_shadow_opportunity() {
         );
     }
     engine.initialize(&connector).await.unwrap();
+    let startup = engine.scan_all_routes(1).await.unwrap();
+    assert!(startup.iter().any(|opportunity| {
+        opportunity.route.kind == RouteKind::ThreeHop && opportunity.quote.net_profit.is_positive()
+    }));
+    let audits = engine.drain_scan_audit().unwrap();
+    let route_audit = audits
+        .iter()
+        .find(|audit| audit.route_id == route.id)
+        .expect("selected route must have an audit record");
+    let diagnostic = engine
+        .route_quote_diagnostic(&route.id, 1, route_audit.quote_amount)
+        .await
+        .unwrap();
+    assert_eq!(diagnostic.route_quote.leg_quotes.len(), 3);
+    assert_eq!(
+        diagnostic.route_quote.leg_quotes[0].amount_out,
+        diagnostic.route_quote.leg_quotes[1].amount_in
+    );
+    assert_eq!(
+        diagnostic.route_quote.leg_quotes[1].amount_out,
+        diagnostic.route_quote.leg_quotes[2].amount_in
+    );
+    assert_eq!(diagnostic.gas_anchor, U256::ZERO);
+    assert_eq!(
+        diagnostic.expected_final_anchor + diagnostic.risk_buffer,
+        diagnostic.route_quote.amount_out
+    );
+    assert_eq!(
+        diagnostic.expected_net_profit + alloy_primitives::I256::from_raw(diagnostic.risk_buffer),
+        diagnostic.route_quote.gross_profit
+    );
 
     let trigger_leg = &route.legs[0];
     let trigger_pool = engine.registry.pool(&trigger_leg.pool_id).unwrap();
@@ -123,9 +154,19 @@ async fn mock_sync_produces_deduplicated_three_hop_shadow_opportunity() {
     assert!(duplicate.is_empty());
     assert_eq!(engine.metrics.snapshot().pool_updates_total, 1);
     assert!(engine.metrics.snapshot().route_checks_deduplicated_total >= 1);
+
+    // A later full scan refreshes every pool at the same target block, so a large gap from the
+    // previous cache cannot produce `state block gap ... exceeds 1`.
+    connector.set_block(17);
+    assert!(engine.sync_once(&connector).await.is_ok());
 }
 
 fn test_pool(name: &str, address: u8, token0: u8, token1: u8) -> PoolConfig {
+    let (token0, token1) = if token0 < token1 {
+        (token0, token1)
+    } else {
+        (token1, token0)
+    };
     PoolConfig {
         name: name.into(),
         address: format!("0x{address:040x}"),

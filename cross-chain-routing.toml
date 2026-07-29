@@ -5,7 +5,7 @@ input_amount_anchor = "1000000000"       # 1000 USDC
 minimum_net_profit_anchor = "1000000"     # 1 USDC
 minimum_roi_bps = 10
 minimum_theoretical_profit_bps = 15
-max_steps = 6
+max_steps = 9                         # 源链最多 4 跳 + 桥接 + 目标链最多 4 跳
 max_bridges = 2
 risk_buffer_bps = 30
 

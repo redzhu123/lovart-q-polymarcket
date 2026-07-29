@@ -33,6 +33,7 @@ pub use graph::{
     BoundedRouteGenerator, PoolRegistry, RouteGenerationConfig, RouteGenerator, RouteIndex,
     TokenPoolGraph,
 };
+pub use metrics::{DexV2Metrics, DexV2MetricsSnapshot};
 pub use optimizer::{AmountOptimizer, IntegerSearchOptimizer};
 pub use profit::{
     FixedNativePriceOracle, NativePriceOracle, ProfitEngine, V2PoolNativePriceOracle,
@@ -41,7 +42,10 @@ pub use profit::{
 pub use quoter::{LocalRouteQuoter, RouteQuoter};
 pub use repository::{InMemoryOpportunityRepository, OpportunityRepository};
 pub use risk::{DefaultRiskGuard, RejectionReason, RiskGuard};
-pub use runtime::{CostDataSnapshot, DexV2Engine, RuntimeHandle};
+pub use runtime::{
+    CostDataSnapshot, DexV2Engine, HopGasCostSnapshot, RouteQuoteDiagnostic, RouteScanAudit,
+    RuntimeHandle,
+};
 pub use simulator::{EthCallSimulator, LocalShadowSimulator, SimulationEngine};
 pub use state::PoolStateCache;
 pub use types::*;

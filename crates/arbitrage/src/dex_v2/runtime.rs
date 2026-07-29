@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,7 +15,10 @@ use super::gas::{FixedGasPriceOracle, GasEstimator, GasPriceOracle, HopGasEstima
 use super::graph::{PoolRegistry, RouteIndex, TokenPoolGraph};
 use super::metrics::DexV2Metrics;
 use super::optimizer::{AmountOptimizer, IntegerSearchOptimizer, has_marginal_edge};
-use super::profit::{FixedNativePriceOracle, NativePriceOracle, ProfitEngine, V2ProfitEngine};
+use super::profit::{
+    FixedNativePriceOracle, NativePriceOracle, ProfitEngine, V2ProfitEngine, positive_i256,
+    signed_difference,
+};
 use super::quoter::{LocalRouteQuoter, RouteQuoter};
 use super::repository::{InMemoryOpportunityRepository, OpportunityRepository};
 use super::risk::{DefaultRiskGuard, RiskGuard};
@@ -24,7 +26,7 @@ use super::simulator::{LocalShadowSimulator, SimulationEngine};
 use super::state::PoolStateCache;
 use super::types::{
     ArbitrageOpportunity, ArbitrageQuote, CostEstimate, OpportunityStatus, PoolId, PoolUpdate,
-    RouteId, SimulationRequest, StateVersion,
+    RouteId, RouteQuote, SimulationRequest, StateVersion,
 };
 
 pub struct DexV2Engine {
@@ -44,8 +46,41 @@ pub struct DexV2Engine {
     pub metrics: Arc<DexV2Metrics>,
     latest_checks: Mutex<HashMap<(RouteId, u64), u64>>,
     last_synced_block: Mutex<Option<u64>>,
-    last_full_resync_block: Mutex<Option<u64>>,
-    log_polling_unavailable: AtomicBool,
+    scan_audit: Mutex<Vec<RouteScanAudit>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteScanAudit {
+    pub route_id: RouteId,
+    pub trigger_pool: PoolId,
+    pub block_number: u64,
+    pub hop_count: usize,
+    pub outcome: String,
+    /// The optimized input when optimization reached a concrete quote. When absent, the audit
+    /// renderer uses the configured minimum input to produce a diagnostic quote.
+    pub quote_amount: Option<U256>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RouteQuoteDiagnostic {
+    pub route_quote: RouteQuote,
+    pub gas_units: u64,
+    pub gas_price_wei: U256,
+    pub gas_native: U256,
+    pub gas_anchor: U256,
+    pub risk_buffer: U256,
+    pub expected_final_anchor: U256,
+    pub expected_net_profit: alloy_primitives::I256,
+    pub expected_roi_bps: alloy_primitives::I256,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HopGasCostSnapshot {
+    pub hop_count: usize,
+    pub gas_units: u64,
+    pub gas_price_wei: U256,
+    pub native_cost: U256,
+    pub anchor_cost: U256,
 }
 
 impl DexV2Engine {
@@ -110,8 +145,7 @@ impl DexV2Engine {
             metrics: Arc::new(DexV2Metrics::default()),
             latest_checks: Mutex::new(HashMap::new()),
             last_synced_block: Mutex::new(None),
-            last_full_resync_block: Mutex::new(None),
-            log_polling_unavailable: AtomicBool::new(false),
+            scan_audit: Mutex::new(Vec::new()),
         })
     }
 
@@ -152,24 +186,125 @@ impl DexV2Engine {
         })
     }
 
+    pub fn latest_synced_block(&self) -> DexV2Result<Option<u64>> {
+        self.last_synced_block
+            .lock()
+            .map(|block| *block)
+            .map_err(|_| DexV2Error::PoolState("sync block lock poisoned".into()))
+    }
+
+    pub async fn hop_gas_cost_snapshot(
+        &self,
+        anchor: &super::types::TokenId,
+        block: u64,
+    ) -> DexV2Result<Vec<HopGasCostSnapshot>> {
+        let gas_price_wei = self.gas_price_oracle.gas_price(block).await?;
+        let buffer = 10_000u64 + u64::from(self.config.gas.gas_units_buffer_bps);
+        let estimates = [
+            (2usize, self.config.gas.two_hop_fallback_gas),
+            (3usize, self.config.gas.three_hop_fallback_gas),
+            (4usize, self.config.gas.four_hop_fallback_gas),
+        ];
+        let mut snapshots = Vec::with_capacity(estimates.len());
+        for (hop_count, base_units) in estimates {
+            let gas_units = base_units
+                .checked_mul(buffer)
+                .ok_or_else(|| DexV2Error::Quote("gas buffer overflow".into()))?
+                .div_ceil(10_000);
+            let native_cost = U256::from(gas_units)
+                .checked_mul(gas_price_wei)
+                .ok_or_else(|| DexV2Error::Quote("gas cost overflow".into()))?;
+            let anchor_cost = self
+                .oracle
+                .quote_native_to_token(anchor, native_cost, block)
+                .await?;
+            snapshots.push(HopGasCostSnapshot {
+                hop_count,
+                gas_units,
+                gas_price_wei,
+                native_cost,
+                anchor_cost,
+            });
+        }
+        Ok(snapshots)
+    }
+
+    /// Builds a complete hop-by-hop diagnostic quote for one route at a coherent block.
+    /// Rejected routes are quoted at the configured minimum input; optimized routes can pass
+    /// their selected input so the log mirrors the actual opportunity calculation.
+    pub async fn route_quote_diagnostic(
+        &self,
+        route_id: &RouteId,
+        block: u64,
+        amount: Option<U256>,
+    ) -> DexV2Result<RouteQuoteDiagnostic> {
+        let route = self
+            .routes
+            .routes
+            .get(route_id)
+            .ok_or_else(|| DexV2Error::Route("route is missing from route index".into()))?;
+        let snapshot = self.state.snapshot(
+            self.config.chain_id,
+            block,
+            &route.involved_pools,
+            self.config.max_state_block_gap,
+        )?;
+        let amount_in = amount.unwrap_or(self.config.amount_bounds()?.min_input);
+        let route_quote = self.optimizer.quote_exact_in(route, &snapshot, amount_in)?;
+        let gas = self
+            .hop_gas_cost_snapshot(&route.anchor_token, block)
+            .await?
+            .into_iter()
+            .find(|cost| cost.hop_count == route.hop_count())
+            .ok_or_else(|| DexV2Error::Quote("missing fallback gas estimate for route".into()))?;
+        let positive_gross = route_quote.amount_out.saturating_sub(route_quote.amount_in);
+        let risk_buffer = positive_gross
+            .checked_mul(U256::from(self.config.risk_buffer_bps))
+            .ok_or_else(|| DexV2Error::Quote("risk buffer overflow".into()))?
+            / U256::from(10_000);
+        let expected_final_anchor = route_quote
+            .amount_out
+            .saturating_sub(gas.anchor_cost)
+            .saturating_sub(risk_buffer);
+        let total_outflow = route_quote
+            .amount_in
+            .checked_add(gas.anchor_cost)
+            .and_then(|value| value.checked_add(risk_buffer))
+            .ok_or_else(|| DexV2Error::Quote("diagnostic total cost overflow".into()))?;
+        let expected_net_profit = signed_difference(route_quote.amount_out, total_outflow);
+        let roi_magnitude = expected_net_profit
+            .unsigned_abs()
+            .checked_mul(U256::from(10_000))
+            .ok_or_else(|| DexV2Error::Quote("diagnostic ROI overflow".into()))?
+            / route_quote.amount_in;
+        let expected_roi_bps = if expected_net_profit.is_negative() {
+            -positive_i256(roi_magnitude)?
+        } else {
+            positive_i256(roi_magnitude)?
+        };
+        Ok(RouteQuoteDiagnostic {
+            route_quote,
+            gas_units: gas.gas_units,
+            gas_price_wei: gas.gas_price_wei,
+            gas_native: gas.native_cost,
+            gas_anchor: gas.anchor_cost,
+            risk_buffer,
+            expected_final_anchor,
+            expected_net_profit,
+            expected_roi_bps,
+        })
+    }
+
     pub async fn initialize(&self, connector: &dyn ChainConnector) -> DexV2Result<u64> {
         let block = self.stable_sync_block(connector).await?;
-        for pool in self.registry.pools() {
-            let state = connector.get_reserves(pool, block).await?;
-            self.state.apply(PoolUpdate {
-                pool_id: pool.id.clone(),
-                state,
-                log_index: 0,
-            })?;
+        let pools = self.registry.pools().cloned().collect::<Vec<_>>();
+        for update in self.load_all_pool_updates(connector, &pools, block).await? {
+            self.state.apply(update)?;
         }
         *self
             .last_synced_block
             .lock()
             .map_err(|_| DexV2Error::PoolState("sync block lock poisoned".into()))? = Some(block);
-        *self
-            .last_full_resync_block
-            .lock()
-            .map_err(|_| DexV2Error::PoolState("resync block lock poisoned".into()))? = Some(block);
         tracing::info!(
             chain_id = self.config.chain_id,
             block_number = block,
@@ -199,60 +334,103 @@ impl DexV2Engine {
             return Ok(Vec::new());
         }
         let pools = self.registry.pools().cloned().collect::<Vec<_>>();
-        let mut reserve_fallback = self.log_polling_unavailable.load(Ordering::Relaxed);
-        let updates = if reserve_fallback {
-            self.load_all_pool_updates(connector, &pools, latest)
-                .await?
-        } else {
-            match connector.poll_pool_updates(&pools, from, latest).await {
-                Ok(updates) => updates,
-                Err(error) if is_log_access_restriction(&error) => {
-                    self.log_polling_unavailable.store(true, Ordering::Relaxed);
-                    reserve_fallback = true;
-                    tracing::warn!(
-                        error = %error,
-                        "RPC 限制 eth_getLogs，已降级为按新区块刷新全部池储备"
-                    );
-                    self.load_all_pool_updates(connector, &pools, latest)
-                        .await?
-                }
-                Err(error) => return Err(error),
-            }
-        };
-        let opportunities = if reserve_fallback {
-            self.process_full_snapshot(updates, latest).await?
-        } else {
-            let mut opportunities = Vec::new();
-            for update in updates {
-                opportunities.extend(self.process_pool_update(update).await?);
-            }
-            opportunities
-        };
-        let should_resync = self
-            .last_full_resync_block
-            .lock()
-            .map_err(|_| DexV2Error::PoolState("resync block lock poisoned".into()))?
-            .map(|block| latest.saturating_sub(block) >= self.config.resync_interval_blocks)
-            .unwrap_or(true);
-        if should_resync && !reserve_fallback {
-            for pool in &pools {
-                let state = connector.get_reserves(pool, latest).await?;
-                let _ = self.state.apply(PoolUpdate {
-                    pool_id: pool.id.clone(),
-                    state,
-                    log_index: 0,
-                })?;
-            }
-            *self
-                .last_full_resync_block
-                .lock()
-                .map_err(|_| DexV2Error::PoolState("resync block lock poisoned".into()))? =
-                Some(latest);
-        }
+        // Every full-route scan must use one coherent block. Refresh every configured pool at
+        // `latest` before evaluating any route; mixing a freshly updated pool with a cache entry
+        // from an older block caused the previous `state block gap` failures.
+        let updates = self
+            .load_all_pool_updates(connector, &pools, latest)
+            .await?;
+        let opportunities = self.process_full_snapshot(updates, latest).await?;
         *self
             .last_synced_block
             .lock()
             .map_err(|_| DexV2Error::PoolState("sync block lock poisoned".into()))? = Some(latest);
+        Ok(opportunities)
+    }
+
+    /// Returns and clears route-level audit records accumulated since the previous drain.
+    pub fn drain_scan_audit(&self) -> DexV2Result<Vec<RouteScanAudit>> {
+        let mut records = self
+            .scan_audit
+            .lock()
+            .map_err(|_| DexV2Error::PoolState("scan audit lock poisoned".into()))?;
+        Ok(std::mem::take(&mut *records))
+    }
+
+    fn record_scan_audit(
+        &self,
+        route_id: &RouteId,
+        trigger_pool: &PoolId,
+        block_number: u64,
+        hop_count: usize,
+        outcome: impl Into<String>,
+    ) {
+        self.record_scan_audit_with_amount(
+            route_id,
+            trigger_pool,
+            block_number,
+            hop_count,
+            None,
+            outcome,
+        );
+    }
+
+    fn record_scan_audit_with_amount(
+        &self,
+        route_id: &RouteId,
+        trigger_pool: &PoolId,
+        block_number: u64,
+        hop_count: usize,
+        quote_amount: Option<U256>,
+        outcome: impl Into<String>,
+    ) {
+        if let Ok(mut records) = self.scan_audit.lock()
+            && records.len() < 200_000
+        {
+            records.push(RouteScanAudit {
+                route_id: route_id.clone(),
+                trigger_pool: trigger_pool.clone(),
+                block_number,
+                hop_count,
+                outcome: outcome.into(),
+                quote_amount,
+            });
+        }
+    }
+
+    /// Scans every configured route against the current cache at `block`.
+    ///
+    /// This is intentionally public so callers can perform the mandatory startup scan after
+    /// `initialize`, before waiting for the first pool event.
+    pub async fn scan_all_routes(&self, block: u64) -> DexV2Result<Vec<ArbitrageOpportunity>> {
+        let mut route_ids = self.routes.routes.keys().cloned().collect::<Vec<_>>();
+        route_ids.sort();
+        let mut opportunities = Vec::new();
+        for route_id in route_ids {
+            let route = self
+                .routes
+                .routes
+                .get(&route_id)
+                .ok_or_else(|| DexV2Error::PoolState("route index is inconsistent".into()))?;
+            let trigger_pool = route
+                .involved_pools
+                .first()
+                .ok_or_else(|| DexV2Error::Route("route has no pools".into()))?
+                .clone();
+            if let Some(opportunity) = self
+                .scan_route(
+                    &route_id,
+                    &trigger_pool,
+                    StateVersion {
+                        block_number: block,
+                        max_log_index: 0,
+                    },
+                )
+                .await?
+            {
+                opportunities.push(opportunity);
+            }
+        }
         Ok(opportunities)
     }
 
@@ -273,10 +451,6 @@ impl DexV2Engine {
         .buffer_unordered(concurrency)
         .try_collect::<Vec<_>>()
         .await?;
-        *self
-            .last_full_resync_block
-            .lock()
-            .map_err(|_| DexV2Error::PoolState("resync block lock poisoned".into()))? = Some(block);
         Ok(updates)
     }
 
@@ -362,6 +536,13 @@ impl DexV2Engine {
                 .is_some_and(|index| *index >= trigger_version.max_log_index)
             {
                 DexV2Metrics::increment(&self.metrics.route_checks_deduplicated_total);
+                self.record_scan_audit(
+                    route_id,
+                    trigger_pool,
+                    trigger_version.block_number,
+                    0,
+                    "deduplicated",
+                );
                 return Ok(None);
             }
             checks.insert(key, trigger_version.max_log_index);
@@ -378,15 +559,30 @@ impl DexV2Engine {
             &route.involved_pools,
             self.config.max_state_block_gap,
         )?;
-        self.risk
-            .validate_route(route, &snapshot)
-            .map_err(DexV2Error::from)?;
+        if let Err(reason) = self.risk.validate_route(route, &snapshot) {
+            self.record_scan_audit(
+                route_id,
+                trigger_pool,
+                trigger_version.block_number,
+                route.hop_count(),
+                format!("route_rejected:{reason:?}"),
+            );
+            return Err(DexV2Error::from(reason));
+        }
         if !has_marginal_edge(
             &self.registry,
             route,
             &snapshot,
             self.config.optimizer.minimum_theoretical_edge_bps,
         )? {
+            DexV2Metrics::increment(&self.metrics.marginal_filter_rejected_total);
+            self.record_scan_audit(
+                route_id,
+                trigger_pool,
+                trigger_version.block_number,
+                route.hop_count(),
+                "no_theoretical_edge",
+            );
             return Ok(None);
         }
         DexV2Metrics::increment(&self.metrics.marginal_filter_pass_total);
@@ -395,12 +591,28 @@ impl DexV2Engine {
             .optimizer
             .has_profitable_seed(route, &snapshot, &bounds)?
         {
+            DexV2Metrics::increment(&self.metrics.seed_quote_filter_rejected_total);
+            self.record_scan_audit(
+                route_id,
+                trigger_pool,
+                trigger_version.block_number,
+                route.hop_count(),
+                "no_profitable_seed",
+            );
             return Ok(None);
         }
         DexV2Metrics::increment(&self.metrics.seed_quote_filter_pass_total);
         let optimized = match self.optimizer.optimize(route, &snapshot, &bounds) {
             Ok(value) => value,
             Err(DexV2Error::Optimization(message)) if message.contains("no profitable input") => {
+                DexV2Metrics::increment(&self.metrics.optimization_no_profit_total);
+                self.record_scan_audit(
+                    route_id,
+                    trigger_pool,
+                    trigger_version.block_number,
+                    route.hop_count(),
+                    "optimization_no_profit",
+                );
                 return Ok(None);
             }
             Err(error) => return Err(error),
@@ -496,6 +708,14 @@ impl DexV2Engine {
             Ok(result) if result.success => result,
             Ok(_) | Err(_) => {
                 DexV2Metrics::increment(&self.metrics.simulation_failures_total);
+                self.record_scan_audit_with_amount(
+                    route_id,
+                    trigger_pool,
+                    trigger_version.block_number,
+                    route.hop_count(),
+                    Some(optimized.route_quote.amount_in),
+                    "simulation_failed",
+                );
                 return Ok(None);
             }
         };
@@ -556,11 +776,36 @@ impl DexV2Engine {
         };
         if let Err(reason) = self.risk.validate_quote(route, &quote) {
             DexV2Metrics::increment(&self.metrics.opportunities_rejected_total);
+            self.record_scan_audit_with_amount(
+                route_id,
+                trigger_pool,
+                trigger_version.block_number,
+                route.hop_count(),
+                Some(quote.amount_in),
+                format!(
+                    "quote_rejected:{reason:?};amount_in={},amount_out={},gross_profit={},gas_anchor={},risk_buffer={},net_profit={},roi_bps={}",
+                    quote.amount_in,
+                    quote.amount_out,
+                    quote.gross_profit,
+                    quote.estimated_gas_anchor,
+                    quote.risk_buffer,
+                    quote.net_profit,
+                    quote.roi_bps
+                ),
+            );
             tracing::debug!(route_id = %route.id.0, hop_count = route.hop_count(), rejection_reason = ?reason, "cyclic opportunity rejected");
             return Ok(None);
         }
         let current_version = self.state.version(&route.involved_pools)?;
         if current_version.is_none_or(|version| version > snapshot.state_version) {
+            self.record_scan_audit_with_amount(
+                route_id,
+                trigger_pool,
+                trigger_version.block_number,
+                route.hop_count(),
+                Some(optimized.route_quote.amount_in),
+                "stale_result",
+            );
             tracing::debug!(route_id = %route.id.0, hop_count = route.hop_count(), "discarding stale route result");
             return Ok(None);
         }
@@ -583,6 +828,23 @@ impl DexV2Engine {
             created_at: SystemTime::now(),
         };
         self.repository.save_opportunity(&opportunity).await?;
+        self.record_scan_audit_with_amount(
+            route_id,
+            trigger_pool,
+            trigger_version.block_number,
+            route.hop_count(),
+            Some(opportunity.quote.amount_in),
+            format!(
+                "profitable:amount_in={},amount_out={},gross_profit={},gas_anchor={},risk_buffer={},net_profit={},roi_bps={}",
+                opportunity.quote.amount_in,
+                opportunity.quote.amount_out,
+                opportunity.quote.gross_profit,
+                opportunity.quote.estimated_gas_anchor,
+                opportunity.quote.risk_buffer,
+                opportunity.quote.net_profit,
+                opportunity.quote.roi_bps
+            ),
+        );
         tracing::info!(
             chain_id = self.config.chain_id, block_number = trigger_version.block_number,
             route_id = %route.id.0, route_kind = ?route.kind, hop_count = route.hop_count(),
@@ -624,15 +886,6 @@ impl DexV2Engine {
             joins,
         }
     }
-}
-
-fn is_log_access_restriction(error: &DexV2Error) -> bool {
-    let message = error.to_string().to_ascii_lowercase();
-    message.contains("eth_getlogs")
-        && (message.contains("http 403")
-            || message.contains("archive requests")
-            || message.contains("personal token")
-            || message.contains("invalid block range"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

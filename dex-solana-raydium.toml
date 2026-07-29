@@ -1,0 +1,46 @@
+# Solana Raydium read-only cyclic profit scanner.
+enabled = true
+chain_id = 101
+api_base_url = "https://transaction-v1.raydium.io"
+rpc_http_url = "https://api.mainnet-beta.solana.com"
+# 仅替换 Solana RPC；Raydium Trade API 报价仍保留原实现。
+rpc_http_url_env = "ALCHEMY_SOLANA_RPC_URL"
+slippage_bps = 10
+max_concurrency = 2
+request_timeout_secs = 12
+# 独立于多链 500ms 主 tick；一次扫描结束后至少等待 5 秒，避免持续触发 Trade API 限流。
+poll_interval_ms = 5000
+quote_max_retries = 2
+
+# Anchor amounts are in USDC's smallest unit (6 decimals).
+input_amount = "1000000000"
+network_cost_anchor = "50000"
+min_net_profit_anchor = "500000"
+min_roi_bps = 5
+risk_buffer_bps = 20
+
+[routes]
+enable_two_hop = true
+enable_three_hop = true
+max_routes = 64
+
+[[tokens]]
+symbol = "USDC"
+mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+decimals = 6
+anchor = true
+
+[[tokens]]
+symbol = "WSOL"
+mint = "So11111111111111111111111111111111111111112"
+decimals = 9
+
+[[tokens]]
+symbol = "USDT"
+mint = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+decimals = 6
+
+[[tokens]]
+symbol = "RAY"
+mint = "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R"
+decimals = 6

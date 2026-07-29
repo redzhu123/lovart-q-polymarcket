@@ -18,6 +18,8 @@ pub struct DexV2Config {
     pub chain_id: u64,
     pub rpc_http_url: String,
     #[serde(default)]
+    pub rpc_http_url_env: Option<String>,
+    #[serde(default)]
     pub rpc_ws_url: Option<String>,
     #[serde(default)]
     pub execution_mode: ExecutionMode,
@@ -412,6 +414,15 @@ impl DexV2Config {
                 "chain_id and rpc_http_url are required".into(),
             ));
         }
+        if self
+            .rpc_http_url_env
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(DexV2Error::Configuration(
+                "rpc_http_url_env cannot be empty".into(),
+            ));
+        }
         if self.worker_count == 0
             || self.queue_capacity == 0
             || self.poll_interval_ms == 0
@@ -505,6 +516,14 @@ impl DexV2Config {
                     pool.name
                 )));
             }
+            // Uniswap V2 compatible pairs define token0 as the numerically smaller address.
+            // Reversed metadata silently maps reserve0/reserve1 to the wrong assets.
+            if token0 > token1 {
+                return Err(DexV2Error::Configuration(format!(
+                    "pool {} has reversed token0/token1 order",
+                    pool.name
+                )));
+            }
         }
         for factory in self.factories.iter().filter(|factory| factory.enabled) {
             let _ = parse_address(&factory.address)?;
@@ -537,6 +556,22 @@ impl DexV2Config {
             let _ = parse_address(address)?;
         }
         Ok(())
+    }
+
+    /// Resolves an optional secret-bearing primary RPC URL from the environment and
+    /// always keeps the configured public URL as the fallback.
+    pub fn rpc_http_urls(&self) -> Vec<String> {
+        let mut urls = self
+            .rpc_http_url_env
+            .as_deref()
+            .and_then(|name| std::env::var(name).ok())
+            .filter(|value| !value.trim().is_empty())
+            .into_iter()
+            .collect::<Vec<_>>();
+        if !urls.iter().any(|url| url == &self.rpc_http_url) {
+            urls.push(self.rpc_http_url.clone());
+        }
+        urls
     }
 
     fn token_lookup(&self) -> DexV2Result<HashMap<String, TokenId>> {
@@ -787,5 +822,15 @@ mod tests {
             assert!(config.factories.len() >= 2);
             assert!(config.native_price_pool().unwrap().is_some());
         }
+    }
+
+    #[test]
+    fn reversed_v2_pool_token_order_is_rejected() {
+        let mut config: DexV2Config =
+            toml::from_str(include_str!("../../../../dex-arbitrage.toml")).unwrap();
+        let pool = config.pools.first_mut().unwrap();
+        std::mem::swap(&mut pool.token0, &mut pool.token1);
+        let error = config.validate().unwrap_err().to_string();
+        assert!(error.contains("reversed token0/token1"));
     }
 }

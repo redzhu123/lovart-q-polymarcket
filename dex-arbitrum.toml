@@ -2,6 +2,8 @@
 enabled = true
 chain_id = 42161
 rpc_http_url = "https://arbitrum-one-rpc.publicnode.com"
+# 可选 Alchemy 主 RPC（值为完整 URL）；未设置时继续使用上面的 PublicNode。
+rpc_http_url_env = "ALCHEMY_ARBITRUM_RPC_URL"
 rpc_ws_url = "wss://arbitrum-one-rpc.publicnode.com"
 execution_mode = "shadow"
 confirmation_mode = "latest"

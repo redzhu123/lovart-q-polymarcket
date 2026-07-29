@@ -48,6 +48,7 @@ pub struct CrossChainOptimalRoute {
     pub start: SuperGraphNode,
     pub nodes: Vec<SuperGraphNode>,
     pub edges: Vec<SuperGraphEdge>,
+    pub step_quotes: Vec<CrossChainStepQuote>,
     pub amount_in: U256,
     pub amount_out: U256,
     pub gross_profit: I256,
@@ -58,6 +59,16 @@ pub struct CrossChainOptimalRoute {
     pub bridge_count: usize,
     pub estimated_bridge_seconds: u64,
     pub execution_model: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CrossChainStepQuote {
+    pub edge_id: String,
+    pub amount_in: U256,
+    pub amount_out: U256,
+    /// Swap fees and percentage bridge fees are reflected in `amount_out`; this contains the
+    /// separately deducted Gas or fixed bridge cost, denominated in the anchor token.
+    pub explicit_cost_anchor: U256,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -145,7 +156,7 @@ impl CrossChainPathConfig {
     fn validate(&self) -> RouterResult<()> {
         if self.anchor_asset.trim().is_empty()
             || !(3..=10).contains(&self.max_steps)
-            || self.max_bridges < 2
+            || self.max_bridges < 1
             || self.max_bridges > self.max_steps
             || self.minimum_roi_bps > 10_000
             || self.minimum_theoretical_profit_bps > 10_000
@@ -201,11 +212,27 @@ impl CrossChainPathScanner {
         let (nodes, edges) = self.build_graph(supervisor)?;
         let outgoing = build_outgoing(nodes.len(), &edges);
         let mut routes = Vec::new();
+        let anchor_nodes = self
+            .config
+            .tokens
+            .iter()
+            .filter(|token| token.asset_id == self.config.anchor_asset)
+            .map(|token| (token.chain_id, token.address))
+            .collect::<std::collections::HashSet<_>>();
         for (start_index, start) in nodes.iter().enumerate() {
-            if start.asset_id != self.config.anchor_asset {
+            if !anchor_nodes.contains(&(start.chain_id, start.token)) {
                 continue;
             }
-            if let Some(path) = self.shortest_profitable_cycle(start_index, &edges, &outgoing) {
+            let terminal = nodes
+                .iter()
+                .map(|node| {
+                    anchor_nodes.contains(&(node.chain_id, node.token))
+                        && node.chain_id != start.chain_id
+                })
+                .collect::<Vec<_>>();
+            if let Some(path) =
+                self.shortest_profitable_path(start_index, &terminal, &edges, &outgoing)
+            {
                 if let Some(route) = self.exact_quote(start_index, path, &nodes, &edges)? {
                     routes.push(route);
                 }
@@ -236,6 +263,32 @@ impl CrossChainPathScanner {
                 decimals: token.decimals,
             });
             node_index.insert((token.chain_id, token.address), index);
+        }
+        // The explicit list defines which contracts represent the same bridgeable asset across
+        // chains. All other tokens from the single-chain pool registries are still added as local
+        // nodes, allowing routes through DAI/WBTC/etc. without duplicating that list here.
+        for chain in supervisor.chains() {
+            for pool in chain.engine.registry.pools() {
+                for token_id in [&pool.token0, &pool.token1] {
+                    if node_index.contains_key(&(chain.chain_id, token_id.address)) {
+                        continue;
+                    }
+                    let token = chain.engine.registry.token(token_id).ok_or_else(|| {
+                        RouterError::Configuration(format!(
+                            "链 {} 的池 {} 引用了未知代币 {:#x}",
+                            chain.chain_id, pool.name, token_id.address
+                        ))
+                    })?;
+                    let index = nodes.len();
+                    nodes.push(SuperGraphNode {
+                        chain_id: chain.chain_id,
+                        asset_id: token.symbol.clone(),
+                        token: token_id.address,
+                        decimals: token.decimals,
+                    });
+                    node_index.insert((chain.chain_id, token_id.address), index);
+                }
+            }
         }
         let gas_costs = self
             .config
@@ -272,12 +325,22 @@ impl CrossChainPathScanner {
                     if from_chain == to_chain {
                         continue;
                     }
-                    let from = nodes.iter().position(|node| {
-                        node.chain_id == from_chain && node.asset_id == bridge.asset_id
-                    });
-                    let to = nodes.iter().position(|node| {
-                        node.chain_id == to_chain && node.asset_id == bridge.asset_id
-                    });
+                    let from = self
+                        .config
+                        .tokens
+                        .iter()
+                        .find(|token| {
+                            token.chain_id == from_chain && token.asset_id == bridge.asset_id
+                        })
+                        .and_then(|token| node_index.get(&(from_chain, token.address)).copied());
+                    let to = self
+                        .config
+                        .tokens
+                        .iter()
+                        .find(|token| {
+                            token.chain_id == to_chain && token.asset_id == bridge.asset_id
+                        })
+                        .and_then(|token| node_index.get(&(to_chain, token.address)).copied());
                     let (Some(from), Some(to)) = (from, to) else {
                         continue;
                     };
@@ -303,9 +366,10 @@ impl CrossChainPathScanner {
         Ok((nodes, edges))
     }
 
-    fn shortest_profitable_cycle(
+    fn shortest_profitable_path(
         &self,
         start: usize,
+        terminal: &[bool],
         edges: &[SuperGraphEdge],
         outgoing: &[Vec<usize>],
     ) -> Option<PathState> {
@@ -326,6 +390,13 @@ impl CrossChainPathScanner {
             for ((node, _), path) in current {
                 for &edge_index in &outgoing[node] {
                     let edge = &edges[edge_index];
+                    if path
+                        .edge_ids
+                        .iter()
+                        .any(|previous| same_liquidity_resource(&edges[*previous], edge))
+                    {
+                        continue;
+                    }
                     let bridges = path.bridge_count
                         + usize::from(matches!(&edge.kind, SuperEdgeKind::Bridge { .. }));
                     if bridges > self.config.max_bridges {
@@ -335,8 +406,8 @@ impl CrossChainPathScanner {
                     candidate.weight += edge.weight;
                     candidate.bridge_count = bridges;
                     candidate.edge_ids.push(edge_index);
-                    if edge.to == start
-                        && bridges >= 2
+                    if terminal.get(edge.to).copied().unwrap_or(false)
+                        && bridges >= 1
                         && candidate.edge_ids.len() >= 3
                         && candidate.weight < threshold
                         && best
@@ -370,17 +441,21 @@ impl CrossChainPathScanner {
         let mut amount = amount_in;
         let mut total_cost = U256::ZERO;
         let mut route_edges = Vec::with_capacity(path.edge_ids.len());
+        let mut step_quotes = Vec::with_capacity(path.edge_ids.len());
         let mut route_nodes = vec![nodes[start_index].clone()];
         let mut bridge_seconds = 0u64;
         let theoretical_weight = path.weight;
         for edge_index in path.edge_ids {
             let edge = edges[edge_index].clone();
+            let step_amount_in = amount;
+            let explicit_cost_anchor;
             amount = match &edge.kind {
                 SuperEdgeKind::Swap {
                     pool,
                     state,
                     gas_cost_anchor,
                 } => {
+                    explicit_cost_anchor = *gas_cost_anchor;
                     total_cost = checked_add(total_cost, *gas_cost_anchor, "Swap Gas 成本")?;
                     quote_v2(pool, state, &nodes[edge.from], amount)?
                 }
@@ -390,6 +465,7 @@ impl CrossChainPathScanner {
                     estimated_seconds,
                     ..
                 } => {
+                    explicit_cost_anchor = *fixed_cost_anchor;
                     total_cost = checked_add(total_cost, *fixed_cost_anchor, "桥固定成本")?;
                     bridge_seconds = bridge_seconds.saturating_add(*estimated_seconds);
                     quote_bridge(
@@ -400,6 +476,12 @@ impl CrossChainPathScanner {
                     )?
                 }
             };
+            step_quotes.push(CrossChainStepQuote {
+                edge_id: edge.id.clone(),
+                amount_in: step_amount_in,
+                amount_out: amount,
+                explicit_cost_anchor,
+            });
             route_nodes.push(nodes[edge.to].clone());
             route_edges.push(edge);
         }
@@ -421,11 +503,17 @@ impl CrossChainPathScanner {
             return Ok(None);
         }
         let theoretical = ((-theoretical_weight).exp() - 1.0) * 10_000.0;
-        let id_material = route_edges
-            .iter()
-            .flat_map(|edge| edge.id.as_bytes())
-            .copied()
-            .collect::<Vec<_>>();
+        let mut id_material = Vec::new();
+        id_material.extend_from_slice(&amount_in.to_be_bytes::<32>());
+        id_material.extend_from_slice(&amount.to_be_bytes::<32>());
+        for edge in &route_edges {
+            id_material.extend_from_slice(edge.id.as_bytes());
+            if let SuperEdgeKind::Swap { state, .. } = &edge.kind {
+                id_material.extend_from_slice(&state.block_number.to_be_bytes());
+                id_material.extend_from_slice(&state.reserve0.to_be_bytes::<32>());
+                id_material.extend_from_slice(&state.reserve1.to_be_bytes::<32>());
+            }
+        }
         Ok(Some(CrossChainOptimalRoute {
             id: keccak256(id_material),
             start: nodes[start_index].clone(),
@@ -435,6 +523,7 @@ impl CrossChainPathScanner {
                 .filter(|edge| matches!(&edge.kind, SuperEdgeKind::Bridge { .. }))
                 .count(),
             edges: route_edges,
+            step_quotes,
             amount_in,
             amount_out: amount,
             gross_profit: gross,
@@ -443,8 +532,18 @@ impl CrossChainPathScanner {
             roi_bps: roi,
             theoretical_profit_bps: theoretical.round() as i64,
             estimated_bridge_seconds: bridge_seconds,
-            execution_model: "prepositioned_inventory_non_atomic",
+            execution_model: "cross_chain_sequential_non_atomic",
         }))
+    }
+}
+
+fn same_liquidity_resource(left: &SuperGraphEdge, right: &SuperGraphEdge) -> bool {
+    match (&left.kind, &right.kind) {
+        (SuperEdgeKind::Swap { pool: left, .. }, SuperEdgeKind::Swap { pool: right, .. }) => {
+            left.id == right.id
+        }
+        (SuperEdgeKind::Bridge { .. }, SuperEdgeKind::Bridge { .. }) => left.id == right.id,
+        _ => false,
     }
 }
 
@@ -600,13 +699,13 @@ mod tests {
         let config: CrossChainPathConfig =
             toml::from_str(include_str!("../../../../cross-chain-routing.toml")).unwrap();
         assert!(config.validate().is_ok());
-        assert_eq!(config.max_steps, 6);
+        assert_eq!(config.max_steps, 9);
         assert_eq!(config.max_bridges, 2);
         assert_eq!(config.tokens.len(), 6);
     }
 
     #[test]
-    fn bounded_bellman_ford_finds_cross_chain_negative_cycle() {
+    fn bounded_bellman_ford_finds_single_bridge_profitable_path() {
         use std::time::SystemTime;
 
         use crate::dex_v2::{PoolId, Protocol, TokenId};
@@ -658,8 +757,12 @@ mod tests {
             kind: SuperEdgeKind::Swap {
                 pool: V2Pool {
                     id: PoolId {
-                        chain_id: 1,
-                        address: Address::from([9u8; 20]),
+                        chain_id: if id == "buy" { 1 } else { 2 },
+                        address: if id == "buy" {
+                            Address::from([9u8; 20])
+                        } else {
+                            Address::from([10u8; 20])
+                        },
                     },
                     name: "synthetic".into(),
                     protocol: Protocol::UniswapV2Compatible {
@@ -691,12 +794,12 @@ mod tests {
             swap("buy", 0, 1, 1.02),
             bridge("out", 1, 2),
             swap("sell", 2, 3, 1.02),
-            bridge("back", 3, 0),
         ];
         let outgoing = build_outgoing(4, &edges);
+        let terminal = vec![false, false, false, true];
         let path = scanner
-            .shortest_profitable_cycle(0, &edges, &outgoing)
+            .shortest_profitable_path(0, &terminal, &edges, &outgoing)
             .unwrap();
-        assert_eq!(path.edge_ids.len(), 4);
+        assert_eq!(path.edge_ids.len(), 3);
     }
 }

@@ -2,6 +2,8 @@
 enabled = true
 chain_id = 8453
 rpc_http_url = "https://base-rpc.publicnode.com"
+# 可选 Alchemy 主 RPC（值为完整 URL）；未设置时继续使用上面的 PublicNode。
+rpc_http_url_env = "ALCHEMY_BASE_RPC_URL"
 rpc_ws_url = "wss://base-rpc.publicnode.com"
 execution_mode = "shadow"
 confirmation_mode = "latest"

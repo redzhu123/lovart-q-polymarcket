@@ -63,6 +63,19 @@ impl IntegerSearchOptimizer {
         Self { registry, quoter }
     }
 
+    /// Quotes one exact input amount without running the amount optimizer.
+    ///
+    /// This is used by the human-readable scan audit so even a route rejected by an early
+    /// profitability filter still has a concrete, reproducible hop-by-hop calculation.
+    pub fn quote_exact_in(
+        &self,
+        route: &ArbitrageRoute,
+        snapshot: &StateSnapshot,
+        input: U256,
+    ) -> DexV2Result<RouteQuote> {
+        self.quoter.quote_exact_in(route, snapshot, input)
+    }
+
     fn quote(
         &self,
         route: &ArbitrageRoute,

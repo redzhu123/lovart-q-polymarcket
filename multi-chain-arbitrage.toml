@@ -16,3 +16,8 @@ enabled = true
 name = "arbitrum"
 config_path = "dex-arbitrum.toml"
 enabled = true
+
+[[solana_dexes]]
+name = "solana-raydium"
+config_path = "dex-solana-raydium.toml"
+enabled = true
